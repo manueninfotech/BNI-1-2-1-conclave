@@ -57,7 +57,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
         try {
           const defaultBackendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? 'http://localhost:3000/api'
-            : 'https://bni-1-2-1-backend.onrender.com/api';
+            : 'https://conclave-backend.blackpond-26884e90.centralindia.azurecontainerapps.io/api';
           const apiBase = import.meta.env.VITE_API_URL || defaultBackendUrl;
           const resp = await fetch(`${apiBase}/me`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -130,7 +130,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
         try {
           const defaultBackendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
             ? 'http://localhost:3000/api'
-            : 'https://bni-1-2-1-backend.onrender.com/api';
+            : 'https://conclave-backend.blackpond-26884e90.centralindia.azurecontainerapps.io/api';
           const apiBase = import.meta.env.VITE_API_URL || defaultBackendUrl;
 
           const resp = await fetch(`${apiBase}/auth/resolve-identifier`, {
