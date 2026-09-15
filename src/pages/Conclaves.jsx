@@ -181,8 +181,31 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
 
           const currentR = Number(c.currentRound) || 0;
           const totalR = Number(c.roundCount) || 5;
-          const isCompleted = s === 'completed' || s === 'finished';
-          const isRunning = s === 'running' || s === 'active';
+
+          // Conclave is shown as Running only once its start date and start time have actually started (or live rounds are run)
+          if (status === 'Running' && currentR === 0) {
+            const startD = parseDate(c.date || c.startDate);
+            if (startD) {
+              const startDateTime = new Date(startD);
+              if (c.startTime) {
+                const match = String(c.startTime).match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+                if (match) {
+                  let h = parseInt(match[1], 10);
+                  const m = parseInt(match[2], 10);
+                  const meridian = match[3]?.toUpperCase();
+                  if (meridian === 'PM' && h < 12) h += 12;
+                  if (meridian === 'AM' && h === 12) h = 0;
+                  startDateTime.setHours(h, m, 0, 0);
+                }
+              }
+              if (new Date() < startDateTime) {
+                status = 'Upcoming';
+              }
+            }
+          }
+
+          const isCompleted = status === 'Completed';
+          const isRunning = status === 'Running';
           const hasSchedule = Boolean(c.scheduleSummary || c.schedule);
 
           let progress = 0;

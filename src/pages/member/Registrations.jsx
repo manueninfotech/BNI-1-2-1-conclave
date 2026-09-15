@@ -119,15 +119,38 @@ export default function Registrations({ loggedInMember }) {
           localStorage.setItem('bni_logged_member', JSON.stringify(memberData));
         }
 
-        const mappedConclaves = (Array.isArray(conclavesData) ? conclavesData : []).map((c) => ({
-          ...c,
-          name: c.name || c.title || 'BNI Conclave',
-          venue: c.venue || c.venueLocation || 'TBD Venue',
-          region: c.region || 'BNI Region',
-          startDate: c.date || c.startDate || null,
-          status: c.status ? (c.status.toLowerCase() === 'running' ? 'Running' : c.status.toLowerCase() === 'completed' ? 'Completed' : c.status.toLowerCase().includes('closed') ? 'Registration Closed' : c.status.toLowerCase().includes('open') ? 'Registration Open' : c.status) : 'Upcoming',
-          memberCount: c.memberCount || c.registrationCount || 0,
-        }));
+        const mappedConclaves = (Array.isArray(conclavesData) ? conclavesData : []).map((c) => {
+          let st = c.status ? (c.status.toLowerCase() === 'running' ? 'Running' : c.status.toLowerCase() === 'completed' ? 'Completed' : c.status.toLowerCase().includes('closed') ? 'Registration Closed' : c.status.toLowerCase().includes('open') ? 'Registration Open' : c.status) : 'Upcoming';
+          if (st === 'Running' && (!c.currentRound || Number(c.currentRound) === 0)) {
+            const startD = c.date ? new Date(c.date) : (c.startDate ? new Date(c.startDate) : null);
+            if (startD && !isNaN(startD.getTime())) {
+              const startDateTime = new Date(startD);
+              if (c.startTime) {
+                const match = String(c.startTime).match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+                if (match) {
+                  let h = parseInt(match[1], 10);
+                  const m = parseInt(match[2], 10);
+                  const meridian = match[3]?.toUpperCase();
+                  if (meridian === 'PM' && h < 12) h += 12;
+                  if (meridian === 'AM' && h === 12) h = 0;
+                  startDateTime.setHours(h, m, 0, 0);
+                }
+              }
+              if (new Date() < startDateTime) {
+                st = 'Registration Closed';
+              }
+            }
+          }
+          return {
+            ...c,
+            name: c.name || c.title || 'BNI Conclave',
+            venue: c.venue || c.venueLocation || 'TBD Venue',
+            region: c.region || 'BNI Region',
+            startDate: c.date || c.startDate || null,
+            status: st,
+            memberCount: c.memberCount || c.registrationCount || 0,
+          };
+        });
         setConclaves(mappedConclaves);
         localStorage.setItem('bni_conclaves', JSON.stringify(mappedConclaves));
       } catch (err) {
