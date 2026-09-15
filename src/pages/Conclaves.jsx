@@ -126,16 +126,22 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If every item has null startTime the cache is stale — discard it
+          const allNull = parsed.every(c => !c.startTime && !c.endTime);
+          if (allNull) { localStorage.removeItem('bni_admin_conclaves_cache'); return []; }
           return parsed.map(c => ({
             ...c,
-            startDate: formatDateForInput(c.startDate || c.date)
+            startDate: formatDateForInput(c.startDate || c.date),
+            startTime: formatTimeForInput(c.startTime) || null,
+            endTime: formatTimeForInput(c.endTime) || null,
           }));
         }
       } catch (e) { }
     }
     return [];
   });
+
   const [isLoadingConclaves, setIsLoadingConclaves] = useState(true);
 
   useEffect(() => {
