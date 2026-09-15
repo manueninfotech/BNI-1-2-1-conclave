@@ -19,11 +19,64 @@ import { api } from '../services/api';
 import { extractTextFromPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
 
+const parseDate = (val) => {
+  if (!val) return null;
+  if (typeof val === 'object' && val._seconds !== undefined) {
+    return new Date(val._seconds * 1000);
+  }
+  if (typeof val === 'object' && val.seconds !== undefined) {
+    return new Date(val.seconds * 1000);
+  }
+  if (val && typeof val.toDate === 'function') {
+    return val.toDate();
+  }
+  if (typeof val === 'string' || typeof val === 'number') {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+};
+
+const getDateSortValue = (val) => {
+  const d = parseDate(val);
+  return d ? d.getTime() : 0;
+};
+
+const formatDateForInput = (val) => {
+  const d = parseDate(val);
+  return d ? d.toISOString().slice(0, 10) : '';
+};
+
+const formatDateNice = (val, fallback = 'TBD') => {
+  const d = parseDate(val);
+  if (!d) return fallback;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const safeRenderString = (val, fallback = '') => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string' || typeof val === 'number') return String(val);
+  if (typeof val === 'object' && (val._seconds !== undefined || val.seconds !== undefined)) {
+    const d = parseDate(val);
+    return d ? d.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : fallback;
+  }
+  if (typeof val === 'object') return fallback;
+  return String(val);
+};
+
 export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.map(c => ({
+            ...c,
+            startDate: formatDateForInput(c.startDate || c.date)
+          }));
+        }
+      } catch (e) { }
     }
     return [];
   });
@@ -365,13 +418,17 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       return matchesSearch && matchesStatus && matchesVenue && matchesViewScope && matchesState && matchesCountry;
     });
 
-    // Sorting logic - guard against undefined fields
+    // Sorting logic - guard against undefined fields & object timestamps
     if (sortBy === 'NameAsc') {
-      result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      result.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
     } else if (sortBy === 'Capacity') {
-      result.sort((a, b) => (b.memberLimit || 0) - (a.memberLimit || 0));
+      result.sort((a, b) => (Number(b.memberLimit) || 0) - (Number(a.memberLimit) || 0));
     } else { // DateDesc
-      result.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+      result.sort((a, b) => {
+        const timeA = getDateSortValue(a.startDate || a.date);
+        const timeB = getDateSortValue(b.startDate || b.date);
+        return timeB - timeA;
+      });
     }
 
     return result;
@@ -472,43 +529,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     link.click();
     document.body.removeChild(link);
     showToast('Export Selected', `Successfully exported ${selectedList.length} conclaves.`);
-  };
-
-  const parseDate = (val) => {
-    if (!val) return null;
-    if (typeof val === 'object' && val._seconds !== undefined) {
-      return new Date(val._seconds * 1000);
-    }
-    if (typeof val === 'object' && val.seconds !== undefined) {
-      return new Date(val.seconds * 1000);
-    }
-    if (typeof val === 'string' || typeof val === 'number') {
-      const d = new Date(val);
-      return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-  };
-
-  const formatDateForInput = (val) => {
-    const d = parseDate(val);
-    return d ? d.toISOString().slice(0, 10) : '';
-  };
-
-  const formatDateNice = (val, fallback = 'TBD') => {
-    const d = parseDate(val);
-    if (!d) return fallback;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const safeRenderString = (val, fallback = '') => {
-    if (val === null || val === undefined) return fallback;
-    if (typeof val === 'string' || typeof val === 'number') return String(val);
-    if (typeof val === 'object' && (val._seconds !== undefined || val.seconds !== undefined)) {
-      const d = parseDate(val);
-      return d ? d.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : fallback;
-    }
-    if (typeof val === 'object') return fallback;
-    return String(val);
   };
 
   const handleDateChange = (field, val) => {
