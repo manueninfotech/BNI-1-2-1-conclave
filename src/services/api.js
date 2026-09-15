@@ -133,21 +133,35 @@ export const api = {
       }
       const data = await response.json();
       if (data && data.quotaExceeded) {
-        const cached = localStorage.getItem('bni_conclaves_cache') || localStorage.getItem('bni_admin_conclaves_cache');
-        if (cached) {
-          try { return JSON.parse(cached); } catch (e) {}
+        const raw = localStorage.getItem('bni_conclaves_cache') || localStorage.getItem('bni_admin_conclaves_cache');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const cacheData = Array.isArray(parsed) ? parsed : parsed.data;
+            if (Array.isArray(cacheData)) return cacheData;
+          } catch (e) {}
         }
         return Array.isArray(data.data) ? data.data : [];
       }
       if (Array.isArray(data) && (endpoint === '/conclaves' || endpoint === '/admin/conclaves')) {
-        localStorage.setItem('bni_conclaves_cache', JSON.stringify(data));
+        const entry = { data, ts: Date.now() };
+        localStorage.setItem('bni_conclaves_cache', JSON.stringify(entry));
       }
       return data;
     } catch (error) {
       if (endpoint === '/conclaves' || endpoint === '/admin/conclaves') {
-        const cached = localStorage.getItem('bni_conclaves_cache');
-        if (cached) {
-          try { return JSON.parse(cached); } catch (e) {}
+        const raw = localStorage.getItem('bni_conclaves_cache');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            // Support old flat-array format or new {data, ts} format
+            const cacheData = Array.isArray(parsed) ? parsed : parsed.data;
+            const cacheTs = Array.isArray(parsed) ? 0 : (parsed.ts || 0);
+            // Only use cache if it is less than 5 minutes old
+            if (Array.isArray(cacheData) && (Date.now() - cacheTs < 5 * 60 * 1000)) {
+              return cacheData;
+            }
+          } catch (e) {}
         }
       }
       throw error;
