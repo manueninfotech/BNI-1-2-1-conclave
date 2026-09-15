@@ -343,12 +343,24 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
               {conclaveSyncData?.conclaveStatus?.name || conclaveSyncData?.conclaveStatus?.title || conclaveSyncData?.conclaveName || 'Networking Conclave Session'}
             </h1>
 
-            {/* Venue */}
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
-              <span className="text-[11px] text-zinc-400 font-medium truncate">
-                {conclaveSyncData?.conclaveStatus?.venue || conclaveSyncData?.venue || 'Venue TBD'}
-              </span>
+            {/* Venue & Timing */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <div className="flex items-center gap-1.5">
+                <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
+                <span className="text-[11px] text-zinc-400 font-medium truncate">
+                  {conclaveSyncData?.conclaveStatus?.venue || conclaveSyncData?.venue || 'Venue TBD'}
+                </span>
+              </div>
+              {(conclaveSyncData?.conclaveStatus?.startTime || conclaveSyncData?.conclaveStatus?.endTime) && (
+                <div className="flex items-center gap-1.5 text-[11px] text-brand-red font-bold">
+                  <Clock className="w-3 h-3 text-brand-red shrink-0" />
+                  <span>
+                    {conclaveSyncData.conclaveStatus.startTime}
+                    {conclaveSyncData.conclaveStatus.startTime && conclaveSyncData.conclaveStatus.endTime ? ' – ' : ''}
+                    {conclaveSyncData.conclaveStatus.endTime}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

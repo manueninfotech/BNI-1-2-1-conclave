@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Calendar,
+  Clock,
   MapPin,
   CheckCircle2,
   XCircle,
@@ -26,6 +27,29 @@ const formatDateNice = (val, fallback = 'TBD') => {
     d = new Date(val);
   }
   return isNaN(d.getTime()) ? fallback : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTimeNice = (val, fallback = '') => {
+  if (!val) return fallback;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      let meridian = match[3] ? match[3].toUpperCase() : null;
+      if (!meridian) {
+        meridian = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+      }
+      return `${String(hours).padStart(2, '0')}:${mins} ${meridian}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+  return String(val);
 };
 
 export default function Registrations({ loggedInMember }) {
@@ -527,6 +551,12 @@ export default function Registrations({ loggedInMember }) {
                       <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                       <span>{c.dateRange || 'Dates to be announced'}</span>
                     </div>
+                    {(c.startTime || c.endTime) && (
+                      <div className="flex items-center gap-2 text-zinc-655 font-bold">
+                        <Clock className="w-3.5 h-3.5 text-brand-red shrink-0" />
+                        <span>Timing: {formatTimeNice(c.startTime)} – {formatTimeNice(c.endTime)}</span>
+                      </div>
+                    )}
                     {(c.regStartDate || c.regEndDate) && (
                       <div className="flex items-center gap-2 text-zinc-500 font-semibold">
                         <CalendarRange className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -669,6 +699,14 @@ export default function Registrations({ loggedInMember }) {
                   <span className="text-zinc-400 uppercase font-extrabold text-[9px]">Date Schedule</span>
                   <span className="text-zinc-800 font-bold">{selectedConclaveForReg.dateRange}</span>
                 </div>
+                {(selectedConclaveForReg.startTime || selectedConclaveForReg.endTime) && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400 uppercase font-extrabold text-[9px]">Timing</span>
+                    <span className="text-zinc-800 font-bold">
+                      {formatTimeNice(selectedConclaveForReg.startTime)} – {formatTimeNice(selectedConclaveForReg.endTime)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="text-[10px] font-black text-brand-red uppercase tracking-wider border-b border-zinc-100 pb-1 mt-1">

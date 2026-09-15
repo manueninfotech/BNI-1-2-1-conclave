@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Search,
   X,
+  Clock,
   Download,
   Plus,
   Trash2,
@@ -43,8 +44,15 @@ const getDateSortValue = (val) => {
 };
 
 const formatDateForInput = (val) => {
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+    return val.trim();
+  }
   const d = parseDate(val);
-  return d ? d.toISOString().slice(0, 10) : '';
+  if (!d) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const formatDateNice = (val, fallback = 'TBD') => {
@@ -61,6 +69,54 @@ const safeRenderString = (val, fallback = '') => {
     return d ? d.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : fallback;
   }
   if (typeof val === 'object') return fallback;
+  return String(val);
+};
+
+const formatTimeForInput = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+    if (/^\d{1}:\d{2}$/.test(trimmed)) return `0${trimmed}`;
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      const meridian = match[3].toUpperCase();
+      if (meridian === 'PM' && hours < 12) hours += 12;
+      if (meridian === 'AM' && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, '0')}:${mins}`;
+    }
+  }
+  const d = parseDate(val);
+  if (d) {
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  return '';
+};
+
+const formatTimeNice = (val, fallback = '') => {
+  if (!val) return fallback;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      let meridian = match[3] ? match[3].toUpperCase() : null;
+      if (!meridian) {
+        meridian = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+      }
+      return `${String(hours).padStart(2, '0')}:${mins} ${meridian}`;
+    }
+  }
+  const d = parseDate(val);
+  if (d) {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
   return String(val);
 };
 
@@ -148,6 +204,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
             venueShort,
             startDate,
             dateRange,
+            startTime: formatTimeForInput(c.startTime),
+            endTime: formatTimeForInput(c.endTime),
             coordinator,
             status,
             memberCount: c.registrationCount ?? c.memberCount ?? 0,
@@ -564,6 +622,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       dateRange: '',
       startDate: '',
       endDate: '',
+      startTime: '09:00',
+      endTime: '17:00',
       regStartDate: new Date().toISOString().slice(0, 10),
       regEndDate: '',
       memberLimit: 100,
@@ -596,6 +656,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         venueLocation: formData.venue,
         date: formData.startDate || new Date().toISOString(),
         endDate: formData.endDate || undefined,
+        startTime: formData.startTime || undefined,
+        endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
         dateRange: formData.dateRange || 'TBD',
@@ -628,6 +690,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
           venueShort: (c.venueLocation || c.venue || 'N/A').split(',')[0],
           dateRange: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'TBD',
           startDate: formatDateForInput(c.date || c.startDate),
+          startTime: formatTimeForInput(c.startTime),
+          endTime: formatTimeForInput(c.endTime),
           coordinator: c.coordinator || loggedInAdmin?.name || 'Admin',
           status: c.status || 'Upcoming',
           memberCount: c.registrationCount ?? c.memberCount ?? 0,
@@ -653,6 +717,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       dateRange: c.dateRange || '',
       startDate: formatDateForInput(c.startDate || c.date),
       endDate: formatDateForInput(c.endDate),
+      startTime: formatTimeForInput(c.startTime) || '09:00',
+      endTime: formatTimeForInput(c.endTime) || '17:00',
       regStartDate: formatDateForInput(c.regStartDate),
       regEndDate: formatDateForInput(c.regEndDate),
       memberCount: c.memberCount || 0,
@@ -686,6 +752,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         dateRange: formData.dateRange,
         date: formData.startDate || undefined,
         endDate: formData.endDate || undefined,
+        startTime: formData.startTime || undefined,
+        endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
         memberLimit: Number(formData.memberLimit) || 100,
@@ -713,6 +781,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
           venueShort: (c.venueLocation || c.venue || 'N/A').split(',')[0],
           dateRange: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'TBD',
           startDate: formatDateForInput(c.date || c.startDate),
+          startTime: formatTimeForInput(c.startTime),
+          endTime: formatTimeForInput(c.endTime),
           coordinator: c.coordinator || loggedInAdmin?.name || 'Admin',
           status: c.status || 'Upcoming',
           progress: c.status === 'Completed' ? 100 : c.status === 'Running' ? 60 : 0
@@ -939,7 +1009,19 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                           <span className="font-semibold text-zinc-700">{safeRenderString(conclave.coordinator)}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-4 font-semibold text-zinc-650">{safeRenderString(conclave.dateRange, 'TBD')}</td>
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-zinc-650">{safeRenderString(conclave.dateRange, 'TBD')}</div>
+                        {(conclave.startTime || conclave.endTime) && (
+                          <div className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-0.5 whitespace-nowrap">
+                            <Clock className="w-3 h-3 text-brand-red shrink-0" />
+                            <span>
+                              {formatTimeNice(conclave.startTime)}
+                              {conclave.startTime && conclave.endTime ? ' – ' : ''}
+                              {formatTimeNice(conclave.endTime)}
+                            </span>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-5 py-4 text-zinc-650">{safeRenderString(conclave.venueShort, 'N/A')}</td>
                       <td className="px-5 py-4 text-center font-bold text-zinc-800">
                         {conclave.memberCount}
@@ -1066,6 +1148,42 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
 
                 {/* Drawer Body */}
                 <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-6">
+
+                  {/* Conclave Top Overview Card */}
+                  <div className="p-4 bg-zinc-50 border border-zinc-200/80 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 bg-zinc-100 border border-zinc-200 text-zinc-700 text-[10px] font-extrabold rounded uppercase tracking-wider">
+                        {selectedConclave.region || 'Global'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                        selectedConclave.status === 'Running' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        selectedConclave.status === 'Upcoming' ? 'bg-red-50 text-brand-red border border-red-200' :
+                        'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                      }`}>
+                        {selectedConclave.status || 'Upcoming'}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-zinc-900 leading-snug">{safeRenderString(selectedConclave.name)}</h4>
+                      <p className="text-xs text-zinc-500 font-medium mt-0.5">{safeRenderString(selectedConclave.venue || selectedConclave.venueLocation, 'Venue TBD')}</p>
+                    </div>
+                    <div className="pt-2 border-t border-zinc-200/60 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-zinc-600 font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-zinc-400 font-bold uppercase text-[9px]">Date:</span>
+                        <span>{safeRenderString(selectedConclave.dateRange, 'TBD')}</span>
+                      </div>
+                      {(selectedConclave.startTime || selectedConclave.endTime) && (
+                        <div className="flex items-center gap-1.5 text-brand-red font-bold">
+                          <Clock className="w-3.5 h-3.5 text-brand-red shrink-0" />
+                          <span>
+                            {formatTimeNice(selectedConclave.startTime)}
+                            {selectedConclave.startTime && selectedConclave.endTime ? ' – ' : ''}
+                            {formatTimeNice(selectedConclave.endTime)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   {/* Payment & Bank Details in Drawer */}
                   {selectedConclave.paymentDetails && (
@@ -1322,6 +1440,27 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                     onChange={(e) => handleDateChange('endDate', e.target.value)}
                     className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
                     type="date"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Time</label>
+                  <input
+                    value={formData.startTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Time</label>
+                  <input
+                    value={formData.endTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
                   />
                 </div>
               </div>
@@ -1594,6 +1733,27 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                     onChange={(e) => handleDateChange('endDate', e.target.value)}
                     className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
                     type="date"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Time</label>
+                  <input
+                    value={formData.startTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Time</label>
+                  <input
+                    value={formData.endTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
                   />
                 </div>
               </div>

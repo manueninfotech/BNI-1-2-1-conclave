@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Search,
   Calendar,
+  Clock,
   MapPin,
   RefreshCw,
   X,
@@ -106,6 +107,8 @@ export default function MemberConclaveHistory({ loggedInMember }) {
             location: c.venue || c.venueLocation || 'TBD Venue',
             date: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'TBD',
             year: c.date ? new Date(c.date).getFullYear().toString() : 'All',
+            startTime: c.startTime,
+            endTime: c.endTime,
             status: formattedStatus,
             rounds: c.roundCount || 4,
             agendaDocument: c.agendaDocument || (() => {
@@ -292,6 +295,12 @@ export default function MemberConclaveHistory({ loggedInMember }) {
                           <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                           {conclave.date}
                         </span>
+                        {(conclave.startTime || conclave.endTime) && (
+                          <span className="flex items-center gap-1.5 text-brand-red font-bold">
+                            <Clock className="w-3.5 h-3.5 text-brand-red" />
+                            {conclave.startTime}{conclave.startTime && conclave.endTime ? ' – ' : ''}{conclave.endTime}
+                          </span>
+                        )}
                         {conclave.status !== 'Cancelled' && (
                           <span className="flex items-center gap-1.5 text-brand-red font-black">
                             <RefreshCw className="w-3 h-3 animate-spin-slow" />

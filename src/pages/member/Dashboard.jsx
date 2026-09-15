@@ -360,6 +360,18 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       <span className="text-[10px] text-zinc-400 font-semibold">{c.region || 'BNI Region'}</span>
                     </div>
                     <h3 className="text-base font-black text-zinc-900 leading-snug">{c.title || c.name || 'BNI Conclave'}</h3>
+                    {c.dateRange && (
+                      <p className="text-xs text-zinc-500 font-medium flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        {c.dateRange}
+                      </p>
+                    )}
+                    {(c.startTime || c.endTime) && (
+                      <p className="text-xs text-zinc-500 font-medium flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-brand-red shrink-0" />
+                        <span>{c.startTime}{c.startTime && c.endTime ? ' – ' : ''}{c.endTime}</span>
+                      </p>
+                    )}
                     {c.venue && (
                       <p className="text-xs text-zinc-500 font-medium flex items-center gap-1">
                         <Building2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -427,6 +439,19 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                         <span className="text-blue-300">•</span>
                         <span className="text-[10px] font-semibold text-blue-500">
                           {conclaveSyncData.conclaveStatus.venue}
+                        </span>
+                      </>
+                    )}
+                    {(conclaveSyncData.conclaveStatus.startTime || conclaveSyncData.conclaveStatus.endTime) && (
+                      <>
+                        <span className="text-blue-300">•</span>
+                        <span className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-blue-500 shrink-0" />
+                          <span>
+                            {conclaveSyncData.conclaveStatus.startTime}
+                            {conclaveSyncData.conclaveStatus.startTime && conclaveSyncData.conclaveStatus.endTime ? ' – ' : ''}
+                            {conclaveSyncData.conclaveStatus.endTime}
+                          </span>
                         </span>
                       </>
                     )}
