@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Shield, X, Award } from 'lucide-react';
+import { ArrowRight, Shield, X, Award, Clock, Footprints } from 'lucide-react';
 
 import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
+import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
@@ -29,6 +30,35 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
   const [referTarget, setReferTarget] = useState(null);
   const [selectedProfileMember, setSelectedProfileMember] = useState(null);
   const [toast, setToast] = useState(null);
+
+  const personsPerTable = conclaveSyncData?.personsPerTable ||
+    conclaveSyncData?.conclaveStatus?.personsPerTable ||
+    6;
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+  }));
+
+  useEffect(() => {
+    const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
+    const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
+    const isRunning = status === 'running' || status === 'active';
+
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable,
+        isRunning,
+      });
+      setTimingState(timing);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [conclaveSyncData, personsPerTable]);
 
   const roundObj = conclaveSyncData?.mySchedule?.find(s => s.number === selectedRound);
   const currentMembersList = roundObj ? roundObj.participants : [];
@@ -238,8 +268,89 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
           </div>
         </div>
 
-        {/* Right Column (Instructions & Guidelines) */}
+        {/* Right Column (Instructions, Timing & Guidelines) */}
         <div className="lg:col-span-3 space-y-6">
+          {/* Table Round Moderator & Pace Card */}
+          <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5">
+              <h3 className="font-black text-zinc-955 text-body-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-brand-red shrink-0" />
+                <span>Round Moderator Pace</span>
+              </h3>
+              {timingState.phase === 'active' ? (
+                <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                  Talking Time
+                </span>
+              ) : timingState.phase === 'transition' ? (
+                <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                  Transitioning
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
+                  Ready
+                </span>
+              )}
+            </div>
+
+            <div className="bg-zinc-50/70 p-4 rounded-xl border border-zinc-150 text-center">
+              <div className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">
+                Total Round Time
+              </div>
+              <div className={`text-3xl font-black tracking-tighter ${
+                timingState.phase === 'active'
+                  ? 'text-emerald-600'
+                  : timingState.phase === 'transition'
+                  ? 'text-amber-600'
+                  : 'text-zinc-800'
+              }`}>
+                {formatTime(timingState.totalRemaining)}
+              </div>
+              <p className="text-[9.5px] text-zinc-500 font-bold mt-1">
+                {timingState.phase === 'active'
+                  ? `${formatTime(timingState.phaseRemaining)} talking time left`
+                  : timingState.phase === 'transition'
+                  ? `${formatTime(timingState.phaseRemaining)} left to rotate`
+                  : '15-minute table session'}
+              </p>
+            </div>
+
+            {/* Current Speaker Box */}
+            {timingState.phase === 'active' && (
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-lg">
+                <div className="flex items-center justify-between text-[9.5px] font-extrabold text-emerald-800">
+                  <span>Current Speaker Turn</span>
+                  <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-lg font-black text-emerald-700">{formatTime(timingState.speakerTimeLeft)}</span>
+                  <span className="text-[9px] text-emerald-600 font-semibold">90s per attendee</span>
+                </div>
+                <div className="w-full bg-emerald-200/60 rounded-full h-1.5 mt-2 overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-full rounded-full transition-all duration-1000"
+                    style={{ width: `${(timingState.speakerTimeLeft / timingState.speakerTotalSecs) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {timingState.phase === 'transition' && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center space-y-1 animate-pulse">
+                <div className="flex items-center justify-center gap-1.5 text-amber-800 font-black text-[10.5px]">
+                  <Footprints className="w-3.5 h-3.5" />
+                  <span>Discussion Ended</span>
+                </div>
+                <p className="text-[9.5px] text-amber-700 font-semibold leading-tight">
+                  Direct attendees to collect their notes and proceed to their assigned Table for Round {selectedRound + 1}.
+                </p>
+              </div>
+            )}
+
+            <div className="text-[9.5px] text-zinc-400 font-bold text-center border-t border-zinc-100 pt-2">
+              Formula: 1.5m × {timingState.personsPerTable} seats ({Math.round(timingState.activeSecs / 60)}m talking + {Math.round(timingState.transitionSecs / 60)}m move)
+            </div>
+          </div>
+
           <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs space-y-3.5">
             <h3 className="font-black text-zinc-955 text-body-sm border-b border-zinc-100 pb-2 flex items-center gap-2">
               <Shield className="w-4 h-4 text-brand-red shrink-0" />

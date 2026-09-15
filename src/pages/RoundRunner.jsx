@@ -27,6 +27,12 @@ import { api } from '../services/api';
 
 
 import runnerData from '../data/tables_runner.json';
+import {
+  calculateRoundTiming,
+  formatTime,
+  ROUND_BLOCK_DURATION_SECS,
+  TALKING_SECS_PER_PERSON
+} from '../utils/roundTiming';
 const { initialTables, mockRosters } = runnerData;
 
 export default function RoundRunner({ selectedConclaveId }) {
@@ -170,47 +176,46 @@ export default function RoundRunner({ selectedConclaveId }) {
     return !isConnected && !isClosed;
   }).length;
 
-  // Timer States (15 minutes per round)
-  const ROUND_DURATION_SECS = 15 * 60; // 900 seconds (15:00)
-  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION_SECS);
+  // Derive persons per table (default 6 if not explicitly configured)
+  const personsPerTable = useMemo(() => {
+    return selectedConclave?.personsPerTable || selectedConclave?.tableSize || (tables[0]?.members ? tables[0].members.length + 1 : 6);
+  }, [selectedConclave, tables]);
+
+  // Timer States (15 minutes per round with 1.5 min per person talking time)
+  const [timeLeft, setTimeLeft] = useState(ROUND_BLOCK_DURATION_SECS);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: selectedConclave?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: Boolean(selectedConclave?.currentRound && selectedConclave?.currentRoundStartedAt && !isUpcoming)
+  }));
 
   // Sync real-time dynamic round timer from database status
   useEffect(() => {
-    if (!selectedConclave || !selectedConclave.currentRound || !selectedConclave.currentRoundStartedAt) {
-      setTimerRunning(false);
-      setTimeLeft(ROUND_DURATION_SECS);
-      return;
-    }
+    const isRoundLive = Boolean(
+      selectedConclave &&
+      selectedConclave.currentRound &&
+      selectedConclave.currentRoundStartedAt &&
+      !isUpcoming &&
+      statusLower !== 'completed'
+    );
 
     const updateTimer = () => {
-      const rawStart = selectedConclave.currentRoundStartedAt;
-      let startedTime = NaN;
-      if (typeof rawStart === 'object' && rawStart !== null) {
-        if (typeof rawStart._seconds === 'number') startedTime = rawStart._seconds * 1000;
-        else if (typeof rawStart.seconds === 'number') startedTime = rawStart.seconds * 1000;
-        else if (typeof rawStart.toDate === 'function') startedTime = rawStart.toDate().getTime();
-      }
-      if (isNaN(startedTime)) {
-        startedTime = new Date(rawStart).getTime();
-      }
-      if (isNaN(startedTime)) {
-        setTimerRunning(false);
-        setTimeLeft(ROUND_DURATION_SECS);
-        return;
-      }
+      const timing = calculateRoundTiming({
+        startedAt: selectedConclave?.currentRoundStartedAt,
+        personsPerTable,
+        isRunning: isRoundLive || timerRunning,
+      });
 
-      const elapsed = Math.floor((Date.now() - startedTime) / 1000);
-      const remaining = Math.max(0, ROUND_DURATION_SECS - elapsed);
-
-      setTimeLeft(remaining);
-      setTimerRunning(remaining > 0);
+      setTimingState(timing);
+      setTimeLeft(timing.totalRemaining);
+      setTimerRunning(timing.isTalking || timing.isTransition);
     };
 
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [selectedConclave]);
+  }, [selectedConclave, personsPerTable, isUpcoming, statusLower, timerRunning]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -253,31 +258,35 @@ export default function RoundRunner({ selectedConclaveId }) {
     }
   };
 
-  // Timer Tick Interval
+  // Manual local timer tick for unlinked / simulated countdowns
   useEffect(() => {
     let timer = null;
-    if (timerRunning && timeLeft > 0) {
+    const hasRemoteStart = Boolean(selectedConclave?.currentRoundStartedAt);
+    if (!hasRemoteStart && timerRunning && timeLeft > 0) {
       timer = setInterval(() => {
-        setTimeLeft(prev => prev - 1);
+        setTimeLeft(prev => Math.max(0, prev - 1));
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [timerRunning, timeLeft]);
+  }, [timerRunning, timeLeft, selectedConclave?.currentRoundStartedAt]);
 
-  // Play bell chime every 5 minutes (300s) during running timer
+  const prevPhaseRef = useRef(timingState.phase);
+
+  // Auto bell chimes for phase transitions: Talking Time over -> Move to Next Table -> Round End
   useEffect(() => {
-    if (!timerRunning || timeLeft <= 0) return;
+    if (!timerRunning) return;
 
-    const fiveMinInSecs = 5 * 60; // 300 seconds
-    const elapsedSecs = ROUND_DURATION_SECS - timeLeft;
-
-    // Trigger at 5 mins, 10 mins, and round completion (15 mins)
-    if (elapsedSecs > 0 && elapsedSecs % fiveMinInSecs === 0 && lastChimeRef.current !== elapsedSecs) {
-      lastChimeRef.current = elapsedSecs;
-      playBellSound(elapsedSecs === ROUND_DURATION_SECS ? 'double' : 'chime');
-      showToast('Bell Chime', `5-Minute Round Interval (${Math.floor(elapsedSecs / 60)} mins)`);
+    if (prevPhaseRef.current !== timingState.phase) {
+      if (prevPhaseRef.current === 'active' && timingState.phase === 'transition') {
+        playBellSound('double');
+        showToast('Talking Time Over', `Table discussions concluded! ${formatTime(timingState.transitionSecs)} transition window to move to next table.`);
+      } else if (prevPhaseRef.current === 'transition' && timingState.phase === 'ended') {
+        playBellSound('double');
+        showToast('Round Ended', 'The 15-minute round has officially concluded.');
+      }
+      prevPhaseRef.current = timingState.phase;
     }
-  }, [timeLeft, timerRunning]);
+  }, [timingState.phase, timingState.transitionSecs, timerRunning]);
 
 
   // Top 3 referrals leaderboard
@@ -393,7 +402,7 @@ export default function RoundRunner({ selectedConclaveId }) {
       return c;
     }));
     setTimerRunning(true);
-    setTimeLeft(ROUND_DURATION_SECS);
+    setTimeLeft(ROUND_BLOCK_DURATION_SECS);
 
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/start-round`, {
@@ -632,20 +641,72 @@ export default function RoundRunner({ selectedConclaveId }) {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50/40 rounded-xl border border-dashed border-zinc-200 mt-4">
-              <div className="text-[45px] leading-none text-brand-red font-black tracking-tighter timer-glow select-none mb-4">
+            <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200 mt-4 p-4 text-center">
+              {/* Phase Badge */}
+              <div className="mb-3">
+                {timingState.phase === 'active' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Talking Time ({formatTime(timingState.phaseRemaining)} left)
+                  </span>
+                ) : timingState.phase === 'transition' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    Move to Next Table ({formatTime(timingState.phaseRemaining)} left)
+                  </span>
+                ) : timingState.phase === 'ended' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200">
+                    <CheckCircle2 className="w-3 h-3 text-zinc-500" />
+                    Round Finished
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
+                    15-Minute Round Ready
+                  </span>
+                )}
+              </div>
+
+              {/* Main Digital Clock */}
+              <div className={`text-[46px] leading-none font-black tracking-tighter select-none mb-2 ${
+                timingState.phase === 'active'
+                  ? 'text-emerald-600'
+                  : timingState.phase === 'transition'
+                  ? 'text-amber-600'
+                  : 'text-brand-red'
+              }`}>
                 {formatTime(timeLeft)}
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Speaker Progression / Phase Breakdown */}
+              {timingState.phase === 'active' && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white border border-emerald-100 rounded-md text-[10px] font-black text-emerald-800 mb-3 shadow-2xs">
+                  <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
+                  <span className="text-emerald-300">•</span>
+                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 90s turn</span>
+                </div>
+              )}
+
+              {timingState.phase === 'transition' && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white border border-amber-200 rounded-md text-[10px] font-black text-amber-800 mb-3 shadow-2xs">
+                  <span>Table Rotation Window</span>
+                </div>
+              )}
+
+              {/* Controls */}
+              <div className="flex items-center gap-2 mb-3">
                 <button
-                  onClick={() => setTimeLeft(765)}
-                  className="w-7 h-7 rounded-full border border-zinc-100 bg-white text-zinc-400 hover:bg-zinc-50 flex items-center justify-center cursor-pointer"
+                  onClick={() => setTimeLeft(ROUND_BLOCK_DURATION_SECS)}
+                  title="Reset to 15:00"
+                  className="w-7 h-7 rounded-full border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 flex items-center justify-center cursor-pointer shadow-2xs"
                 >
                   <RotateCcw className="w-3 h-3" />
                 </button>
                 <button
                   onClick={() => setTimerRunning(!timerRunning)}
-                  className="w-8 h-8 rounded-full bg-brand-red text-white hover:bg-red-700 flex items-center justify-center cursor-pointer shadow-md"
+                  title={timerRunning ? "Pause Timer" : "Start Timer"}
+                  className={`w-8 h-8 rounded-full text-white flex items-center justify-center cursor-pointer shadow-md transition-smooth ${
+                    timerRunning ? 'bg-zinc-800 hover:bg-zinc-900' : 'bg-brand-red hover:bg-red-700'
+                  }`}
                 >
                   {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                 </button>
@@ -655,12 +716,17 @@ export default function RoundRunner({ selectedConclaveId }) {
                     setTimeLeft(0);
                     showToast('Timer Stopped', 'Active round timer reset to zero.');
                   }}
-                  className="w-7 h-7 rounded-full border border-zinc-100 bg-white text-zinc-400 hover:bg-zinc-50 flex items-center justify-center cursor-pointer"
+                  title="Stop Timer"
+                  className="w-7 h-7 rounded-full border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 flex items-center justify-center cursor-pointer shadow-2xs"
                 >
-                  <span className="w-2.5 h-2.5 bg-zinc-400 rounded-xs" />
+                  <span className="w-2.5 h-2.5 bg-zinc-500 rounded-xs" />
                 </button>
               </div>
-              <p className="mt-5 text-[9px] text-zinc-450 font-bold uppercase tracking-wider">Round 2: Open Networking</p>
+
+              {/* Table Timing Breakdown formula */}
+              <p className="text-[9.5px] text-zinc-500 font-bold uppercase tracking-wider">
+                {timingState.personsPerTable} Seats · {Math.round(timingState.activeSecs / 60)}m Talking + {Math.round(timingState.transitionSecs / 60)}m Transition
+              </p>
             </div>
           </div>
         </div>

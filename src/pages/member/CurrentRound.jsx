@@ -4,12 +4,16 @@ import {
   TrendingUp,
   Award,
   Check,
-  FileText
+  FileText,
+  Footprints,
+  Clock,
+  Users
 } from 'lucide-react';
 
 import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
 import { downloadOrViewAgendaDocument, parseAgendaTextToSteps, extractTextFromPdfDataUrl } from '../../utils/documentUtils';
+import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function MemberCurrentRound({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData, searchQuery }) {
   const [syncData, setSyncData] = useState(() => {
@@ -44,8 +48,21 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     });
   }, [conclaveSyncData?.tableOccupants, searchQuery]);
   
-  const initialTime = 15 * 60; // 900 seconds (15:00)
+  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
   const [timeLeft, setTimeLeft] = useState(initialTime);
+
+  const personsPerTable = useMemo(() => {
+    return conclaveSyncData?.personsPerTable ||
+      conclaveSyncData?.conclaveStatus?.personsPerTable ||
+      conclaveSyncData?.tableOccupants?.length ||
+      6;
+  }, [conclaveSyncData]);
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+  }));
 
   const [referrals, setReferrals] = useState(() => {
     const stored = localStorage.getItem('bni_referrals');
@@ -102,33 +119,20 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
 
-    if (startedAt && isRunning) {
-      const updateTimer = () => {
-        let startTime = NaN;
-        if (typeof startedAt === 'object' && startedAt !== null) {
-          if (typeof startedAt._seconds === 'number') startTime = startedAt._seconds * 1000;
-          else if (typeof startedAt.seconds === 'number') startTime = startedAt.seconds * 1000;
-          else if (typeof startedAt.toDate === 'function') startTime = startedAt.toDate().getTime();
-        }
-        if (isNaN(startTime)) startTime = new Date(startedAt).getTime();
-        if (isNaN(startTime)) startTime = Date.now();
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable,
+        isRunning,
+      });
+      setTimingState(timing);
+      setTimeLeft(timing.totalRemaining);
+    };
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimeLeft(Math.max(0, initialTime - elapsed));
-      };
-      updateTimer();
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setTimeLeft(initialTime);
-    }
-  }, [conclaveSyncData]);
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [conclaveSyncData, personsPerTable]);
 
   const radius = 88;
   const circumference = radius * 2 * Math.PI;
@@ -305,7 +309,26 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
           {/* Countdown Timer Area */}
           <div className="p-8 lg:w-1/3 bg-zinc-50 flex flex-col items-center justify-center text-center select-none">
-            <div className="relative mb-6">
+            {/* Phase Pill Header */}
+            <div className="mb-3">
+              {timingState.phase === 'active' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Talking Time
+                </span>
+              ) : timingState.phase === 'transition' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs animate-pulse">
+                  <Footprints className="w-3.5 h-3.5 text-amber-600" />
+                  Move to Next Table
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
+                  15-Min Round
+                </span>
+              )}
+            </div>
+
+            <div className="relative mb-5">
               <svg className="w-48 h-48">
                 <circle
                   className="text-zinc-200"
@@ -317,7 +340,13 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                   strokeWidth="8"
                 ></circle>
                 <circle
-                  className="text-brand-red progress-ring__circle"
+                  className={`progress-ring__circle transition-all duration-700 ${
+                    timingState.phase === 'active'
+                      ? 'text-emerald-500'
+                      : timingState.phase === 'transition'
+                      ? 'text-amber-500'
+                      : 'text-brand-red'
+                  }`}
                   cx="96"
                   cy="96"
                   fill="transparent"
@@ -334,20 +363,49 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                 <span className="text-3xl font-black text-zinc-950 tracking-tighter leading-none">
                   {formatTime(timeLeft)}
                 </span>
-                <span className="text-[9px] text-zinc-450 font-black uppercase tracking-widest mt-1">
-                  Minutes left
+                <span className="text-[9.5px] text-zinc-450 font-black uppercase tracking-widest mt-1">
+                  {timingState.phase === 'active'
+                    ? `${formatTime(timingState.phaseRemaining)} talking left`
+                    : timingState.phase === 'transition'
+                    ? `${formatTime(timingState.phaseRemaining)} move left`
+                    : 'Minutes left'}
                 </span>
               </div>
             </div>
 
-            <div className="w-full max-w-[200px]">
+            <div className="w-full max-w-[210px]">
               <div className="flex justify-between text-[9px] font-black text-zinc-450 mb-1.5">
                 <span>ROUND PROGRESS</span>
                 <span>{Math.round(progressPercent)}%</span>
               </div>
               <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden border border-zinc-200/40">
-                <div className="bg-brand-red h-full rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    timingState.phase === 'active'
+                      ? 'bg-emerald-500'
+                      : timingState.phase === 'transition'
+                      ? 'bg-amber-500'
+                      : 'bg-brand-red'
+                  }`}
+                  style={{ width: `${progressPercent}%` }}
+                ></div>
               </div>
+
+              {/* Dynamic Turn & Transition Subtitle */}
+              {timingState.phase === 'active' && (
+                <div className="mt-3 flex items-center justify-center gap-1 text-[9.5px] font-black text-emerald-800 bg-white border border-emerald-150 px-2.5 py-1 rounded-md shadow-2xs">
+                  <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
+                  <span className="text-emerald-300">•</span>
+                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 90s slot</span>
+                </div>
+              )}
+
+              {timingState.phase === 'transition' && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 text-[9.5px] font-black text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md shadow-2xs animate-pulse">
+                  <Footprints className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Talking time over · Please move tables</span>
+                </div>
+              )}
             </div>
           </div>
 

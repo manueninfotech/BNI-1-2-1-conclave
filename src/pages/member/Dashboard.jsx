@@ -15,6 +15,7 @@ import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
 
 import { api } from '../../services/api';
+import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function MemberDashboard({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData, searchQuery, memberConclaves: propMemberConclaves }) {
   const [conclavesList, setConclavesList] = useState(() => propMemberConclaves || []);
@@ -107,8 +108,21 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     });
   }, [conclaveSyncData?.tableOccupants, searchQuery]);
   
-  const initialTime = 15 * 60; // 900 seconds (15:00)
+  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
   const [timeLeft, setTimeLeft] = useState(initialTime);
+
+  const personsPerTable = useMemo(() => {
+    return conclaveSyncData?.personsPerTable ||
+      conclaveSyncData?.conclaveStatus?.personsPerTable ||
+      conclaveSyncData?.tableOccupants?.length ||
+      6;
+  }, [conclaveSyncData]);
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+  }));
 
   const [referrals, setReferrals] = useState(() => {
     const stored = localStorage.getItem('bni_referrals');
@@ -165,33 +179,20 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
 
-    if (startedAt && isRunning) {
-      const updateTimer = () => {
-        let startTime = NaN;
-        if (typeof startedAt === 'object' && startedAt !== null) {
-          if (typeof startedAt._seconds === 'number') startTime = startedAt._seconds * 1000;
-          else if (typeof startedAt.seconds === 'number') startTime = startedAt.seconds * 1000;
-          else if (typeof startedAt.toDate === 'function') startTime = startedAt.toDate().getTime();
-        }
-        if (isNaN(startTime)) startTime = new Date(startedAt).getTime();
-        if (isNaN(startTime)) startTime = Date.now();
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable,
+        isRunning,
+      });
+      setTimingState(timing);
+      setTimeLeft(timing.totalRemaining);
+    };
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimeLeft(Math.max(0, initialTime - elapsed));
-      };
-      updateTimer();
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setTimeLeft(initialTime);
-    }
-  }, [conclaveSyncData]);
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [conclaveSyncData, personsPerTable]);
 
   const memberName = loggedInMember?.name || 'Member';
   const memberChapter = loggedInMember?.chapter || 'N/A';
@@ -496,19 +497,54 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                 <div className="pt-2">
                   <div className="flex justify-between items-end mb-2">
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">{isConclaveCompleted ? 'Conclave Status' : 'Time Remaining'}</span>
-                      <span className={`text-2xl font-black mt-0.5 tracking-tighter leading-none ${isConclaveCompleted ? 'text-emerald-600' : 'text-brand-red'}`}>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">{isConclaveCompleted ? 'Conclave Status' : 'Time Remaining'}</span>
+                        {!isConclaveCompleted && (
+                          timingState.phase === 'active' ? (
+                            <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Talking Phase
+                            </span>
+                          ) : timingState.phase === 'transition' ? (
+                            <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                              Move to Table
+                            </span>
+                          ) : null
+                        )}
+                      </div>
+                      <span className={`text-2xl font-black mt-0.5 tracking-tighter leading-none ${
+                        isConclaveCompleted
+                          ? 'text-emerald-600'
+                          : timingState.phase === 'active'
+                          ? 'text-emerald-600'
+                          : timingState.phase === 'transition'
+                          ? 'text-amber-600'
+                          : 'text-brand-red'
+                      }`}>
                         {isConclaveCompleted ? 'Completed' : formatTime(timeLeft)}
                       </span>
                     </div>
                     <span className="text-[9.5px] font-bold text-zinc-455">
-                      {isConclaveCompleted ? '100% Completed' : `${Math.floor(((600 - timeLeft) / 600) * 100)}% Completed`}
+                      {isConclaveCompleted
+                        ? '100% Completed'
+                        : `${Math.round(((ROUND_BLOCK_DURATION_SECS - timeLeft) / ROUND_BLOCK_DURATION_SECS) * 100)}% Completed`}
                     </span>
                   </div>
                   <div className="w-full bg-zinc-100 rounded-full h-2 overflow-hidden border border-zinc-200/50">
                     <div
-                      className={`${isConclaveCompleted ? 'bg-emerald-600' : 'bg-brand-red'} h-full rounded-full transition-all duration-1000 ease-out shadow-inner`}
-                      style={{ width: isConclaveCompleted ? '100%' : `${(timeLeft / 600) * 100}%` }}
+                      className={`h-full rounded-full transition-all duration-1000 ease-out shadow-inner ${
+                        isConclaveCompleted
+                          ? 'bg-emerald-600'
+                          : timingState.phase === 'active'
+                          ? 'bg-emerald-500'
+                          : timingState.phase === 'transition'
+                          ? 'bg-amber-500'
+                          : 'bg-brand-red'
+                      }`}
+                      style={{
+                        width: isConclaveCompleted
+                          ? '100%'
+                          : `${((ROUND_BLOCK_DURATION_SECS - timeLeft) / ROUND_BLOCK_DURATION_SECS) * 100}%`
+                      }}
                     ></div>
                   </div>
                 </div>
