@@ -1,6 +1,27 @@
 import { auth } from '../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
+// Cache-busting: clear all stale conclave caches that are missing startTime/endTime fields.
+// This runs once on module load so stale data from before the timing feature is never shown.
+(function clearStaleConclaveCache() {
+  const keys = ['bni_conclaves', 'bni_conclaves_cache', 'bni_admin_conclaves_cache'];
+  keys.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      // Support both flat array and {data, ts} wrapper formats
+      const items = Array.isArray(parsed) ? parsed : (parsed?.data ?? null);
+      if (!Array.isArray(items)) { localStorage.removeItem(key); return; }
+      // If ANY conclave is missing startTime (null/undefined), the cache is stale — clear it
+      const isStale = items.some((c) => c && c.startTime === undefined);
+      if (isStale) localStorage.removeItem(key);
+    } catch (e) {
+      localStorage.removeItem(key);
+    }
+  });
+})();
+
 const defaultBackendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000/api'
   : 'https://conclave-backend.blackpond-26884e90.centralindia.azurecontainerapps.io/api';
