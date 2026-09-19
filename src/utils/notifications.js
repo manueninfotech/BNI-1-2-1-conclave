@@ -5,39 +5,29 @@
 
 const STORAGE_KEY = 'bni_conclave_notifications_v3';
 
-// Fetch raw notification list from localStorage (with fallback & initial seeding)
+// Fetch raw notification list from localStorage
 export function getRawNotifications() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(item => item && item.id !== 'notif_welcome');
+      }
     }
 
     // Migration fallback: check legacy 'bni_notifications' key if present
     const oldRaw = localStorage.getItem('bni_notifications');
     if (oldRaw) {
       const oldParsed = JSON.parse(oldRaw);
-      if (Array.isArray(oldParsed) && oldParsed.length > 0) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(oldParsed));
-        return oldParsed;
+      if (Array.isArray(oldParsed)) {
+        const cleaned = oldParsed.filter(item => item && item.id !== 'notif_welcome');
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+        return cleaned;
       }
     }
 
-    // Default initial notification seed if store is empty
-    const initialSeed = [
-      {
-        id: 'notif_welcome',
-        title: 'Welcome to BNI Conclave Platform',
-        desc: 'Explore your 1-on-1 schedule, seating assignments, and referral lead slips.',
-        type: 'info',
-        time: 'Just now',
-        createdAt: Date.now(),
-        readBy: []
-      }
-    ];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initialSeed));
-    return initialSeed;
+    return [];
   } catch (e) {
     console.error("Failed to parse notifications store", e);
     return [];

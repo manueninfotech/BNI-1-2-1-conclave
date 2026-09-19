@@ -184,11 +184,63 @@ export default function RoundRunner({ selectedConclaveId }) {
   // Timer States (15 minutes per round with 1.5 min per person talking time)
   const [timeLeft, setTimeLeft] = useState(ROUND_BLOCK_DURATION_SECS);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState(null);
+  const [pauseOffsetMs, setPauseOffsetMs] = useState(0);
+
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: selectedConclave?.currentRoundStartedAt,
     personsPerTable,
     isRunning: Boolean(selectedConclave?.currentRound && selectedConclave?.currentRoundStartedAt && !isUpcoming)
   }));
+
+  // Reset pause state when switching conclaves or advancing rounds
+  useEffect(() => {
+    setIsPaused(false);
+    setPausedAt(null);
+    setPauseOffsetMs(0);
+  }, [selectedConclaveId, activeRound]);
+
+  const handlePause = () => {
+    if (isPaused) return;
+    const now = Date.now();
+    setIsPaused(true);
+    setPausedAt(now);
+    setTimerRunning(false);
+
+    // Freeze timingState exactly at current moment
+    const effectiveNow = now - pauseOffsetMs;
+    const frozenTiming = calculateRoundTiming({
+      startedAt: selectedConclave?.currentRoundStartedAt,
+      personsPerTable,
+      isRunning: true,
+      now: effectiveNow,
+    });
+    setTimingState(frozenTiming);
+    setTimeLeft(frozenTiming.totalRemaining);
+    showToast('Timer Paused', 'Active round timer paused.');
+  };
+
+  const handleResume = () => {
+    if (!isPaused) return;
+    const additionalPaused = pausedAt ? Date.now() - pausedAt : 0;
+    setPauseOffsetMs(prev => prev + additionalPaused);
+    setPausedAt(null);
+    setIsPaused(false);
+    setTimerRunning(true);
+    showToast('Timer Resumed', 'Active round timer resumed.');
+  };
+
+  const handleTogglePlayPause = () => {
+    if (isPaused) {
+      handleResume();
+    } else if (timerRunning) {
+      handlePause();
+    } else {
+      setIsPaused(false);
+      setTimerRunning(true);
+    }
+  };
 
   // Sync real-time dynamic round timer from database status
   useEffect(() => {
@@ -201,10 +253,14 @@ export default function RoundRunner({ selectedConclaveId }) {
     );
 
     const updateTimer = () => {
+      if (isPaused) return;
+
+      const effectiveNow = Date.now() - pauseOffsetMs;
       const timing = calculateRoundTiming({
         startedAt: selectedConclave?.currentRoundStartedAt,
         personsPerTable,
         isRunning: isRoundLive || timerRunning,
+        now: effectiveNow,
       });
 
       setTimingState(timing);
@@ -215,7 +271,7 @@ export default function RoundRunner({ selectedConclaveId }) {
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [selectedConclave, personsPerTable, isUpcoming, statusLower, timerRunning]);
+  }, [selectedConclave, personsPerTable, isUpcoming, statusLower, timerRunning, isPaused, pauseOffsetMs]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -262,31 +318,34 @@ export default function RoundRunner({ selectedConclaveId }) {
   useEffect(() => {
     let timer = null;
     const hasRemoteStart = Boolean(selectedConclave?.currentRoundStartedAt);
-    if (!hasRemoteStart && timerRunning && timeLeft > 0) {
+    if (!hasRemoteStart && timerRunning && !isPaused && timeLeft > 0) {
       timer = setInterval(() => {
         setTimeLeft(prev => Math.max(0, prev - 1));
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [timerRunning, timeLeft, selectedConclave?.currentRoundStartedAt]);
+  }, [timerRunning, isPaused, timeLeft, selectedConclave?.currentRoundStartedAt]);
 
   const prevPhaseRef = useRef(timingState.phase);
 
-  // Auto bell chimes for phase transitions: Talking Time over -> Move to Next Table -> Round End
+  // Auto bell chimes for phase transitions: Talking Time over -> Referrals -> Move to Next Table -> Round End
   useEffect(() => {
-    if (!timerRunning) return;
+    if (!timerRunning || isPaused) return;
 
     if (prevPhaseRef.current !== timingState.phase) {
-      if (prevPhaseRef.current === 'active' && timingState.phase === 'transition') {
+      if (prevPhaseRef.current === 'active' && timingState.phase === 'referral') {
         playBellSound('double');
-        showToast('Talking Time Over', `Table discussions concluded! ${formatTime(timingState.transitionSecs)} transition window to move to next table.`);
+        showToast('Talking Time Concluded', `Speaking rounds finished! ${formatTime(timingState.referralSecs)} referral exchange window is now open.`);
+      } else if (prevPhaseRef.current === 'referral' && timingState.phase === 'transition') {
+        playBellSound('double');
+        showToast('Referral Window Closed', `Referrals closed! ${formatTime(timingState.transitionSecs)} transition window to move to next table.`);
       } else if (prevPhaseRef.current === 'transition' && timingState.phase === 'ended') {
         playBellSound('double');
         showToast('Round Ended', 'The 15-minute round has officially concluded.');
       }
       prevPhaseRef.current = timingState.phase;
     }
-  }, [timingState.phase, timingState.transitionSecs, timerRunning]);
+  }, [timingState.phase, timingState.referralSecs, timingState.transitionSecs, timerRunning, isPaused]);
 
 
   // Top 3 referrals leaderboard
@@ -401,6 +460,9 @@ export default function RoundRunner({ selectedConclaveId }) {
       }
       return c;
     }));
+    setIsPaused(false);
+    setPausedAt(null);
+    setPauseOffsetMs(0);
     setTimerRunning(true);
     setTimeLeft(ROUND_BLOCK_DURATION_SECS);
 
@@ -425,6 +487,9 @@ export default function RoundRunner({ selectedConclaveId }) {
       // Reload conclaves from Express backend API to sync states
       const data = await api.get('/admin/conclaves');
       setConclaves(data);
+      setIsPaused(false);
+      setPausedAt(null);
+      setPauseOffsetMs(0);
       setTimerRunning(false);
       setTimeLeft(0);
       confetti({
@@ -467,20 +532,28 @@ export default function RoundRunner({ selectedConclaveId }) {
               )}
 
               <button
-                onClick={() => setTimerRunning(false)}
+                onClick={handlePause}
                 type="button"
-                className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
+                className={`inline-flex items-center justify-center gap-2 h-10 px-4 border text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer ${
+                  isPaused
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 font-extrabold'
+                    : 'bg-white border-zinc-250 hover:bg-zinc-50 text-zinc-700'
+                }`}
               >
-                <PauseCircle className="w-4 h-4 text-zinc-500" />
-                <span>Pause</span>
+                <PauseCircle className={`w-4 h-4 ${isPaused ? 'text-amber-600' : 'text-zinc-500'}`} />
+                <span>{isPaused ? 'Paused' : 'Pause'}</span>
               </button>
 
               <button
-                onClick={() => setTimerRunning(true)}
+                onClick={handleResume}
                 type="button"
-                className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
+                className={`inline-flex items-center justify-center gap-2 h-10 px-4 border text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer ${
+                  isPaused
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 animate-pulse'
+                    : 'bg-white border-zinc-250 hover:bg-zinc-50 text-zinc-500'
+                }`}
               >
-                <PlayCircle className="w-4 h-4 text-zinc-500" />
+                <PlayCircle className={`w-4 h-4 ${isPaused ? 'text-white' : 'text-zinc-500'}`} />
                 <span>Resume</span>
               </button>
 
@@ -644,10 +717,20 @@ export default function RoundRunner({ selectedConclaveId }) {
             <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200 mt-4 p-4 text-center">
               {/* Phase Badge */}
               <div className="mb-3">
-                {timingState.phase === 'active' ? (
+                {isPaused ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    Timer Paused ({formatTime(timeLeft)} left)
+                  </span>
+                ) : timingState.phase === 'active' ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     Talking Time ({formatTime(timingState.phaseRemaining)} left)
+                  </span>
+                ) : timingState.phase === 'referral' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs animate-pulse">
+                    <Send className="w-3.5 h-3.5 text-blue-600" />
+                    Referral Window ({formatTime(timingState.phaseRemaining)} left)
                   </span>
                 ) : timingState.phase === 'transition' ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs animate-pulse">
@@ -668,8 +751,12 @@ export default function RoundRunner({ selectedConclaveId }) {
 
               {/* Main Digital Clock */}
               <div className={`text-[46px] leading-none font-black tracking-tighter select-none mb-2 ${
-                timingState.phase === 'active'
+                isPaused
+                  ? 'text-amber-600'
+                  : timingState.phase === 'active'
                   ? 'text-emerald-600'
+                  : timingState.phase === 'referral'
+                  ? 'text-blue-600'
                   : timingState.phase === 'transition'
                   ? 'text-amber-600'
                   : 'text-brand-red'
@@ -682,7 +769,14 @@ export default function RoundRunner({ selectedConclaveId }) {
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white border border-emerald-100 rounded-md text-[10px] font-black text-emerald-800 mb-3 shadow-2xs">
                   <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
                   <span className="text-emerald-300">•</span>
-                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 90s turn</span>
+                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 60s turn</span>
+                </div>
+              )}
+
+              {timingState.phase === 'referral' && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white border border-blue-200 rounded-md text-[10px] font-black text-blue-800 mb-3 shadow-2xs animate-pulse">
+                  <Send className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Referral Window ({formatTime(timingState.phaseRemaining)} left)</span>
                 </div>
               )}
 
@@ -695,23 +789,36 @@ export default function RoundRunner({ selectedConclaveId }) {
               {/* Controls */}
               <div className="flex items-center gap-2 mb-3">
                 <button
-                  onClick={() => setTimeLeft(ROUND_BLOCK_DURATION_SECS)}
+                  onClick={() => {
+                    setIsPaused(false);
+                    setPausedAt(null);
+                    setPauseOffsetMs(0);
+                    setTimeLeft(ROUND_BLOCK_DURATION_SECS);
+                    showToast('Timer Reset', 'Round timer reset to 15:00.');
+                  }}
                   title="Reset to 15:00"
                   className="w-7 h-7 rounded-full border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 flex items-center justify-center cursor-pointer shadow-2xs"
                 >
                   <RotateCcw className="w-3 h-3" />
                 </button>
                 <button
-                  onClick={() => setTimerRunning(!timerRunning)}
-                  title={timerRunning ? "Pause Timer" : "Start Timer"}
+                  onClick={handleTogglePlayPause}
+                  title={isPaused ? "Resume Timer" : timerRunning ? "Pause Timer" : "Start Timer"}
                   className={`w-8 h-8 rounded-full text-white flex items-center justify-center cursor-pointer shadow-md transition-smooth ${
-                    timerRunning ? 'bg-zinc-800 hover:bg-zinc-900' : 'bg-brand-red hover:bg-red-700'
+                    isPaused
+                      ? 'bg-amber-600 hover:bg-amber-700 animate-pulse'
+                      : timerRunning
+                      ? 'bg-zinc-800 hover:bg-zinc-900'
+                      : 'bg-brand-red hover:bg-red-700'
                   }`}
                 >
-                  {timerRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  {isPaused || !timerRunning ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onClick={() => {
+                    setIsPaused(false);
+                    setPausedAt(null);
+                    setPauseOffsetMs(0);
                     setTimerRunning(false);
                     setTimeLeft(0);
                     showToast('Timer Stopped', 'Active round timer reset to zero.');
@@ -725,7 +832,7 @@ export default function RoundRunner({ selectedConclaveId }) {
 
               {/* Table Timing Breakdown formula */}
               <p className="text-[9.5px] text-zinc-500 font-bold uppercase tracking-wider">
-                {timingState.personsPerTable} Seats · {Math.round(timingState.activeSecs / 60)}m Talking + {Math.round(timingState.transitionSecs / 60)}m Transition
+                {timingState.personsPerTable} Seats · {Math.round(timingState.activeSecs / 60)}m Talking (1m/ea) + {(timingState.referralSecs / 60).toFixed(1)}m Referrals (30s/ea) + {Math.round(timingState.transitionSecs / 60)}m Transition
               </p>
             </div>
           </div>

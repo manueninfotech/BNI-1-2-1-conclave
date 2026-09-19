@@ -9,6 +9,14 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [authNotice, setAuthNotice] = useState(() => {
+    const msg = localStorage.getItem('bni_auth_notice');
+    if (msg) {
+      localStorage.removeItem('bni_auth_notice');
+      return msg;
+    }
+    return null;
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -227,6 +235,26 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
 
             {/* Form Content */}
             <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+              {authNotice && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-xl text-amber-900 text-body-sm font-semibold flex items-start justify-between gap-3 shadow-2xs animate-fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-wider text-amber-900">Session Notice</p>
+                      <p className="text-xs text-amber-800 mt-0.5 leading-snug">{authNotice}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAuthNotice(null)}
+                    className="text-amber-500 hover:text-amber-900 text-sm font-bold leading-none p-1 cursor-pointer"
+                    title="Dismiss"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
+
               {error && (
                 <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-brand-red text-body-sm font-semibold flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0"></span>

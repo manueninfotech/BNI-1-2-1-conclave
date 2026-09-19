@@ -8,7 +8,6 @@ import {
   X,
   Menu,
   Bell,
-  Search,
   Check,
   AlertTriangle,
   AlertCircle,
@@ -233,16 +232,6 @@ export default function SuperadminLayout({
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="relative max-w-xs hidden sm:block">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-450" />
-              <input
-                type="text"
-                placeholder="Global search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-60 pl-9 pr-3 bg-zinc-50 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 placeholder-zinc-400 focus:outline-hidden focus:ring-1 focus:ring-brand-red focus:border-brand-red"
-              />
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
