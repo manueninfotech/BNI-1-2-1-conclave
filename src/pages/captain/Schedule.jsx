@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { downloadOrViewAgendaDocument, extractTextFromPdfDataUrl } from '../../utils/documentUtils';
 import { api } from '../../services/api';
+import { formatTimeRangeNice } from '../../utils/timeFormat';
 
 export default function CaptainSchedule({ loggedInCaptain, onTabChange, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
@@ -17,28 +18,6 @@ export default function CaptainSchedule({ loggedInCaptain, onTabChange, conclave
     return null;
   });
 
-  const [fetchedAgendaDoc, setFetchedAgendaDoc] = useState(null);
-
-  useEffect(() => {
-    async function fetchLatestAgendaDoc() {
-      try {
-        const list = await api.get('/conclaves');
-        if (Array.isArray(list)) {
-          const conclaveWithDoc = list.find(c => c.agendaDocument);
-          if (conclaveWithDoc && conclaveWithDoc.agendaDocument) {
-            setFetchedAgendaDoc(conclaveWithDoc.agendaDocument);
-            if (conclaveWithDoc.id) {
-              localStorage.setItem(`bni_agenda_doc_${conclaveWithDoc.id}`, JSON.stringify(conclaveWithDoc.agendaDocument));
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Could not fetch agenda document from backend:", err);
-      }
-    }
-    fetchLatestAgendaDoc();
-  }, []);
-
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
@@ -47,53 +26,57 @@ export default function CaptainSchedule({ loggedInCaptain, onTabChange, conclave
   }, [propConclaveSyncData]);
 
   const conclaveSyncData = syncData || propConclaveSyncData;
+  const conclaveId = conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId;
+
+  const [fetchedAgendaDoc, setFetchedAgendaDoc] = useState(null);
+
+  useEffect(() => {
+    async function fetchConclaveAgendaDoc() {
+      if (!conclaveId) {
+        setFetchedAgendaDoc(null);
+        return;
+      }
+      try {
+        const list = await api.get('/conclaves');
+        if (Array.isArray(list)) {
+          const currentConclave = list.find(c => c.id === conclaveId);
+          if (currentConclave && currentConclave.agendaDocument) {
+            setFetchedAgendaDoc(currentConclave.agendaDocument);
+            localStorage.setItem(`bni_agenda_doc_${conclaveId}`, JSON.stringify(currentConclave.agendaDocument));
+          } else {
+            setFetchedAgendaDoc(null);
+            localStorage.removeItem(`bni_agenda_doc_${conclaveId}`);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch agenda document:', err);
+      }
+    }
+    fetchConclaveAgendaDoc();
+  }, [conclaveId]);
 
   const getUploadedAgendaDoc = () => {
+    // Strictly return agenda document for THIS conclave only
+    if (conclaveSyncData?.conclaveStatus?.agendaDocument) return conclaveSyncData.conclaveStatus.agendaDocument;
     if (conclaveSyncData?.agendaDocument) return conclaveSyncData.agendaDocument;
     if (fetchedAgendaDoc) return fetchedAgendaDoc;
 
-    const conclaveId = conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId;
     if (conclaveId) {
       const cached = localStorage.getItem(`bni_agenda_doc_${conclaveId}`);
       if (cached) {
-        try { return JSON.parse(cached); } catch (e) { }
-      }
-    }
-
-    const genericCache = localStorage.getItem('bni_conclave_agenda_doc');
-    if (genericCache) {
-      try { return JSON.parse(genericCache); } catch (e) { }
-    }
-
-    const keys = ['bni_admin_conclaves_cache', 'bni_conclaves', 'bni_member_conclaves_cache', 'bni_schedule_gen_conclaves_cache'];
-    for (const key of keys) {
-      const raw = localStorage.getItem(key);
-      if (raw) {
         try {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list)) {
-            const found = list.find(c => c.agendaDocument);
-            if (found && found.agendaDocument) return found.agendaDocument;
-          }
+          const parsed = JSON.parse(cached);
+          if (parsed && (parsed.url || parsed.dataUrl)) return parsed;
         } catch (e) { }
       }
     }
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('bni_agenda_doc_')) {
-        try {
-          const val = JSON.parse(localStorage.getItem(k));
-          if (val && (val.url || val.dataUrl)) return val;
-        } catch (e) { }
-      }
-    }
     return null;
   };
 
   const agendaDoc = useMemo(() => {
-    return getUploadedAgendaDoc() || fetchedAgendaDoc;
-  }, [conclaveSyncData, fetchedAgendaDoc]);
+    return getUploadedAgendaDoc();
+  }, [conclaveSyncData, fetchedAgendaDoc, conclaveId]);
 
   const rawAgendaText = useMemo(() => {
     if (agendaDoc?.rawText) return agendaDoc.rawText;
@@ -129,15 +112,15 @@ export default function CaptainSchedule({ loggedInCaptain, onTabChange, conclave
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Match explicit timings e.g. 09:30 AM, 10:15 AM
-      const timeMatch = line.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm))/i);
+      // Match explicit timings e.g. 09:30 AM, 10:00 - 11:00, 10:00 AM – 11:00 AM
+      const timeMatch = line.match(/(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?(?:\s*[-–—]\s*\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)?)/i);
 
-      if (timeMatch) {
+      if (timeMatch && (/(?:AM|PM|am|pm)/i.test(timeMatch[1]) || /^\d{1,2}:\d{2}/.test(line.trim()))) {
         if (currentEvent && currentEvent.title) {
           events.push(currentEvent);
         }
 
-        const timeStr = timeMatch[1].toUpperCase();
+        const timeStr = formatTimeRangeNice(timeMatch[1].trim());
         let titleText = line.replace(timeMatch[0], '').replace(/^[-–—:\s]+/, '').trim();
 
         currentEvent = {

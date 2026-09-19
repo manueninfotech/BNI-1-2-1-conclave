@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, Shield, X, Award, Clock, Footprints } from 'lucide-react';
 
 import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import { formatTimeRangeNice, formatUpcomingRoundRange } from '../../utils/timeFormat';
 
 export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
@@ -31,9 +32,18 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
   const [selectedProfileMember, setSelectedProfileMember] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const personsPerTable = conclaveSyncData?.personsPerTable ||
-    conclaveSyncData?.conclaveStatus?.personsPerTable ||
-    6;
+  const roundObj = conclaveSyncData?.mySchedule?.find(s => s.number === selectedRound);
+  const currentMembersList = roundObj ? (roundObj.participants || []) : [];
+
+  const personsPerTable = useMemo(() => {
+    if (currentMembersList.length > 0) return currentMembersList.length;
+    if (conclaveSyncData?.tableOccupants && Array.isArray(conclaveSyncData.tableOccupants) && conclaveSyncData.tableOccupants.length > 0) {
+      return conclaveSyncData.tableOccupants.length;
+    }
+    return conclaveSyncData?.personsPerTable ||
+      conclaveSyncData?.conclaveStatus?.personsPerTable ||
+      6;
+  }, [currentMembersList, conclaveSyncData]);
 
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
@@ -60,9 +70,6 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
     return () => clearInterval(interval);
   }, [conclaveSyncData, personsPerTable]);
 
-  const roundObj = conclaveSyncData?.mySchedule?.find(s => s.number === selectedRound);
-  const currentMembersList = roundObj ? roundObj.participants : [];
-
   const filteredMembers = currentMembersList.filter(member => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -81,6 +88,9 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
   };
 
   const currentStatus = getRoundStatus(selectedRound);
+  const isCurrentRound = selectedRound === (conclaveSyncData?.conclaveStatus?.currentRound || 1);
+  const isTalkingActive = isCurrentRound && Boolean(timingState?.isTalking);
+  const isReferralOpen = isCurrentRound && Boolean(timingState?.isReferralOpen);
 
   return (
     <div className="space-y-6 animate-fade-in font-sans">
@@ -246,21 +256,39 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                     </div>
 
                     {/* Refer button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReferTarget({
-                          id: member.uid || member.id || member._originalUid,
-                          uid: member.uid || member.id || member._originalUid,
-                          name: member.name,
-                          company: member.company,
-                          category: member.category
-                        });
-                      }}
-                      className="w-full py-2 border border-zinc-200 group-hover:border-brand-red text-zinc-700 group-hover:text-white bg-zinc-50 group-hover:bg-brand-red rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-2xs cursor-pointer"
-                    >
-                      Send Referral
-                    </button>
+                    {isReferralOpen ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReferTarget({
+                            id: member.uid || member.id || member._originalUid,
+                            uid: member.uid || member.id || member._originalUid,
+                            name: member.name,
+                            company: member.company,
+                            category: member.category
+                          });
+                        }}
+                        className="w-full py-2 bg-brand-red hover:bg-red-750 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-brand-red/15 cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        Send Referral
+                      </button>
+                    ) : timingState?.isTalking ? (
+                      <button
+                        disabled
+                        title="Referrals will open during the dedicated Referral Window (after speaking concludes)"
+                        className="w-full py-2 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-not-allowed"
+                      >
+                        Referrals Open in {formatTime(timingState?.phaseRemaining)}
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        title="Referrals are closed for this round"
+                        className="w-full py-2 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-not-allowed"
+                      >
+                        Referrals Closed
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -283,7 +311,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                 </span>
               ) : timingState.phase === 'transition' ? (
                 <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
-                  Transitioning
+                  Move to Next Table
                 </span>
               ) : (
                 <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
@@ -293,25 +321,34 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
             </div>
 
             <div className="bg-zinc-50/70 p-4 rounded-xl border border-zinc-150 text-center">
-              <div className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">
-                Total Round Time
+              <div className="text-[9px] font-black uppercase tracking-widest mb-0.5 text-zinc-450">
+                {timingState.phase === 'active'
+                  ? 'Talking Time Left'
+                  : timingState.phase === 'referral'
+                  ? 'Referral Window Left'
+                  : timingState.phase === 'transition'
+                  ? 'Move to Next Table'
+                  : 'Round Session'}
               </div>
-              <div className={`text-3xl font-black tracking-tighter ${
+              <div className={`text-4xl font-black font-mono tracking-tight ${
                 timingState.phase === 'active'
                   ? 'text-emerald-600'
+                  : timingState.phase === 'referral'
+                  ? 'text-blue-600'
                   : timingState.phase === 'transition'
                   ? 'text-amber-600'
                   : 'text-zinc-800'
               }`}>
-                {formatTime(timingState.totalRemaining)}
+                {formatTime(
+                  timingState.phase === 'active' || timingState.phase === 'referral' || timingState.phase === 'transition'
+                    ? timingState.phaseRemaining
+                    : timingState.totalRemaining
+                )}
               </div>
-              <p className="text-[9.5px] text-zinc-500 font-bold mt-1">
-                {timingState.phase === 'active'
-                  ? `${formatTime(timingState.phaseRemaining)} talking time left`
-                  : timingState.phase === 'transition'
-                  ? `${formatTime(timingState.phaseRemaining)} left to rotate`
-                  : '15-minute table session'}
-              </p>
+              <div className="mt-2.5 pt-2 border-t border-zinc-200/70 flex items-center justify-between text-[10px] px-1">
+                <span className="text-zinc-400 font-bold uppercase tracking-wider">Total Round Time</span>
+                <span className="font-mono font-black text-zinc-700">{formatTime(timingState.totalRemaining)}</span>
+              </div>
             </div>
 
             {/* Current Speaker Box */}
@@ -323,7 +360,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                 </div>
                 <div className="mt-1 flex items-baseline justify-between">
                   <span className="text-lg font-black text-emerald-700">{formatTime(timingState.speakerTimeLeft)}</span>
-                  <span className="text-[9px] text-emerald-600 font-semibold">90s per attendee</span>
+                  <span className="text-[9px] text-emerald-600 font-semibold">60s turn (1 min)</span>
                 </div>
                 <div className="w-full bg-emerald-200/60 rounded-full h-1.5 mt-2 overflow-hidden">
                   <div
@@ -334,11 +371,26 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
               </div>
             )}
 
+            {/* Referral Window Box */}
+            {timingState.phase === 'referral' && (
+              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-lg text-center space-y-1 animate-pulse">
+                <div className="flex items-center justify-center gap-1.5 text-blue-900 font-black text-[10.5px]">
+                  <span>Referral Exchange Window Open</span>
+                </div>
+                <p className="text-[10px] text-blue-800 font-semibold leading-tight">
+                  Members are actively submitting referrals (30s per member).
+                </p>
+                <span className="font-mono font-black text-blue-900 text-sm block">
+                  {formatTime(timingState.phaseRemaining)} left
+                </span>
+              </div>
+            )}
+
             {timingState.phase === 'transition' && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center space-y-1 animate-pulse">
                 <div className="flex items-center justify-center gap-1.5 text-amber-800 font-black text-[10.5px]">
                   <Footprints className="w-3.5 h-3.5" />
-                  <span>Discussion Ended</span>
+                  <span>Discussions &amp; Referrals Ended</span>
                 </div>
                 <p className="text-[9.5px] text-amber-700 font-semibold leading-tight">
                   Direct attendees to collect their notes and proceed to their assigned Table for Round {selectedRound + 1}.
@@ -347,7 +399,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
             )}
 
             <div className="text-[9.5px] text-zinc-400 font-bold text-center border-t border-zinc-100 pt-2">
-              Formula: 1.5m × {timingState.personsPerTable} seats ({Math.round(timingState.activeSecs / 60)}m talking + {Math.round(timingState.transitionSecs / 60)}m move)
+              Formula: {timingState.personsPerTable} seats ({Math.round(timingState.activeSecs / 60)}m talking + {(timingState.referralSecs / 60).toFixed(1)}m referrals + {Math.round(timingState.transitionSecs / 60)}m move)
             </div>
           </div>
 
@@ -424,7 +476,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                 </div>
                 <div className="text-center">
                   <p className="text-[10px] text-zinc-400 font-semibold leading-none">Scheduled Time</p>
-                  <p className="font-black text-zinc-800 text-[12px] mt-1.5">{nextRoundObj.time || 'Next Session'}</p>
+                  <p className="font-black text-zinc-800 text-[12px] mt-1.5">{formatUpcomingRoundRange(nextRoundObj.time, 'Next Session')}</p>
                 </div>
                 <button
                   onClick={() => setShowPreviewModal(true)}
@@ -505,12 +557,14 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
         <MemberProfileModal
           member={selectedProfileMember}
           onClose={() => setSelectedProfileMember(null)}
-          onSendReferral={(m) => setReferTarget({
+          isReferralDisabled={!isReferralOpen}
+          referralDisabledReason="Referrals are only active during the dedicated Referral Window (after speaking concludes)."
+          onSendReferral={isReferralOpen ? (m) => setReferTarget({
             id: m.uid || m.id,
             name: m.name,
             company: m.company,
             category: m.category
-          })}
+          }) : undefined}
         />
       )}
 
@@ -519,6 +573,8 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
           recipient={referTarget}
           loggedInUser={loggedInCaptain}
           activeConclaveId={conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId}
+          isReferralOpen={isReferralOpen}
+          disabledReason="Referrals are only active during the dedicated Referral Window (after speaking concludes)."
           onClose={() => setReferTarget(null)}
           onSuccess={(msg) => {
             setToast(msg);

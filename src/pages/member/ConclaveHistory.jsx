@@ -14,6 +14,29 @@ import {
 import { api } from '../../services/api';
 import { downloadOrViewAgendaDocument } from '../../utils/documentUtils';
 
+const formatTimeNice = (val, fallback = '') => {
+  if (!val) return fallback;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      let meridian = match[3] ? match[3].toUpperCase() : null;
+      if (!meridian) {
+        meridian = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+      }
+      return `${String(hours).padStart(2, '0')}:${mins} ${meridian}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+  return String(val);
+};
+
 export default function MemberConclaveHistory({ loggedInMember }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState('All');
@@ -298,7 +321,7 @@ export default function MemberConclaveHistory({ loggedInMember }) {
                         {(conclave.startTime || conclave.endTime) && (
                           <span className="flex items-center gap-1.5 text-brand-red font-bold">
                             <Clock className="w-3.5 h-3.5 text-brand-red" />
-                            {conclave.startTime}{conclave.startTime && conclave.endTime ? ' – ' : ''}{conclave.endTime}
+                            {formatTimeNice(conclave.startTime)}{conclave.startTime && conclave.endTime ? ' – ' : ''}{formatTimeNice(conclave.endTime)}
                           </span>
                         )}
                         {conclave.status !== 'Cancelled' && (

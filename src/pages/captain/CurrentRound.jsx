@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Clock,
@@ -7,15 +7,19 @@ import {
   Info,
   Check,
   Play,
-  X
+  X,
+  ArrowRight
 } from 'lucide-react';
+import { formatTimeNice, formatUpcomingRoundStartTime, formatUpcomingRoundRange } from '../../utils/timeFormat';
+import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import MemberProfileModal from '../../components/MemberProfileModal';
 
 export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
     if (propConclaveSyncData) return propConclaveSyncData;
     const cached = localStorage.getItem('bni_conclave_sync_data_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return null;
   });
@@ -29,42 +33,45 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
   const conclaveSyncData = syncData || propConclaveSyncData;
 
-  const initialTime = 15 * 60; // 900 seconds (15:00)
+  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
   const [timeLeft, setTimeLeft] = useState(initialTime);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedProfileMember, setSelectedProfileMember] = useState(null);
+
+  const personsPerTable = useMemo(() => {
+    if (conclaveSyncData?.tableOccupants && Array.isArray(conclaveSyncData.tableOccupants) && conclaveSyncData.tableOccupants.length > 0) {
+      return conclaveSyncData.tableOccupants.length;
+    }
+    return conclaveSyncData?.personsPerTable ||
+      conclaveSyncData?.conclaveStatus?.personsPerTable ||
+      6;
+  }, [conclaveSyncData]);
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+  }));
 
   useEffect(() => {
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
 
-    if (startedAt && isRunning) {
-      const updateTimer = () => {
-        let startTime = NaN;
-        if (typeof startedAt === 'object' && startedAt !== null) {
-          if (typeof startedAt._seconds === 'number') startTime = startedAt._seconds * 1000;
-          else if (typeof startedAt.seconds === 'number') startTime = startedAt.seconds * 1000;
-          else if (typeof startedAt.toDate === 'function') startTime = startedAt.toDate().getTime();
-        }
-        if (isNaN(startTime)) startTime = new Date(startedAt).getTime();
-        if (isNaN(startTime)) startTime = Date.now();
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable,
+        isRunning,
+      });
+      setTimingState(timing);
+      setTimeLeft(timing.totalRemaining);
+    };
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimeLeft(Math.max(0, initialTime - elapsed));
-      };
-      updateTimer();
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setTimeLeft(initialTime);
-    }
-  }, [conclaveSyncData]);
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [conclaveSyncData, personsPerTable]);
 
   const participants = conclaveSyncData?.tableOccupants || [];
   const categories = [...new Set(participants.map(p => p.category))];
@@ -194,38 +201,95 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
           {/* Left side: Countdown Ring */}
           <div className="flex flex-col items-center shrink-0 pt-6 md:pt-4">
-            <div className="relative w-44 h-44 flex items-center justify-center">
-              {/* Countdown circular track */}
-              <svg className="absolute inset-0 w-full h-full transform -rotate-90">
-                <circle
-                  className="text-zinc-100"
-                  cx="88"
-                  cy="88"
-                  fill="transparent"
-                  r="80"
-                  stroke="currentColor"
-                  strokeWidth="7"
-                />
-                <circle
-                  className="text-brand-red transition-all duration-1000"
-                  cx="88"
-                  cy="88"
-                  fill="transparent"
-                  r="80"
-                  stroke="currentColor"
-                  strokeDasharray={502.6}
-                  strokeDashoffset={502.6 * (1 - timeLeft / 600)}
-                  strokeLinecap="round"
-                  strokeWidth="7"
-                />
-              </svg>
-
-              <div className="text-center z-10">
-                <span className="text-4xl font-black text-zinc-955 tracking-tighter leading-none">
-                  {formatTime(timeLeft)}
+            {/* Phase pill above the circle */}
+            <div className="mb-2">
+              {timingState.phase === 'active' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Talking Time
                 </span>
-                <p className="text-[8.5px] text-zinc-400 font-black uppercase tracking-widest mt-1.5">Minutes Left</p>
-              </div>
+              ) : timingState.phase === 'transition' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                  Move to Next Table
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
+                  Ready
+                </span>
+              )}
+            </div>
+
+            {(() => {
+              const phaseTotalSecs = timingState.phase === 'transition'
+                ? (timingState.transitionSecs || 1)
+                : (timingState.activeSecs || 1);
+              const phaseRemainingSecs = (timingState.phase === 'active' || timingState.phase === 'transition')
+                ? (timingState.phaseRemaining || 0)
+                : timeLeft;
+              const phasePercent = Math.max(0, Math.min(100, (phaseRemainingSecs / phaseTotalSecs) * 100));
+              const strokeDashoffset = 502.6 * (1 - phasePercent / 100);
+
+              return (
+                <div className="relative w-44 h-44 flex items-center justify-center">
+                  {/* Countdown circular track */}
+                  <svg className="absolute inset-0 w-full h-full transform -rotate-90">
+                    <circle
+                      className="text-zinc-100"
+                      cx="88"
+                      cy="88"
+                      fill="transparent"
+                      r="80"
+                      stroke="currentColor"
+                      strokeWidth="7"
+                    />
+                    <circle
+                      className={`transition-all duration-1000 ${timingState.phase === 'active'
+                          ? 'text-emerald-500'
+                          : timingState.phase === 'transition'
+                            ? 'text-amber-500'
+                            : 'text-brand-red'
+                        }`}
+                      cx="88"
+                      cy="88"
+                      fill="transparent"
+                      r="80"
+                      stroke="currentColor"
+                      strokeDasharray={502.6}
+                      strokeDashoffset={strokeDashoffset}
+                      strokeLinecap="round"
+                      strokeWidth="7"
+                    />
+                  </svg>
+
+                  <div className="text-center z-10 flex flex-col items-center">
+                    <span className={`text-4xl font-black tracking-tighter leading-none ${timingState.phase === 'active'
+                        ? 'text-emerald-600'
+                        : timingState.phase === 'transition'
+                          ? 'text-amber-600'
+                          : 'text-zinc-955'
+                      }`}>
+                      {formatTime(
+                        timingState.phase === 'active' || timingState.phase === 'transition'
+                          ? timingState.phaseRemaining
+                          : timeLeft
+                      )}
+                    </span>
+                    <p className="text-[8.5px] text-zinc-450 font-black uppercase tracking-widest mt-1.5">
+                      {timingState.phase === 'active'
+                        ? 'Talking Time Left'
+                        : timingState.phase === 'transition'
+                          ? 'Move Table Left'
+                          : 'Minutes Left'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Total time small display */}
+            <div className="mt-3 bg-zinc-50 border border-zinc-200 rounded-lg py-1 px-3 text-center shadow-2xs flex items-center justify-between gap-3 min-w-[170px]">
+              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Total Round Time</span>
+              <span className="text-[11.5px] font-mono font-black text-zinc-800">{formatTime(timeLeft)}</span>
             </div>
           </div>
 
@@ -239,30 +303,96 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
             </div>
 
             <div className="border-t border-zinc-100 pt-3.5 space-y-2.5">
-              <span className="text-[9.5px] font-black text-zinc-450 uppercase tracking-wider block">Live Speaker Queue</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[9.5px] font-black text-zinc-450 uppercase tracking-wider block">Live Speaker Queue</span>
+                {timingState?.isTalking && (
+                  <span className="text-[9.5px] font-bold text-brand-red flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5" />
+                    {formatTime(timingState?.speakerTimeLeft || 60)} turn remaining
+                  </span>
+                )}
+              </div>
 
               <div className="space-y-2">
-                {participants.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between p-2 bg-red-50/50 border border-red-100 rounded-lg text-[11px] font-bold animate-pulse">
-                      <div className="flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-brand-red"></span>
-                        <span className="text-zinc-955 font-black">{participants[0].name} ({participants[0].category || 'Member'})</span>
-                      </div>
-                      <span className="text-[9px] font-black text-brand-red bg-red-50 border border-red-100 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">Speaking</span>
-                    </div>
-
-                    {participants.length > 1 && (
-                      <div className="flex items-center justify-between p-2 bg-zinc-50 border border-zinc-150 rounded-lg text-[11px] font-bold text-zinc-500">
-                        <div className="flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-zinc-300"></span>
-                          <span>{participants.slice(1).map(p => p.name).join(', ')}</span>
+                {participants.length > 0 ? (() => {
+                  if (timingState?.isReferral) {
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-150 rounded-lg text-[11px] font-bold text-emerald-900">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+                            <span>All speaker presentations completed</span>
+                          </div>
+                          <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">Completed</span>
                         </div>
-                        <span className="text-[9px] font-bold text-zinc-400 uppercase leading-none">Up Next</span>
+                        <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-150 rounded-lg text-[11px] font-semibold text-blue-900 animate-pulse">
+                          <span>Referral Exchange Window: {formatTime(timingState.phaseRemaining)} left</span>
+                          <span className="text-[9px] font-black text-blue-700 bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">30s / Member</span>
+                        </div>
                       </div>
-                    )}
-                  </>
-                ) : (
+                    );
+                  }
+
+                  if (timingState?.isTransition) {
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-150 rounded-lg text-[11px] font-bold text-emerald-900">
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+                            <span>All speaker presentations completed</span>
+                          </div>
+                          <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">Completed</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-blue-50/70 border border-blue-150 rounded-lg text-[11px] font-semibold text-blue-900">
+                          <span>Transition time: move to assigned next table</span>
+                          <span className="text-[9px] font-black text-blue-700 bg-blue-100 border border-blue-200 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">Moving Table</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const activeIdx = Math.min(
+                    Math.max(0, timingState?.speakerIndex ?? 0),
+                    participants.length - 1
+                  );
+                  const currentSpeaker = participants[activeIdx];
+                  const upNext = participants.filter((_, idx) => idx > activeIdx);
+
+                  return (
+                    <>
+                      {currentSpeaker && (
+                        <div className="flex items-center justify-between p-2 bg-red-50/50 border border-red-100 rounded-lg text-[11px] font-bold animate-pulse">
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand-red shrink-0"></span>
+                            <span className="text-zinc-955 font-black truncate">
+                              {currentSpeaker.name} ({currentSpeaker.category || 'Member'})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[9px] font-black text-brand-red bg-red-50 border border-red-100 rounded px-1.5 py-0.5 uppercase tracking-wider leading-none">
+                              Speaking ({activeIdx + 1}/{participants.length})
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {upNext.length > 0 ? (
+                        <div className="flex items-center justify-between p-2 bg-zinc-50 border border-zinc-150 rounded-lg text-[11px] font-bold text-zinc-500">
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 shrink-0"></span>
+                            <span className="truncate">{upNext.map(p => p.name).join(', ')}</span>
+                          </div>
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase leading-none shrink-0">Up Next</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between p-2 bg-zinc-50 border border-zinc-150 rounded-lg text-[11px] font-bold text-zinc-400">
+                          <span>Last speaker of current round</span>
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase leading-none">Final Turn</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })() : (
                   <p className="text-[11px] text-zinc-400 font-semibold p-2">No table occupants assigned for this round.</p>
                 )}
               </div>
@@ -327,29 +457,68 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
         </div>
 
         {/* Current Participants Grid */}
-        <div className="col-span-12 lg:col-span-9 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+        <div className="col-span-12 lg:col-span-9 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5 items-start">
           {participants.map((p) => {
             const initials = p.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
             return (
-              <div key={p.uid || p.name} className="bg-white border border-zinc-200 rounded-xl p-4 flex gap-3.5 hover:border-brand-red/20 shadow-2xs transition-smooth">
-                <div className="w-12 h-12 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-sm text-zinc-500 shrink-0 shadow-inner">
-                  {initials}
-                </div>
-                <div className="flex-1 space-y-1 overflow-hidden">
-                  <h4 className="text-[13px] font-black text-zinc-850 truncate leading-tight">{p.name}</h4>
-                  <p className="text-[11px] text-zinc-450 font-semibold truncate leading-normal mt-0.5">{p.company}</p>
-                  <div className="flex items-center gap-2 pt-1.5">
-                    <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase border ${p.isCaptain ? 'bg-red-50 border-red-100 text-brand-red' : 'bg-zinc-50 border-zinc-200 text-zinc-550'}`}>
-                      {p.isCaptain ? 'Captain' : 'Member'}
-                    </span>
-                    <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">{p.chapter || 'No Chapter'}</span>
+              <div
+                key={p.uid || p.name}
+                onClick={() => setSelectedProfileMember(p)}
+                className="group relative bg-white p-5 rounded-2xl border border-zinc-200/90 hover:border-brand-red/40 hover:shadow-md transition-all duration-200 flex flex-col justify-between gap-3.5 cursor-pointer"
+              >
+                {/* Top row: Avatar + Name & Company + Captain badge */}
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-full bg-linear-to-br from-red-50 to-red-100/70 border border-red-200/70 text-brand-red font-black text-xs flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform select-none">
+                    {initials}
                   </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <h4 className="text-body-sm font-black text-zinc-900 group-hover:text-brand-red transition-colors truncate">
+                        {p.name}
+                      </h4>
+                      {p.isCaptain && (
+                        <span className="shrink-0 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-red-50 text-brand-red border border-red-200/80">
+                          Captain
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-500 font-semibold truncate mt-0.5">
+                      {p.company || 'Business Member'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Middle row: Category pill + Chapter */}
+                <div className="space-y-1.5">
+                  <div>
+                    <span className="inline-flex items-center text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-md border border-zinc-200/80 bg-zinc-50 text-zinc-700 tracking-wider leading-tight">
+                      {p.category || 'BNI Member'}
+                    </span>
+                  </div>
+
+                  {p.chapter && (
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
+                      {p.chapter}
+                    </p>
+                  )}
+                </div>
+
+                {/* Bottom row: Details / Profile link */}
+                <div className="pt-2.5 border-t border-zinc-100 flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    {p.isCaptain ? 'Table Anchor' : 'Active Seating'}
+                  </span>
+
+                  <span className="text-[9.5px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-brand-red transition-colors flex items-center gap-1">
+                    View Profile <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
                 </div>
               </div>
             );
           })}
           {participants.length === 0 && (
-            <p className="col-span-4 p-8 text-center text-zinc-400 text-caption font-semibold">No participants registered at this table.</p>
+            <p className="col-span-full p-8 text-center text-zinc-400 text-caption font-semibold">No participants registered at this table.</p>
           )}
         </div>
 
@@ -375,7 +544,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                         </div>
                         <div className="flex items-center gap-2 text-zinc-300 text-xs">
                           <Clock className="w-3.5 h-3.5 text-brand-red animate-pulse" />
-                          <span>Starts at {nextRoundObj.time.split(' - ')[0]}</span>
+                          <span>Starts at {formatUpcomingRoundStartTime(nextRoundObj.time)}</span>
                         </div>
                       </div>
                     </>
@@ -399,137 +568,189 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
         {/* Live Progress Timeline */}
         <div className="col-span-12 bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
-          <h3 className="font-black text-zinc-955 text-body-sm mb-6">Conclave Timeline</h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-black text-zinc-955 text-body-sm">Conclave Timeline</h3>
+            <span className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">
+              Round {conclaveSyncData?.conclaveStatus?.currentRound || 1} of {conclaveSyncData?.mySchedule?.length || 6}
+            </span>
+          </div>
 
           <div className="relative py-4 px-3">
-            {/* Horizontal Track Background Line */}
-            <div className="absolute top-[32px] left-6 right-6 h-0.5 bg-zinc-100 rounded-full z-0"></div>
+            {(() => {
+              const currentRoundNum = conclaveSyncData?.conclaveStatus?.currentRound || 1;
+              const totalRounds = conclaveSyncData?.mySchedule?.length || conclaveSyncData?.conclaveStatus?.totalRounds || 6;
+              const timelinePercent = totalRounds > 1
+                ? Math.min(100, Math.max(0, Math.round(((currentRoundNum - 1) / (totalRounds - 1)) * 100)))
+                : 0;
 
-            {/* Horizontal Active Track Progress Line */}
-            <div className="absolute top-[32px] left-6 w-[40%] h-0.5 bg-brand-red rounded-full z-0"></div>
+              return (
+                <>
+                  {/* Horizontal Track Background Line */}
+                  <div className="absolute top-[32px] left-6 right-6 h-0.5 bg-zinc-100 rounded-full z-0"></div>
 
-            {/* Steps Container */}
-            <div className="relative flex justify-between items-start z-10">
-              {/* Step 1 */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center z-10 shadow-xs border-2 border-white">
-                  <Check className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-[9.5px] font-extrabold text-zinc-800 uppercase tracking-wider mt-3">Round 1</span>
-              </div>
+                  {/* Horizontal Active Track Progress Line */}
+                  <div
+                    className="absolute top-[32px] left-6 h-0.5 bg-brand-red rounded-full z-0 transition-all duration-500"
+                    style={{ width: `calc(${timelinePercent}% * 0.92)` }}
+                  ></div>
 
-              {/* Step 2 */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center z-10 shadow-xs border-2 border-white">
-                  <Check className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-[9.5px] font-extrabold text-zinc-800 uppercase tracking-wider mt-3">Round 2</span>
-              </div>
+                  {/* Steps Container */}
+                  <div className="relative flex justify-between items-start z-10">
+                    {Array.from({ length: totalRounds }, (_, i) => i + 1).map((rNum) => {
+                      const isPast = rNum < currentRoundNum;
+                      const isCurrent = rNum === currentRoundNum;
 
-              {/* Step 3 (Active) */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-9 h-9 -mt-0.5 flex items-center justify-center">
-                  {/* Pulsing active background indicator glow */}
-                  <div className="absolute -inset-1 rounded-full bg-red-100/60 animate-pulse z-0"></div>
-
-                  {/* Solid mask circle to completely block the background progress line */}
-                  <div className="relative w-9 h-9 rounded-full bg-brand-red text-white flex items-center justify-center z-10 shadow-md shadow-brand-red/25 border-2 border-white">
-                    <Play className="w-4 h-4 fill-current ml-0.5 animate-pulse" />
+                      return (
+                        <div key={rNum} className="flex flex-col items-center text-center">
+                          {isPast ? (
+                            <div className="relative w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center z-10 shadow-xs border-2 border-white">
+                              <Check className="w-3.5 h-3.5" />
+                            </div>
+                          ) : isCurrent ? (
+                            <div className="relative w-9 h-9 -mt-0.5 flex items-center justify-center">
+                              <div className="absolute -inset-1 rounded-full bg-red-100/60 animate-pulse z-0"></div>
+                              <div className="relative w-9 h-9 rounded-full bg-brand-red text-white flex items-center justify-center z-10 shadow-md shadow-brand-red/25 border-2 border-white">
+                                <Play className="w-4 h-4 fill-current ml-0.5 animate-pulse" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative w-8 h-8 rounded-full bg-white border border-zinc-200 text-zinc-350 flex items-center justify-center z-10 text-[10.5px] font-extrabold shadow-xs select-none">
+                              {rNum}
+                            </div>
+                          )}
+                          <span
+                            className={`text-[9.5px] uppercase tracking-wider mt-2.5 ${isCurrent
+                                ? 'font-black text-brand-red'
+                                : isPast
+                                  ? 'font-extrabold text-zinc-800'
+                                  : 'font-bold text-zinc-400'
+                              }`}
+                          >
+                            Round {rNum}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-                <span className="text-[10px] font-black text-brand-red uppercase tracking-wider mt-2.5">Round 3</span>
-              </div>
-
-              {/* Step 4 */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-8 h-8 rounded-full bg-white border border-zinc-200 text-zinc-350 flex items-center justify-center z-10 text-[10.5px] font-extrabold shadow-xs select-none">
-                  4
-                </div>
-                <span className="text-[9.5px] font-bold text-zinc-400 uppercase tracking-wider mt-3">Round 4</span>
-              </div>
-
-              {/* Step 5 */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-8 h-8 rounded-full bg-white border border-zinc-200 text-zinc-350 flex items-center justify-center z-10 text-[10.5px] font-extrabold shadow-xs select-none">
-                  5
-                </div>
-                <span className="text-[9.5px] font-bold text-zinc-400 uppercase tracking-wider mt-3">Round 5</span>
-              </div>
-
-              {/* Step 6 */}
-              <div className="flex flex-col items-center text-center">
-                <div className="relative w-8 h-8 rounded-full bg-white border border-zinc-200 text-zinc-350 flex items-center justify-center z-10 text-[10.5px] font-extrabold shadow-xs select-none">
-                  6
-                </div>
-                <span className="text-[9.5px] font-bold text-zinc-400 uppercase tracking-wider mt-3">Round 6</span>
-              </div>
-            </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>
 
       {/* Slide-Up / Overlay Modal for View Round Details */}
       {showDetailsModal && createPortal(
-        <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in font-sans">
-          <div className="bg-white rounded-xl border border-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-5 py-4 border-b border-zinc-150 flex items-center justify-between bg-zinc-50">
-              <div className="flex items-center gap-2">
-                <Award className="w-4 h-4 text-brand-red" />
-                <h3 className="font-black text-zinc-955 text-body-md">Round 3 Discussion Details</h3>
-              </div>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-200/50 transition-smooth cursor-pointer"
-              >
-                <X className="w-4.5 h-4.5" />
-              </button>
-            </div>
+        (() => {
+          const currentRoundNum = conclaveSyncData?.conclaveStatus?.currentRound || 1;
+          const targetRound = conclaveSyncData?.mySchedule?.find(s => s.number === currentRoundNum + 1) ||
+            conclaveSyncData?.mySchedule?.find(s => s.number === currentRoundNum) ||
+            null;
 
-            <div className="p-5 overflow-y-auto space-y-4">
-              <div className="bg-red-50/50 border border-red-100 p-4 rounded-lg space-y-2">
-                <span className="text-[10px] font-black text-brand-red uppercase tracking-wider block">Round Focus Topic</span>
-                <p className="text-[12px] font-black text-zinc-900 leading-snug">
-                  Identifying Cross-Classification Synergies & Shared Client Referral Opportunities
-                </p>
-                <p className="text-[11px] font-semibold text-zinc-500 leading-relaxed">
-                  Members at this table represent Construction, Finance, Software, Manufacturing, and Healthcare. Locate matches where these industries share the same client base.
-                </p>
-              </div>
+          const targetParticipants = targetRound?.participants || [];
 
-              <div className="space-y-2.5">
-                <span className="text-[9.5px] font-black text-zinc-450 uppercase tracking-wider block">Timeline & Format</span>
-                <div className="space-y-2 text-[11.5px] font-semibold text-zinc-650">
-                  <div className="flex justify-between items-center py-2 border-b border-zinc-100">
-                    <span>Total Round Duration</span>
-                    <span className="font-extrabold text-zinc-800">20 Minutes</span>
+          return (
+            <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in font-sans">
+              <div className="bg-white rounded-xl border border-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-5 py-4 border-b border-zinc-150 flex items-center justify-between bg-zinc-50">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-brand-red" />
+                    <h3 className="font-black text-zinc-955 text-body-md">
+                      {targetRound ? `Round ${targetRound.number} Seating & Schedule` : 'Round Details'}
+                    </h3>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-zinc-100">
-                    <span>Time per Pitch</span>
-                    <span className="font-extrabold text-zinc-800 font-mono">2.0 Mins / Speaker</span>
+                  <button
+                    onClick={() => setShowDetailsModal(false)}
+                    className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg hover:bg-zinc-200/50 transition-smooth cursor-pointer"
+                  >
+                    <X className="w-4.5 h-4.5" />
+                  </button>
+                </div>
+
+                <div className="p-5 overflow-y-auto space-y-4">
+                  {/* Round Meta info */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+                      <span className="text-[9px] font-extrabold uppercase text-zinc-400 block tracking-wider">Assigned Table</span>
+                      <span className="text-body-sm font-black text-zinc-900 mt-0.5 block">{targetRound?.table || 'Table TBD'}</span>
+                    </div>
+                    <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
+                      <span className="text-[9px] font-extrabold uppercase text-zinc-400 block tracking-wider">Scheduled Time</span>
+                      <span className="text-body-sm font-black text-zinc-900 mt-0.5 block">
+                        {formatUpcomingRoundStartTime(targetRound?.time) || 'Upcoming'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-zinc-100">
-                    <span>Q&A & Networking Wrap</span>
-                    <span className="font-extrabold text-zinc-800">5 Minutes</span>
+
+                  {/* Expected Participants */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black text-zinc-450 uppercase tracking-wider block">
+                      Expected Table Members ({targetParticipants.length})
+                    </span>
+                    {targetParticipants.length > 0 ? (
+                      <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
+                        {targetParticipants.map((p, idx) => (
+                          <div key={p.id || p.uid || idx} className="p-2.5 flex items-center justify-between text-xs">
+                            <div>
+                              <p className="font-bold text-zinc-900">{p.name}</p>
+                              <p className="text-[11px] text-zinc-500 font-medium">{p.category || p.company || 'BNI Member'}</p>
+                            </div>
+                            {p.isCaptain && (
+                              <span className="px-2 py-0.5 bg-red-50 text-brand-red border border-red-100 rounded text-[9px] font-black uppercase tracking-wider">
+                                Table Captain
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-400 font-semibold p-3 bg-zinc-50 rounded-lg border border-zinc-200 text-center">
+                        No member roster generated yet for this round.
+                      </p>
+                    )}
                   </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span>Seating Rule</span>
-                    <span className="font-extrabold text-brand-red bg-red-50/50 px-2 py-0.5 rounded border border-red-100 text-[9px] uppercase font-black">Strict Attendance</span>
+
+                  {/* Format details */}
+                  <div className="space-y-2.5 pt-1">
+                    <span className="text-[9.5px] font-black text-zinc-450 uppercase tracking-wider block">Format & Timings</span>
+                    <div className="space-y-2 text-[11.5px] font-semibold text-zinc-650">
+                      <div className="flex justify-between items-center py-1.5 border-b border-zinc-100">
+                        <span>Total Round Duration</span>
+                        <span className="font-extrabold text-zinc-800">15 Minutes</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1.5 border-b border-zinc-100">
+                        <span>Pitch Window</span>
+                        <span className="font-extrabold text-zinc-800 font-mono">1.5 Mins (90s) / Speaker</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1.5 border-b border-zinc-100">
+                        <span>Table Transition</span>
+                        <span className="font-extrabold text-zinc-800">Remaining window to rotate</span>
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                <div className="p-4 border-t border-zinc-150 flex justify-end bg-zinc-50">
+                  <button
+                    onClick={() => setShowDetailsModal(false)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-white rounded-lg text-[10.5px] font-black uppercase tracking-wider transition-smooth cursor-pointer"
+                  >
+                    Close Details
+                  </button>
                 </div>
               </div>
             </div>
-
-            <div className="p-4 border-t border-zinc-150 flex justify-end bg-zinc-50">
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-white rounded-lg text-[10.5px] font-black uppercase tracking-wider transition-smooth cursor-pointer"
-              >
-                Close Details
-              </button>
-            </div>
-          </div>
-        </div>,
+          );
+        })(),
         document.body
+      )}
+
+      {/* Member Profile Modal */}
+      {selectedProfileMember && (
+        <MemberProfileModal
+          member={selectedProfileMember}
+          onClose={() => setSelectedProfileMember(null)}
+        />
       )}
 
     </div>

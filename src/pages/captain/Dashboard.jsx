@@ -17,6 +17,8 @@ import {
 import confetti from 'canvas-confetti';
 import { api } from '../../services/api';
 import MemberProfileModal from '../../components/MemberProfileModal';
+import { formatTimeNice, formatTimeRangeNice } from '../../utils/timeFormat';
+import { calculateRoundTiming, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboard', onTabChange, onLogout, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
@@ -125,35 +127,43 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
 
   const displayTable = `Table ${conclaveSyncData?.tableNumber || 'N/A'}`;
 
-  const ROUND_DURATION_SECS = 15 * 60; // 900 seconds (15:00)
+  const ROUND_DURATION_SECS = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
   const [secondsLeft, setSecondsLeft] = useState(ROUND_DURATION_SECS);
+
+  const personsPerTable = useMemo(() => {
+    if (conclaveSyncData?.tableOccupants && Array.isArray(conclaveSyncData.tableOccupants) && conclaveSyncData.tableOccupants.length > 0) {
+      return conclaveSyncData.tableOccupants.length;
+    }
+    return conclaveSyncData?.personsPerTable ||
+      conclaveSyncData?.conclaveStatus?.personsPerTable ||
+      6;
+  }, [conclaveSyncData]);
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+  }));
 
   useEffect(() => {
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
 
-    if (startedAt && isRunning) {
-      const updateTimer = () => {
-        let startTime = NaN;
-        if (typeof startedAt === 'object' && startedAt !== null) {
-          if (typeof startedAt._seconds === 'number') startTime = startedAt._seconds * 1000;
-          else if (typeof startedAt.seconds === 'number') startTime = startedAt.seconds * 1000;
-          else if (typeof startedAt.toDate === 'function') startTime = startedAt.toDate().getTime();
-        }
-        if (isNaN(startTime)) startTime = new Date(startedAt).getTime();
-        if (isNaN(startTime)) startTime = Date.now();
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable,
+        isRunning,
+      });
+      setTimingState(timing);
+      setSecondsLeft(timing.totalRemaining);
+    };
 
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setSecondsLeft(Math.max(0, ROUND_DURATION_SECS - elapsed));
-      };
-      updateTimer();
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setSecondsLeft(ROUND_DURATION_SECS);
-    }
-  }, [conclaveSyncData]);
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [conclaveSyncData, personsPerTable]);
 
   const formatTime = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -355,9 +365,9 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                 <div className="flex items-center gap-1.5 text-[11px] text-brand-red font-bold">
                   <Clock className="w-3 h-3 text-brand-red shrink-0" />
                   <span>
-                    {conclaveSyncData.conclaveStatus.startTime}
+                    {formatTimeNice(conclaveSyncData.conclaveStatus.startTime)}
                     {conclaveSyncData.conclaveStatus.startTime && conclaveSyncData.conclaveStatus.endTime ? ' – ' : ''}
-                    {conclaveSyncData.conclaveStatus.endTime}
+                    {formatTimeNice(conclaveSyncData.conclaveStatus.endTime)}
                   </span>
                 </div>
               )}
@@ -405,11 +415,40 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                   </div>
                 </div>
                 <div className="bg-white p-4.5 rounded-xl border border-zinc-200 shadow-2xs flex flex-col justify-between h-24">
-                  <p className="text-[11px] font-bold text-zinc-455 uppercase tracking-wide">{isConclaveCompleted ? 'Status' : 'Time Remaining'}</p>
-                  <div className="flex items-end justify-between mt-2">
-                    <span className={`text-lg font-black leading-none ${isConclaveCompleted ? 'text-emerald-600' : 'text-brand-red'}`}>
-                      {isConclaveCompleted ? 'Completed' : formatTimeSimple(secondsLeft)}
-                    </span>
+                  <p className="text-[11px] font-bold text-zinc-455 uppercase tracking-wide">
+                    {isConclaveCompleted
+                      ? 'Status'
+                      : timingState.phase === 'active'
+                      ? 'Talking Time'
+                      : timingState.phase === 'transition'
+                      ? 'Move to Next Table'
+                      : 'Time Remaining'}
+                  </p>
+                  <div className="flex items-end justify-between mt-1">
+                    <div>
+                      <span className={`text-lg font-black leading-none ${
+                        isConclaveCompleted
+                          ? 'text-emerald-600'
+                          : timingState.phase === 'active'
+                          ? 'text-emerald-600'
+                          : timingState.phase === 'transition'
+                          ? 'text-amber-600'
+                          : 'text-brand-red'
+                      }`}>
+                        {isConclaveCompleted
+                          ? 'Completed'
+                          : formatTimeSimple(
+                              timingState.phase === 'active' || timingState.phase === 'transition'
+                                ? timingState.phaseRemaining
+                                : secondsLeft
+                            )}
+                      </span>
+                      {!isConclaveCompleted && (
+                        <span className="text-[9px] text-zinc-400 font-semibold block mt-0.5">
+                          Total: <strong className="text-zinc-700 font-mono">{formatTimeSimple(secondsLeft)}</strong>
+                        </span>
+                      )}
+                    </div>
                     <Clock className={`w-5 h-5 ${isConclaveCompleted ? 'text-emerald-600' : 'text-brand-red animate-pulse'} shrink-0`} />
                   </div>
                 </div>
@@ -582,30 +621,70 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {filteredMyTableMembers.map((member) => (
-                        <div
-                          key={member.id}
-                          onClick={() => setSelectedProfileMember(member)}
-                          className="bg-white p-4.5 rounded-xl border border-zinc-200 hover:border-brand-red/35 hover:bg-zinc-50/20 shadow-2xs flex items-start gap-4 transition-smooth cursor-pointer"
-                        >
-                          <div className="w-12 h-12 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-sm text-zinc-500 shrink-0 shadow-inner">
-                            {member.initials}
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <h4 className="text-[13px] font-bold text-zinc-850 leading-tight">{member.name}</h4>
-                            <p className="text-[11px] text-zinc-450 font-semibold leading-normal mt-0.5">{member.company}</p>
-                            <div className="pt-1.5 flex flex-wrap items-center gap-1.5">
-                              <span className="bg-zinc-100 text-zinc-650 text-[8px] font-black px-2 py-0.5 rounded border border-zinc-200/50 uppercase tracking-wide">
-                                {member.category}
-                              </span>
-                              <span className="text-[9px] font-bold text-zinc-400 whitespace-nowrap">
-                                Sent: <span className="text-zinc-700">{getMemberReferralCount(member.name, member.id).given}</span> • Recv: <span className="text-zinc-700">{getMemberReferralCount(member.name, member.id).received}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+                      {filteredMyTableMembers.map((member) => {
+                        const isCaptain = member.isCaptain || member.role === 'captain';
+                        const referralCount = getMemberReferralCount(member.name, member.id);
+
+                        return (
+                          <div
+                            key={member.id}
+                            onClick={() => setSelectedProfileMember(member)}
+                            className="group relative bg-white p-5 rounded-2xl border border-zinc-200/90 hover:border-brand-red/40 hover:shadow-md transition-all duration-200 flex flex-col justify-between gap-3.5 cursor-pointer"
+                          >
+                            {/* Top row: Avatar + Name & Company + Captain badge */}
+                            <div className="flex items-start gap-3.5">
+                              <div className="w-11 h-11 rounded-full bg-linear-to-br from-red-50 to-red-100/70 border border-red-200/70 text-brand-red font-black text-xs flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform select-none">
+                                {member.initials}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <h4 className="text-body-sm font-black text-zinc-900 group-hover:text-brand-red transition-colors truncate">
+                                    {member.name}
+                                  </h4>
+                                  {isCaptain && (
+                                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-red-50 text-brand-red border border-red-200/80">
+                                      Captain
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-zinc-500 font-semibold truncate mt-0.5">
+                                  {member.company || 'Business Member'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Middle row: Category pill + Chapter */}
+                            <div className="space-y-1.5">
+                              <div>
+                                <span className="inline-flex items-center text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-md border border-zinc-200/80 bg-zinc-50 text-zinc-700 tracking-wider leading-tight">
+                                  {member.category}
+                                </span>
+                              </div>
+
+                              {member.chapter && (
+                                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
+                                  {member.chapter}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Bottom row: Referral Metrics + View Profile */}
+                            <div className="pt-2.5 border-t border-zinc-100 flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-450">
+                                <span>Sent: <strong className="text-zinc-800 font-extrabold">{referralCount.given}</strong></span>
+                                <span className="text-zinc-300">•</span>
+                                <span>Recv: <strong className="text-zinc-800 font-extrabold">{referralCount.received}</strong></span>
+                              </div>
+
+                              <span className="text-[9.5px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-brand-red transition-colors flex items-center gap-1">
+                                Profile <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                               </span>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </section>
 
@@ -760,7 +839,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                             )}
                             <div className="flex flex-col">
                               <span className={`font-extrabold text-[9px] uppercase tracking-wider ${isActive ? 'text-brand-red font-black' : 'text-zinc-400'}`}>
-                                {rnd.time} {isActive && '(ACTIVE)'}
+                                {formatTimeRangeNice(rnd.time)} {isActive && '(ACTIVE)'}
                               </span>
                               <span className={`font-extrabold text-[12px] mt-0.5 ${isActive ? 'text-zinc-900 font-black' : 'text-zinc-800'}`}>
                                 Round {rnd.number}: Table {rnd.tableNumber} Seating
