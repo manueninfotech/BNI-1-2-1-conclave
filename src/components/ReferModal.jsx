@@ -1,13 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, X, AlertCircle, Sparkles, Building2, Tag, Loader2 } from 'lucide-react';
+import { Send, X, AlertCircle, Sparkles, Building2, Tag, Loader2, Clock } from 'lucide-react';
 import { addNotification } from '../utils/notifications';
 import { api } from '../services/api';
 
-export default function ReferModal({ recipient, loggedInUser, activeConclaveId, onClose, onSuccess }) {
+export default function ReferModal({
+  recipient,
+  loggedInUser,
+  activeConclaveId,
+  isReferralOpen = true,
+  isTalkingTimeActive,
+  disabledReason = 'Referrals are only open during the dedicated Referral Window (after table member speaking concludes).',
+  onClose,
+  onSuccess
+}) {
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check whether referral submission is allowed
+  const isAllowed = isTalkingTimeActive !== undefined ? isTalkingTimeActive : isReferralOpen;
 
   // Lock background scrolling when modal is open
   useEffect(() => {
@@ -20,6 +32,10 @@ export default function ReferModal({ recipient, loggedInUser, activeConclaveId, 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isAllowed) {
+      setError(disabledReason || 'Referral sending is only allowed during the referral exchange window.');
+      return;
+    }
     if (!description.trim()) {
       setError('Please enter referral opportunity details.');
       return;
@@ -110,9 +126,6 @@ export default function ReferModal({ recipient, loggedInUser, activeConclaveId, 
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[999] flex items-center justify-center p-4 sm:p-6 animate-fade-in font-sans">
       <div className="bg-white border border-zinc-200/80 w-full max-w-lg max-h-[85vh] rounded-2xl shadow-2xl overflow-hidden animate-scale-up text-left flex flex-col">
         
-        {/* Top Decorative Banner */}
-        <div className="h-2 bg-gradient-to-r from-red-600 via-brand-red to-red-500"></div>
-
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-zinc-150 flex items-center justify-between bg-zinc-50/70 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -136,6 +149,18 @@ export default function ReferModal({ recipient, loggedInUser, activeConclaveId, 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto max-h-[60vh]">
           
+          {!isAllowed && (
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200/80 p-3.5 rounded-xl text-amber-900 text-[11.5px] font-semibold leading-relaxed shadow-2xs">
+              <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-950">Referrals Inactive</p>
+                <p className="text-[10.5px] text-amber-800 mt-0.5">
+                  {disabledReason || 'Referrals are only active during the dedicated 30s/person Referral Window after speaking concludes.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Recipient card summary (pre-filled & locked) */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -171,13 +196,18 @@ export default function ReferModal({ recipient, loggedInUser, activeConclaveId, 
             <div className="relative">
               <textarea
                 value={description}
+                disabled={!isTalkingTimeActive}
                 onChange={(e) => {
                   setDescription(e.target.value);
                   setError('');
                 }}
-                placeholder="E.g., I have a client looking to redesign their office space, please contact their admin at contact@email.com."
+                placeholder={isTalkingTimeActive ? "E.g., I have a client looking to redesign their office space, please contact their admin at contact@email.com." : "Referral sending is closed because round talking time has ended."}
                 rows="4"
-                className="w-full p-3.5 border border-zinc-200/90 rounded-xl text-[12px] font-semibold text-zinc-800 focus:outline-none focus:border-brand-red focus:ring-3 focus:ring-brand-red/10 transition-smooth placeholder-zinc-400 bg-white resize-none leading-relaxed shadow-2xs"
+                className={`w-full p-3.5 border rounded-xl text-[12px] font-semibold transition-smooth placeholder-zinc-400 resize-none leading-relaxed shadow-2xs ${
+                  !isTalkingTimeActive
+                    ? 'border-zinc-200 bg-zinc-100/70 text-zinc-400 cursor-not-allowed'
+                    : 'border-zinc-200/90 bg-white text-zinc-800 focus:outline-none focus:border-brand-red focus:ring-3 focus:ring-brand-red/10'
+                }`}
               />
             </div>
           </div>
@@ -193,10 +223,16 @@ export default function ReferModal({ recipient, loggedInUser, activeConclaveId, 
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3 bg-brand-red hover:bg-red-700 disabled:bg-zinc-300 text-white rounded-xl text-[11.5px] font-black uppercase tracking-wider transition-smooth cursor-pointer shadow-md shadow-brand-red/15 flex items-center justify-center gap-2"
+              disabled={isSubmitting || !isTalkingTimeActive}
+              className={`w-full py-3 rounded-xl text-[11.5px] font-black uppercase tracking-wider transition-smooth flex items-center justify-center gap-2 shadow-xs ${
+                !isTalkingTimeActive
+                  ? 'bg-zinc-200 text-zinc-400 border border-zinc-250 cursor-not-allowed shadow-none'
+                  : 'bg-brand-red hover:bg-red-700 disabled:bg-zinc-300 text-white cursor-pointer shadow-brand-red/15'
+              }`}
             >
-              {isSubmitting ? (
+              {!isTalkingTimeActive ? (
+                <span>Referrals Closed</span>
+              ) : isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Submitting Referral...</span>

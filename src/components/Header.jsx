@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu } from 'lucide-react';
+import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
 
 export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId }) {
@@ -73,8 +73,8 @@ export default function Header({ searchQuery, setSearchQuery, activeTab, setActi
   return (
     <header className="w-full sticky top-0 z-40 bg-white border-b border-red-100 flex justify-between items-center px-4 sm:px-8 h-14 shrink-0 font-sans">
 
-      {/* Left side: Mobile Menu Button & Search Input */}
-      <div className="flex items-center gap-3 sm:gap-4 flex-1">
+      {/* Left side: Mobile Menu Button */}
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={onMenuClick}
           className="lg:hidden p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-555 hover:text-zinc-800 transition-smooth cursor-pointer flex items-center justify-center"
@@ -82,18 +82,6 @@ export default function Header({ searchQuery, setSearchQuery, activeTab, setActi
         >
           <Menu className="w-5.5 h-5.5" />
         </button>
-
-        {/* Search Input on the Left */}
-        <div className="relative w-full max-w-[200px] sm:max-w-xs">
-          <Search className="w-4 h-4 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
-            value={searchQuery || ''}
-            onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
-            className="w-full pl-8 sm:pl-9 pr-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-body-sm placeholder-zinc-450 focus:outline-none focus:bg-white focus:border-brand-red/50 focus:ring-2 focus:ring-brand-red/10 transition-smooth font-semibold"
-            placeholder="Search anything..."
-            type="text"
-          />
-        </div>
       </div>
 
       {/* Right side: Notifications & Utilities */}

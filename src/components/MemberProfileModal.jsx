@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, Phone, Mail, Building, Tag, Award, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 
-export default function MemberProfileModal({ member, onClose, onSendReferral }) {
+export default function MemberProfileModal({ member, onClose, onSendReferral, isReferralDisabled = false, referralDisabledReason = '' }) {
   if (!member) return null;
 
   const initials = (member.name || 'Member')
@@ -116,16 +116,27 @@ export default function MemberProfileModal({ member, onClose, onSendReferral }) 
         {/* Footer Actions */}
         <div className="p-4 border-t border-zinc-200 bg-zinc-50 flex items-center gap-3 shrink-0">
           {onSendReferral && (
-            <button
-              onClick={() => {
-                onClose();
-                onSendReferral(member);
-              }}
-              className="flex-1 py-2.5 px-4 bg-brand-red hover:bg-red-750 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-smooth flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-brand-red/15"
-            >
-              <Send className="w-3.5 h-3.5" />
-              Send Referral
-            </button>
+            isReferralDisabled ? (
+              <button
+                disabled
+                title={referralDisabledReason || "Referrals are only active during the dedicated Referral Window"}
+                className="flex-1 py-2.5 px-4 bg-zinc-200 text-zinc-400 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Referrals Closed
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  onClose();
+                  onSendReferral(member);
+                }}
+                className="flex-1 py-2.5 px-4 bg-brand-red hover:bg-red-750 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-smooth flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-brand-red/15"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Send Referral
+              </button>
+            )
           )}
           <button
             onClick={onClose}

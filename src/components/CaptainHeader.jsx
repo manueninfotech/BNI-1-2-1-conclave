@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, X, Check, Award, Clock, Users } from 'lucide-react';
+import { Bell, X, Check, Award, Clock, Users } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
 
 export default function CaptainHeader({
@@ -48,10 +48,14 @@ export default function CaptainHeader({
 
 
 
+  const conclaveStatus = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
+  const currentRoundNum = conclaveSyncData?.conclaveStatus?.currentRound;
+  const isConclaveLive = (conclaveStatus === 'running' || conclaveStatus === 'active') && Number(currentRoundNum) > 0;
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'my-table', label: 'My Table' },
-    { id: 'current-round', label: 'Current Round' },
+    ...(isConclaveLive ? [{ id: 'current-round', label: 'Current Round' }] : []),
     { id: 'schedule', label: 'Schedule' },
     { id: 'referrals', label: 'Referrals' }
   ];
@@ -96,18 +100,8 @@ export default function CaptainHeader({
           </nav>
         </div>
 
-        {/* Right section: Search, Notifications & Avatar */}
+        {/* Right section: Notifications & Avatar */}
         <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 shrink-0">
-          {/* Search Input Box */}
-          <div className="relative w-24 sm:w-36 md:w-40 lg:w-48 xl:w-56">
-            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              value={searchQuery || ''}
-              onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-2.5 py-1 bg-zinc-55 border border-zinc-200 rounded-lg text-[10px] placeholder-zinc-400 focus:outline-none focus:bg-white focus:border-brand-red/50 focus:ring-2 focus:ring-brand-red/10 transition-smooth font-semibold text-zinc-700"
-              placeholder="Search members..."
-            />
-          </div>
 
           {/* Notifications Popover Menu */}
           <div className="relative shrink-0" ref={dropdownRef}>
