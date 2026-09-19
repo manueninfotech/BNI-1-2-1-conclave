@@ -168,7 +168,12 @@ export default function App() {
 
   // Handle URL updates when switching tabs
   const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
+    // Guard: if trying to navigate to current-round while conclave isn't live, redirect to my-schedule
+    const conclaveStatusNow = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
+    const isLiveNow = (conclaveStatusNow === 'running' || conclaveStatusNow === 'active') &&
+      Number(conclaveSyncData?.conclaveStatus?.currentRound) > 0;
+    const resolvedTab = (tabId === 'current-round' && !isLiveNow) ? 'my-schedule' : tabId;
+    setActiveTab(resolvedTab);
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
     let activeRole = userRole;
     if (path.startsWith('captain') || path.includes('/captain')) activeRole = 'captain';
@@ -176,7 +181,7 @@ export default function App() {
     else if (path.startsWith('superadmin') || path.includes('/superadmin')) activeRole = 'superadmin';
     else if (path.startsWith('admin') || path.includes('/admin')) activeRole = 'admin';
 
-    window.history.pushState({}, '', `/${activeRole}/${tabId}`);
+    window.history.pushState({}, '', `/${activeRole}/${resolvedTab}`);
   };
 
   // Sync state if user clicks Back or Forward browser navigation buttons
@@ -315,6 +320,7 @@ export default function App() {
     localStorage.removeItem('bni_logged_admin');
     localStorage.removeItem('bni_conclave_sync_data_cache');
     localStorage.removeItem('bni_member_conclaves_cache');
+    localStorage.removeItem('bni_selected_member_conclave_id');
     localStorage.removeItem('bni_referrals');
     setLoggedInCaptain(null);
     setLoggedInMember(null);
@@ -325,6 +331,7 @@ export default function App() {
   };
 
   const [conclaveSyncData, setConclaveSyncData] = useState(null);
+
   const [memberConclaves, setMemberConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_member_conclaves_cache');
     if (cached) {
@@ -350,6 +357,28 @@ export default function App() {
         }
 
         if (profile) {
+          // If role is changed, directly log out so the user will log in again
+          const resolvedRole = (profile.isCaptain || profile.role === 'captain')
+            ? 'captain'
+            : ((profile.role === 'superadmin' || profile.role === 'admin') ? profile.role : 'member');
+
+          if (resolvedRole !== userRole) {
+            console.info(`[Role Sync] User role changed from ${userRole} to ${resolvedRole}. Logging out to re-authenticate.`);
+            const roleLabels = {
+              captain: 'Table Captain',
+              member: 'Member',
+              admin: 'Admin',
+              superadmin: 'Superadmin'
+            };
+            const toLabel = roleLabels[resolvedRole] || resolvedRole;
+            localStorage.setItem(
+              'bni_auth_notice',
+              `Your role has been updated to ${toLabel}. Please log in again to continue.`
+            );
+            handleLogout();
+            return;
+          }
+
           const mergedProfile = {
             ...(userRole === 'captain' ? (loggedInCaptain || {}) : (loggedInMember || {})),
             ...profile,
@@ -371,15 +400,51 @@ export default function App() {
           }
         }
 
-        const myRegisteredConclave = Array.isArray(list) ? (
-          list.find(c => c.isRegistered && (c.status === 'running' || c.status === 'active')) ||
-          list.find(c => c.isRegistered) ||
-          null
-        ) : null;
+        const registered = Array.isArray(list) ? list.filter(c => c.isRegistered || c.registered) : [];
+        const pool = registered.length > 0 ? registered : list;
+        const now = Date.now();
+        let chosenConclave = null;
+
+        // 1. Live or running conclave (priority)
+        chosenConclave = pool.find(c => c.status === 'running' || c.status === 'active');
+
+        // 2. Next upcoming conclave (upcoming date >= now - 12h, sorted ascending by date so Sep 25 is chosen!)
+        if (!chosenConclave) {
+          const upcoming = pool
+            .filter(c => {
+              const s = (c.status || '').toLowerCase();
+              if (s === 'completed' || s === 'finished' || s === 'ended' || s === 'cancelled') return false;
+              const dt = new Date(c.date || c.startDate).getTime();
+              return isNaN(dt) || dt >= now - 12 * 60 * 60 * 1000;
+            })
+            .sort((a, b) => {
+              const da = new Date(a.date || a.startDate).getTime() || 0;
+              const db = new Date(b.date || b.startDate).getTime() || 0;
+              return da - db; // ASCENDING: earliest upcoming event first (Sep 25 before Nov 10)
+            });
+
+          if (upcoming.length > 0) {
+            chosenConclave = upcoming[0];
+          }
+        }
+
+        // 3. If no upcoming conclaves, pick the most recent conclave
+        if (!chosenConclave && pool.length > 0) {
+          const sorted = [...pool].sort((a, b) => {
+            const da = new Date(a.date || a.startDate).getTime() || 0;
+            const db = new Date(b.date || b.startDate).getTime() || 0;
+            return db - da; // most recent first
+          });
+          chosenConclave = sorted[0];
+        }
+
+        const myRegisteredConclave = chosenConclave;
 
         if (myRegisteredConclave) {
           const syncResult = await api.post(`/conclaves/${myRegisteredConclave.id}/sync`, {}).catch(() => null);
-          if (syncResult && Array.isArray(syncResult.mySchedule) && syncResult.mySchedule.length > 0) {
+          // For captains: mySchedule may be empty (they anchor their table), but conclaveStatus is still valid.
+          // Set syncData if we have a valid conclaveStatus, regardless of mySchedule length.
+          if (syncResult && syncResult.conclaveStatus) {
             localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(syncResult));
             setConclaveSyncData(prev => (JSON.stringify(prev) !== JSON.stringify(syncResult) ? syncResult : prev));
           } else {
@@ -407,6 +472,27 @@ export default function App() {
       try {
         const profile = await api.get('/me');
         if (profile && profile.uid) {
+          const resolvedRole = (profile.role === 'superadmin' || profile.role === 'admin')
+            ? profile.role
+            : ((profile.isCaptain || profile.role === 'captain') ? 'captain' : 'member');
+
+          if (resolvedRole !== 'admin' && resolvedRole !== userRole) {
+            console.info(`[Role Sync] Admin role changed from ${userRole} to ${resolvedRole}. Logging out to re-authenticate.`);
+            const roleLabels = {
+              captain: 'Table Captain',
+              member: 'Member',
+              admin: 'Admin',
+              superadmin: 'Superadmin'
+            };
+            const toLabel = roleLabels[resolvedRole] || resolvedRole;
+            localStorage.setItem(
+              'bni_auth_notice',
+              `Your role has been updated to ${toLabel}. Please log in again to continue.`
+            );
+            handleLogout();
+            return;
+          }
+
           setLoggedInAdmin(prev => {
             const updated = {
               ...(prev || {}),
@@ -504,11 +590,20 @@ export default function App() {
               searchQuery={searchQuery}
             />
           ) : activeTab === 'current-round' ? (
-            <CaptainCurrentRound
-              loggedInCaptain={loggedInCaptain}
-              conclaveSyncData={conclaveSyncData}
-              searchQuery={searchQuery}
-            />
+            (['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()) && Number(conclaveSyncData?.conclaveStatus?.currentRound) > 0) ? (
+              <CaptainCurrentRound
+                loggedInCaptain={loggedInCaptain}
+                conclaveSyncData={conclaveSyncData}
+                searchQuery={searchQuery}
+              />
+            ) : (
+              <CaptainSchedule
+                loggedInCaptain={loggedInCaptain}
+                onTabChange={handleTabChange}
+                conclaveSyncData={conclaveSyncData}
+                searchQuery={searchQuery}
+              />
+            )
           ) : (activeTab === 'schedule' || activeTab === 'my-schedule') ? (
             <CaptainSchedule
               loggedInCaptain={loggedInCaptain}

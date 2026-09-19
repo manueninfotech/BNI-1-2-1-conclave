@@ -16,6 +16,30 @@ import MemberProfileModal from '../../components/MemberProfileModal';
 
 import { api } from '../../services/api';
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import { formatUpcomingRoundStartTime } from '../../utils/timeFormat';
+
+const formatTimeNice = (val, fallback = '') => {
+  if (!val) return fallback;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const mins = match[2];
+      let meridian = match[3] ? match[3].toUpperCase() : null;
+      if (!meridian) {
+        meridian = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+      }
+      return `${String(hours).padStart(2, '0')}:${mins} ${meridian}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+  return String(val);
+};
 
 export default function MemberDashboard({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData, searchQuery, memberConclaves: propMemberConclaves }) {
   const [conclavesList, setConclavesList] = useState(() => propMemberConclaves || []);
@@ -112,9 +136,11 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
   const [timeLeft, setTimeLeft] = useState(initialTime);
 
   const personsPerTable = useMemo(() => {
+    if (conclaveSyncData?.tableOccupants && Array.isArray(conclaveSyncData.tableOccupants) && conclaveSyncData.tableOccupants.length > 0) {
+      return conclaveSyncData.tableOccupants.length;
+    }
     return conclaveSyncData?.personsPerTable ||
       conclaveSyncData?.conclaveStatus?.personsPerTable ||
-      conclaveSyncData?.tableOccupants?.length ||
       6;
   }, [conclaveSyncData]);
 
@@ -201,6 +227,12 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
 
   const conclaveStatusStr = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
   const isConclaveCompleted = conclaveStatusStr === 'completed' || conclaveStatusStr === 'finished';
+  const hasActiveConclave = !isConclaveCompleted && Boolean(
+    conclaveSyncData?.conclaveStatus?.id ||
+    conclaveSyncData?.tableNumber ||
+    (conclaveSyncData?.conclaveStatus?.currentRound && conclaveSyncData.conclaveStatus.currentRound > 0) ||
+    ['running', 'active'].includes(conclaveStatusStr)
+  );
 
   const [isSyncLoading, setIsSyncLoading] = useState(true);
 
@@ -369,7 +401,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                     {(c.startTime || c.endTime) && (
                       <p className="text-xs text-zinc-500 font-medium flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-brand-red shrink-0" />
-                        <span>{c.startTime}{c.startTime && c.endTime ? ' – ' : ''}{c.endTime}</span>
+                        <span>{formatTimeNice(c.startTime)}{c.startTime && c.endTime ? ' – ' : ''}{formatTimeNice(c.endTime)}</span>
                       </p>
                     )}
                     {c.venue && (
@@ -448,9 +480,9 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                         <span className="text-[10px] font-bold text-blue-700 flex items-center gap-1">
                           <Clock className="w-3 h-3 text-blue-500 shrink-0" />
                           <span>
-                            {conclaveSyncData.conclaveStatus.startTime}
+                            {formatTimeNice(conclaveSyncData.conclaveStatus.startTime)}
                             {conclaveSyncData.conclaveStatus.startTime && conclaveSyncData.conclaveStatus.endTime ? ' – ' : ''}
-                            {conclaveSyncData.conclaveStatus.endTime}
+                            {formatTimeNice(conclaveSyncData.conclaveStatus.endTime)}
                           </span>
                         </span>
                       </>
@@ -523,10 +555,18 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                   <div className="flex justify-between items-end mb-2">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">{isConclaveCompleted ? 'Conclave Status' : 'Time Remaining'}</span>
+                        <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">
+                          {isConclaveCompleted
+                            ? 'Conclave Status'
+                            : timingState.phase === 'active'
+                            ? 'Talking Time'
+                            : timingState.phase === 'transition'
+                            ? 'Move to Next Table'
+                            : 'Time Remaining'}
+                        </span>
                         {!isConclaveCompleted && (
                           timingState.phase === 'active' ? (
-                            <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
                               Talking Phase
                             </span>
                           ) : timingState.phase === 'transition' ? (
@@ -545,8 +585,19 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                           ? 'text-amber-600'
                           : 'text-brand-red'
                       }`}>
-                        {isConclaveCompleted ? 'Completed' : formatTime(timeLeft)}
+                        {isConclaveCompleted
+                          ? 'Completed'
+                          : formatTime(
+                              timingState.phase === 'active' || timingState.phase === 'transition'
+                                ? timingState.phaseRemaining
+                                : timeLeft
+                            )}
                       </span>
+                      {!isConclaveCompleted && (
+                        <span className="text-[10px] text-zinc-400 font-semibold mt-1">
+                          Total Round Time: <strong className="text-zinc-700 font-mono font-bold">{formatTime(timeLeft)}</strong>
+                        </span>
+                      )}
                     </div>
                     <span className="text-[9.5px] font-bold text-zinc-455">
                       {isConclaveCompleted
@@ -590,27 +641,35 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                     {isCheckedIn ? 'Attendance Confirmed' : 'Mark My Attendance'}
                   </button>
                 )}
-                <button
-                  onClick={() => onTabChange && onTabChange('registrations')}
-                  className="text-[10px] font-black uppercase tracking-wider px-5 py-2.5 bg-brand-red hover:bg-red-700 text-white rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  Browse &amp; Register Conclaves
-                </button>
+                {!hasActiveConclave && (
+                  <button
+                    onClick={() => onTabChange && onTabChange('registrations')}
+                    className="text-[10px] font-black uppercase tracking-wider px-5 py-2.5 bg-brand-red hover:bg-red-700 text-white rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Browse &amp; Register Conclaves
+                  </button>
+                )}
                 <button
                   onClick={() => onTabChange && onTabChange('current-round')}
-                  className="text-[10px] font-black uppercase tracking-wider px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer"
+                  className={`text-[10px] font-black uppercase tracking-wider px-5 py-2.5 rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                    hasActiveConclave
+                      ? 'bg-brand-red hover:bg-red-700 text-white'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800'
+                  }`}
                 >
                   View Current Round
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={() => onTabChange && onTabChange('history')}
-                  className="text-[10px] font-black uppercase tracking-wider px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  View Conclave History
-                </button>
+                {!hasActiveConclave && (
+                  <button
+                    onClick={() => onTabChange && onTabChange('history')}
+                    className="text-[10px] font-black uppercase tracking-wider px-5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg transition-smooth flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    View Conclave History
+                  </button>
+                )}
               </div>
         </div>
 
@@ -813,20 +872,30 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
 
                   {/* Refer button */}
                   {member.uid !== (loggedInMember?.uid || loggedInMember?.id) && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReferTarget({
-                          id: member.uid,
-                          name: member.name,
-                          company: member.company,
-                          category: member.category
-                        });
-                      }}
-                      className="w-full py-1.5 border border-zinc-200 group-hover:border-brand-red text-zinc-700 group-hover:text-white bg-zinc-50 group-hover:bg-brand-red rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all shadow-2xs cursor-pointer"
-                    >
-                      Send Referral
-                    </button>
+                    timingState?.isTalking ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReferTarget({
+                            id: member.uid,
+                            name: member.name,
+                            company: member.company,
+                            category: member.category
+                          });
+                        }}
+                        className="w-full py-1.5 border border-zinc-200 group-hover:border-brand-red text-zinc-700 group-hover:text-white bg-zinc-50 group-hover:bg-brand-red rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all shadow-2xs cursor-pointer"
+                      >
+                        Send Referral
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        title="Referrals are closed after talking time for this round"
+                        className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9.5px] font-black uppercase tracking-wider cursor-not-allowed"
+                      >
+                        Referrals Closed
+                      </button>
+                    )
                   )}
                 </div>
               );
@@ -848,7 +917,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                 </div>
                 <div>
                   <h4 className="text-[13.5px] font-black text-zinc-900 leading-snug">Round {nextRoundSeating.number} Seating: {nextRoundSeating.table}</h4>
-                  <p className="text-[10px] text-zinc-455 font-semibold mt-1">Starts at {nextRoundSeating.time.split(' - ')[0]}</p>
+                  <p className="text-[10px] text-zinc-455 font-semibold mt-1">Starts at {formatUpcomingRoundStartTime(nextRoundSeating.time)}</p>
                 </div>
                 <div className="flex items-center gap-2 mt-4 pt-3.5 border-t border-zinc-100">
                   <div className="flex -space-x-1.5">
@@ -905,12 +974,14 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
         <MemberProfileModal
           member={selectedProfileMember}
           onClose={() => setSelectedProfileMember(null)}
-          onSendReferral={(m) => setReferTarget({
+          isReferralDisabled={!timingState?.isReferralOpen}
+          referralDisabledReason="Referrals are only active during the dedicated Referral Window (after speaking concludes)."
+          onSendReferral={timingState?.isReferralOpen ? (m) => setReferTarget({
             id: m.uid || m.id,
             name: m.name,
             company: m.company,
             category: m.category
-          })}
+          }) : undefined}
         />
       )}
 
@@ -919,6 +990,8 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
           recipient={referTarget}
           loggedInUser={loggedInMember || { name: 'Member' }}
           activeConclaveId={conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId || conclaveSyncData?.id}
+          isReferralOpen={Boolean(timingState?.isReferralOpen)}
+          disabledReason="Referrals are only active during the dedicated Referral Window (after speaking concludes)."
           onClose={() => setReferTarget(null)}
           onSuccess={(msg) => {
             setToast(msg);

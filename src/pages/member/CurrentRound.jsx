@@ -6,8 +6,8 @@ import {
   Check,
   FileText,
   Footprints,
-  Clock,
-  Users
+  Mic,
+  Send
 } from 'lucide-react';
 
 import ReferModal from '../../components/ReferModal';
@@ -20,7 +20,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     if (propConclaveSyncData) return propConclaveSyncData;
     const cached = localStorage.getItem('bni_conclave_sync_data_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return null;
   });
@@ -47,14 +47,16 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
       return tokens.every(token => text.includes(token));
     });
   }, [conclaveSyncData?.tableOccupants, searchQuery]);
-  
+
   const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
   const [timeLeft, setTimeLeft] = useState(initialTime);
 
   const personsPerTable = useMemo(() => {
+    if (conclaveSyncData?.tableOccupants && Array.isArray(conclaveSyncData.tableOccupants) && conclaveSyncData.tableOccupants.length > 0) {
+      return conclaveSyncData.tableOccupants.length;
+    }
     return conclaveSyncData?.personsPerTable ||
       conclaveSyncData?.conclaveStatus?.personsPerTable ||
-      conclaveSyncData?.tableOccupants?.length ||
       6;
   }, [conclaveSyncData]);
 
@@ -63,6 +65,25 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     personsPerTable,
     isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
   }));
+
+  // Identify current speaker from table occupants
+  const currentSpeaker = useMemo(() => {
+    const occupants = conclaveSyncData?.tableOccupants || [];
+    if (!occupants.length) return null;
+    const idx = Math.min(occupants.length - 1, timingState?.speakerIndex || 0);
+    return occupants[idx] || null;
+  }, [conclaveSyncData?.tableOccupants, timingState?.speakerIndex]);
+
+  const loggedInUid = loggedInMember?.uid || loggedInMember?.id || conclaveSyncData?.userUid;
+  const isMyTurnToSpeak = Boolean(
+    timingState?.isTalking &&
+    currentSpeaker &&
+    (
+      (currentSpeaker.uid && currentSpeaker.uid === loggedInUid) ||
+      (currentSpeaker.id && currentSpeaker.id === loggedInUid) ||
+      (currentSpeaker.name && loggedInMember?.name && currentSpeaker.name.toLowerCase().trim() === loggedInMember.name.toLowerCase().trim())
+    )
+  );
 
   const [referrals, setReferrals] = useState(() => {
     const stored = localStorage.getItem('bni_referrals');
@@ -76,7 +97,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
         try {
           const parsed = JSON.parse(stored);
           setReferrals(prev => (JSON.stringify(prev) !== JSON.stringify(parsed) ? parsed : prev));
-        } catch {}
+        } catch { }
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -100,13 +121,13 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
       }))
     ];
 
-    const given = allRefs.filter(r => 
+    const given = allRefs.filter(r =>
       (targetUid && (r.fromMemberId === targetUid || r.fromUserId === targetUid)) ||
       (targetName && r.fromName && r.fromName.toLowerCase() === targetName) ||
       (targetName && r.giverName && r.giverName.toLowerCase() === targetName)
     ).length;
 
-    const received = allRefs.filter(r => 
+    const received = allRefs.filter(r =>
       (targetUid && (r.toMemberId === targetUid || r.toUserId === targetUid)) ||
       (targetName && r.toName && r.toName.toLowerCase() === targetName)
     ).length;
@@ -136,8 +157,17 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
   const radius = 88;
   const circumference = radius * 2 * Math.PI;
+  const phaseTotalSecs = timingState.phase === 'transition'
+    ? (timingState.transitionSecs || 1)
+    : timingState.phase === 'referral'
+      ? (timingState.referralSecs || 1)
+      : (timingState.talkingSecs || timingState.activeSecs || 1);
+  const phaseRemainingSecs = (timingState.phase === 'active' || timingState.phase === 'referral' || timingState.phase === 'transition')
+    ? (timingState.phaseRemaining || 0)
+    : timeLeft;
+  const phasePercent = Math.max(0, Math.min(100, (phaseRemainingSecs / phaseTotalSecs) * 100));
+  const strokeDashoffset = circumference - (phasePercent / 100) * circumference;
   const progressPercent = (timeLeft / initialTime) * 100;
-  const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
   const activeConclaveId = conclaveSyncData?.conclaveId || conclaveSyncData?.id || conclaveSyncData?.conclaveStatus?.id;
   const uploadedAgendaDoc = useMemo(() => {
@@ -146,12 +176,12 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     if (activeConclaveId) {
       const cached = localStorage.getItem(`bni_agenda_doc_${activeConclaveId}`);
       if (cached) {
-        try { return JSON.parse(cached); } catch (e) {}
+        try { return JSON.parse(cached); } catch (e) { }
       }
     }
     const genericCache = localStorage.getItem('bni_conclave_agenda_doc');
     if (genericCache) {
-      try { return JSON.parse(genericCache); } catch (e) {}
+      try { return JSON.parse(genericCache); } catch (e) { }
     }
     return null;
   }, [conclaveSyncData, activeConclaveId]);
@@ -246,7 +276,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                   LIVE NOW
                 </span>
                 <span className="text-zinc-450 font-extrabold text-[9px] uppercase tracking-widest">
-                  Networking Conclave 2026
+                  {conclaveSyncData?.conclaveStatus?.name || conclaveSyncData?.conclaveStatus?.title || conclaveSyncData?.conclaveStatus?.region || 'BNI Conclave'}
                 </span>
               </div>
               <h1 className="text-[20px] font-black text-zinc-955 leading-tight">
@@ -314,12 +344,17 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               {timingState.phase === 'active' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  Talking Time
+                  Talking Time ({formatTime(timingState.phaseRemaining)} left)
+                </span>
+              ) : timingState.phase === 'referral' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs animate-pulse">
+                  <Send className="w-3.5 h-3.5 text-blue-600" />
+                  Referral Window ({formatTime(timingState.phaseRemaining)} left)
                 </span>
               ) : timingState.phase === 'transition' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs animate-pulse">
                   <Footprints className="w-3.5 h-3.5 text-amber-600" />
-                  Move to Next Table
+                  Move to Next Table ({formatTime(timingState.phaseRemaining)} left)
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
@@ -340,13 +375,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                   strokeWidth="8"
                 ></circle>
                 <circle
-                  className={`progress-ring__circle transition-all duration-700 ${
-                    timingState.phase === 'active'
+                  className={`progress-ring__circle transition-all duration-700 ${timingState.phase === 'active'
                       ? 'text-emerald-500'
-                      : timingState.phase === 'transition'
-                      ? 'text-amber-500'
-                      : 'text-brand-red'
-                  }`}
+                      : timingState.phase === 'referral'
+                        ? 'text-blue-600'
+                        : timingState.phase === 'transition'
+                          ? 'text-amber-500'
+                          : 'text-brand-red'
+                    }`}
                   cx="96"
                   cy="96"
                   fill="transparent"
@@ -360,17 +396,36 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-black text-zinc-950 tracking-tighter leading-none">
-                  {formatTime(timeLeft)}
+                <span className={`text-4xl font-black tracking-tighter leading-none ${timingState.phase === 'active'
+                    ? 'text-emerald-600'
+                    : timingState.phase === 'referral'
+                      ? 'text-blue-600'
+                      : timingState.phase === 'transition'
+                        ? 'text-amber-600'
+                        : 'text-zinc-950'
+                  }`}>
+                  {formatTime(
+                    timingState.phase === 'active' || timingState.phase === 'referral' || timingState.phase === 'transition'
+                      ? timingState.phaseRemaining
+                      : timeLeft
+                  )}
                 </span>
-                <span className="text-[9.5px] text-zinc-450 font-black uppercase tracking-widest mt-1">
+                <span className="text-[9px] text-zinc-450 font-black uppercase tracking-widest mt-1.5">
                   {timingState.phase === 'active'
-                    ? `${formatTime(timingState.phaseRemaining)} talking left`
-                    : timingState.phase === 'transition'
-                    ? `${formatTime(timingState.phaseRemaining)} move left`
-                    : 'Minutes left'}
+                    ? 'Talking Time Left'
+                    : timingState.phase === 'referral'
+                      ? 'Referral Window Left'
+                      : timingState.phase === 'transition'
+                        ? 'Move to Next Table'
+                        : 'Time Remaining'}
                 </span>
               </div>
+            </div>
+
+            {/* Small Total Round Time */}
+            <div className="w-full max-w-[210px] bg-white border border-zinc-200 rounded-lg py-1.5 px-3 mb-3.5 shadow-2xs flex items-center justify-between">
+              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Total Round Time</span>
+              <span className="text-[12px] font-mono font-black text-zinc-800">{formatTime(timeLeft)}</span>
             </div>
 
             <div className="w-full max-w-[210px]">
@@ -380,13 +435,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </div>
               <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden border border-zinc-200/40">
                 <div
-                  className={`h-full rounded-full transition-all duration-1000 ${
-                    timingState.phase === 'active'
+                  className={`h-full rounded-full transition-all duration-1000 ${timingState.phase === 'active'
                       ? 'bg-emerald-500'
-                      : timingState.phase === 'transition'
-                      ? 'bg-amber-500'
-                      : 'bg-brand-red'
-                  }`}
+                      : timingState.phase === 'referral'
+                        ? 'bg-blue-600'
+                        : timingState.phase === 'transition'
+                          ? 'bg-amber-500'
+                          : 'bg-brand-red'
+                    }`}
                   style={{ width: `${progressPercent}%` }}
                 ></div>
               </div>
@@ -396,7 +452,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                 <div className="mt-3 flex items-center justify-center gap-1 text-[9.5px] font-black text-emerald-800 bg-white border border-emerald-150 px-2.5 py-1 rounded-md shadow-2xs">
                   <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
                   <span className="text-emerald-300">•</span>
-                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 90s slot</span>
+                  <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 60s turn</span>
+                </div>
+              )}
+
+              {timingState.phase === 'referral' && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 text-[9.5px] font-black text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-md shadow-2xs animate-pulse">
+                  <Send className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span>Referrals Open · 30s per member</span>
                 </div>
               )}
 
@@ -430,26 +493,157 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </span>
             </div>
 
+            {/* Dynamic Turn & Phase Status Banners */}
+            {isMyTurnToSpeak ? (
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-5 text-white shadow-lg border border-emerald-400/40 animate-fade-in flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0 border border-white/30 animate-pulse">
+                    <Mic className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-black uppercase tracking-wider text-emerald-100">
+                        Live Turn
+                      </span>
+                      <span className="text-emerald-200 text-xs font-bold">Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
+                    </div>
+                    <h3 className="text-lg font-black tracking-tight mt-0.5">
+                      It's Your Turn to Speak!
+                    </h3>
+                    <p className="text-xs text-emerald-100 font-medium">
+                      Introduce your business &amp; tell the table what referrals you are looking for.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 bg-black/25 backdrop-blur-xs px-4 py-2 rounded-xl border border-white/20 shrink-0">
+                  <div className="text-center">
+                    <div className="text-[9.5px] uppercase tracking-wider font-extrabold text-emerald-200">Your 1-Min Timer</div>
+                    <div className="text-3xl font-black font-mono tracking-tight text-white">
+                      {formatTime(timingState.speakerTimeLeft)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : timingState?.isTalking && currentSpeaker ? (
+              <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between gap-3 text-emerald-900 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0 border border-emerald-200 animate-pulse">
+                    <Mic className="w-4 h-4 text-emerald-700" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Currently Speaking</span>
+                      <span className="text-emerald-300">•</span>
+                      <span className="text-[10px] font-bold text-emerald-600">Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
+                    </div>
+                    <div className="text-sm font-extrabold text-zinc-900">
+                      {currentSpeaker.name} <span className="text-xs font-semibold text-zinc-500">({currentSpeaker.company || currentSpeaker.category || 'Member'})</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Turn Time Left</div>
+                  <div className="text-xl font-mono font-black text-emerald-900 leading-tight">
+                    {formatTime(timingState.speakerTimeLeft)}
+                  </div>
+                </div>
+              </div>
+            ) : timingState?.isReferral ? (
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-4.5 text-white shadow-lg border border-blue-400/40 animate-fade-in flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0 border border-white/30 animate-pulse">
+                    <Send className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-black uppercase tracking-wider text-blue-100">
+                        Window Active
+                      </span>
+                      <span className="text-blue-200 text-xs font-bold">Referral Exchange Phase</span>
+                    </div>
+                    <h3 className="text-base font-black tracking-tight mt-0.5">
+                      Send Your Referrals to Table Members Now!
+                    </h3>
+                    <p className="text-xs text-blue-100 font-medium">
+                      Speaking has concluded. 30 seconds per member allocated for referral slips.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 bg-black/25 backdrop-blur-xs px-4 py-2 rounded-xl border border-white/20 shrink-0">
+                  <div className="text-center">
+                    <div className="text-[9.5px] uppercase tracking-wider font-extrabold text-blue-200">Window Closes In</div>
+                    <div className="text-2xl font-black font-mono tracking-tight text-white">
+                      {formatTime(timingState.phaseRemaining)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : timingState?.isTransition ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between gap-3 text-amber-900 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                    <Footprints className="w-5 h-5 text-amber-700" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Table Rotation</span>
+                    <h4 className="text-sm font-black text-amber-950">Talking &amp; Referrals Closed</h4>
+                    <p className="text-xs text-amber-800">Please move to your next assigned table.</p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[9px] font-black uppercase tracking-wider text-amber-700">Next Round In</div>
+                  <div className="text-lg font-mono font-black text-amber-950 leading-tight">
+                    {formatTime(timingState.phaseRemaining)}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredOccupants.map((member) => {
                 const initials = member.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                const isSpeakerCard = Boolean(
+                  timingState?.isTalking &&
+                  currentSpeaker &&
+                  (
+                    (member.uid && currentSpeaker.uid && member.uid === currentSpeaker.uid) ||
+                    (member.id && currentSpeaker.id && member.id === currentSpeaker.id) ||
+                    (member.name && currentSpeaker.name && member.name.toLowerCase().trim() === currentSpeaker.name.toLowerCase().trim())
+                  )
+                );
+
                 return (
                   <div
                     key={member.uid}
                     onClick={() => setSelectedProfileMember(member)}
-                    className="p-4 border border-zinc-200/90 hover:border-brand-red/35 rounded-2xl transition-all duration-200 group bg-white flex flex-col justify-between gap-3 shadow-2xs hover:shadow-md cursor-pointer"
+                    className={`p-4 border rounded-2xl transition-all duration-200 group bg-white flex flex-col justify-between gap-3 shadow-2xs hover:shadow-md cursor-pointer ${isSpeakerCard
+                        ? 'border-emerald-500 ring-2 ring-emerald-500/40 bg-emerald-50/15'
+                        : 'border-zinc-200/90 hover:border-brand-red/35'
+                      }`}
                   >
                     {/* Card Details */}
                     <div className="space-y-2.5">
                       {/* Top Header: Avatar + Name + Company */}
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-red-50 border border-red-100/80 text-brand-red font-black text-xs flex items-center justify-center shrink-0 shadow-2xs select-none">
+                        <div className={`w-10 h-10 rounded-full border text-xs font-black flex items-center justify-center shrink-0 shadow-2xs select-none ${isSpeakerCard
+                            ? 'bg-emerald-100 border-emerald-300 text-emerald-800 animate-pulse'
+                            : 'bg-red-50 border-red-100/80 text-brand-red'
+                          }`}>
                           {initials}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-[13px] font-extrabold text-zinc-950 leading-snug select-text truncate">
-                            {member.name}
-                          </h3>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="text-[13px] font-extrabold text-zinc-955 leading-snug select-text truncate">
+                              {member.name}
+                            </h3>
+                            {isSpeakerCard && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse">
+                                <Mic className="w-2.5 h-2.5 text-emerald-700" />
+                                <span>Speaking</span>
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-zinc-500 font-semibold leading-tight select-text truncate mt-0.5">
                             {member.company || 'Business Member'}
                           </p>
@@ -479,21 +673,40 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                     </div>
 
                     {/* Refer button */}
-                    {member.uid !== (loggedInMember?.uid || loggedInMember?.id) && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReferTarget({
-                            id: member.uid,
-                            name: member.name,
-                            company: member.company,
-                            category: member.category
-                          });
-                        }}
-                        className="w-full py-1.5 border border-zinc-200 group-hover:border-brand-red text-zinc-700 group-hover:text-white bg-zinc-50 group-hover:bg-brand-red rounded-xl text-[9.5px] font-black uppercase tracking-wider transition-all shadow-2xs cursor-pointer"
-                      >
-                        Send Referral
-                      </button>
+                    {member.uid !== loggedInUid && (
+                      timingState?.isReferralOpen ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReferTarget({
+                              id: member.uid,
+                              name: member.name,
+                              company: member.company,
+                              category: member.category
+                            });
+                          }}
+                          className="w-full py-2 bg-brand-red hover:bg-red-750 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm hover:shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>Send Referral</span>
+                        </button>
+                      ) : timingState?.isTalking ? (
+                        <button
+                          disabled
+                          title="Referrals open during the referral window (after speaking concludes)"
+                          className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9px] font-bold uppercase tracking-wider cursor-not-allowed text-center truncate"
+                        >
+                          Referrals Open in {formatTime(timingState.phaseRemaining)}
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          title="Referrals are closed for this round"
+                          className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9px] font-bold uppercase tracking-wider cursor-not-allowed text-center"
+                        >
+                          Referrals Closed
+                        </button>
+                      )
                     )}
                   </div>
                 );
@@ -535,10 +748,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                     <div key={idx} className="relative group">
                       {/* Bullet timeline circle */}
                       <span className={`absolute -left-6.5 top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${step.completed
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : idx === 0
-                            ? 'bg-brand-red border-brand-red text-white'
-                            : 'bg-white border-zinc-300'
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : idx === 0
+                          ? 'bg-brand-red border-brand-red text-white'
+                          : 'bg-white border-zinc-300'
                         }`}>
                         {step.completed ? (
                           <Check className="w-2.5 h-2.5 stroke-[3]" />
@@ -550,10 +763,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                       <div className="space-y-0.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded leading-none ${step.completed
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : idx === 0
-                                ? 'bg-red-50 text-brand-red animate-pulse'
-                                : 'bg-zinc-100 text-zinc-450'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : idx === 0
+                              ? 'bg-red-50 text-brand-red animate-pulse'
+                              : 'bg-zinc-100 text-zinc-450'
                             }`}>
                             {step.time}
                           </span>
@@ -694,12 +907,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
         <MemberProfileModal
           member={selectedProfileMember}
           onClose={() => setSelectedProfileMember(null)}
-          onSendReferral={(m) => setReferTarget({
+          isReferralDisabled={!timingState?.isReferralOpen}
+          referralDisabledReason="Referrals are only active during the dedicated Referral Window (after speaking concludes)."
+          onSendReferral={timingState?.isReferralOpen ? (m) => setReferTarget({
             id: m.uid || m.id,
             name: m.name,
             company: m.company,
             category: m.category
-          })}
+          }) : undefined}
         />
       )}
 
@@ -708,6 +923,8 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
           recipient={referTarget}
           loggedInUser={loggedInMember || { name: memberName }}
           activeConclaveId={conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId || conclaveSyncData?.id}
+          isReferralOpen={Boolean(timingState?.isReferralOpen)}
+          disabledReason="Referrals can only be submitted during the dedicated 30s/person Referral Window (after speaking concludes and before table rotation)."
           onClose={() => setReferTarget(null)}
           onSuccess={(msg) => {
             setToast(msg);

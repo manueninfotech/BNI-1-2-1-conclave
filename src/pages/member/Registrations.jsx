@@ -52,11 +52,28 @@ const formatTimeNice = (val, fallback = '') => {
   return String(val);
 };
 
-export default function Registrations({ loggedInMember }) {
+const normalizeStatus = (status) => {
+  const raw = (status || '').toLowerCase().replace(/[_\s]/g, '');
+  if (raw === 'running' || raw === 'active') return 'Running';
+  if (raw === 'completed' || raw === 'finished' || raw === 'ended') return 'Completed';
+  if (raw === 'cancelled') return 'Cancelled';
+  if (raw === 'draft') return 'Draft';
+  return 'Upcoming';
+};
+
+export default function Registrations({ loggedInMember, onTabChange, onSelectConclave }) {
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_conclaves');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.map(c => ({
+            ...c,
+            status: normalizeStatus(c.status)
+          }));
+        }
+      } catch (e) { }
     }
     return [];
   });
@@ -120,7 +137,7 @@ export default function Registrations({ loggedInMember }) {
         }
 
         const mappedConclaves = (Array.isArray(conclavesData) ? conclavesData : []).map((c) => {
-          let st = c.status ? (c.status.toLowerCase() === 'running' ? 'Running' : c.status.toLowerCase() === 'completed' ? 'Completed' : c.status.toLowerCase().includes('closed') ? 'Registration Closed' : c.status.toLowerCase().includes('open') ? 'Registration Open' : c.status) : 'Upcoming';
+          let st = normalizeStatus(c.status);
           if (st === 'Running' && (!c.currentRound || Number(c.currentRound) === 0)) {
             const startD = c.date ? new Date(c.date) : (c.startDate ? new Date(c.startDate) : null);
             if (startD && !isNaN(startD.getTime())) {
@@ -137,7 +154,7 @@ export default function Registrations({ loggedInMember }) {
                 }
               }
               if (new Date() < startDateTime) {
-                st = 'Registration Closed';
+                st = 'Upcoming';
               }
             }
           }
@@ -264,38 +281,6 @@ export default function Registrations({ loggedInMember }) {
     showToastMessage(`Successfully registered for ${conclaveName}!`);
   };
 
-  // Handle deregistration action
-  const handleDeregister = async (conclaveId, conclaveName) => {
-    try {
-      await api.delete(`/conclaves/${conclaveId}/register`);
-    } catch (err) {
-      console.warn("Backend deregistration warning:", err.message);
-    }
-
-    const registeredIds = member?.conclaveIds || [];
-    const updatedMember = {
-      ...member,
-      conclaveIds: registeredIds.filter(id => id !== conclaveId)
-    };
-    setMember(updatedMember);
-    localStorage.setItem('bni_logged_member', JSON.stringify(updatedMember));
-
-    const updatedConclaves = conclaves.map(c => {
-      if (c.id === conclaveId) {
-        return { ...c, isRegistered: false, memberCount: Math.max(0, (c.memberCount || 1) - 1) };
-      }
-      return c;
-    });
-    setConclaves(updatedConclaves);
-    localStorage.setItem('bni_conclaves', JSON.stringify(updatedConclaves));
-
-    const allRegistrations = JSON.parse(localStorage.getItem('bni_conclave_registrations') || '[]');
-    const filteredRegs = allRegistrations.filter(r => r.conclaveId !== conclaveId);
-    localStorage.setItem('bni_conclave_registrations', JSON.stringify(filteredRegs));
-
-    window.dispatchEvent(new Event('storage'));
-    showToastMessage(`Cancelled registration for ${conclaveName}.`, 'warning');
-  };
 
   // Helper to determine if current member is registered for a conclave
   const isConclaveRegistered = (c) => {
@@ -318,7 +303,13 @@ export default function Registrations({ loggedInMember }) {
         c.region.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesRegion = regionFilter === 'All' || c.region === regionFilter;
-      const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
+      const matchesStatus = statusFilter === 'All' || (() => {
+        const norm = normalizeStatus(c.status);
+        if (statusFilter === 'Running') return norm === 'Running';
+        if (statusFilter === 'Completed') return norm === 'Completed';
+        if (statusFilter === 'Upcoming') return norm === 'Upcoming';
+        return c.status === statusFilter;
+      })();
       const matchesRegistered = !showRegisteredOnly || isConclaveRegistered(c);
 
       const matchesMonth = monthFilter === 'All' || (() => {
@@ -344,7 +335,10 @@ export default function Registrations({ loggedInMember }) {
   }, [conclaves, member]);
 
   const upcomingCount = useMemo(() => {
-    return conclaves.filter(c => c.status === 'Running' || c.status === 'Upcoming').length;
+    return conclaves.filter(c => {
+      const norm = normalizeStatus(c.status);
+      return norm === 'Running' || norm === 'Upcoming';
+    }).length;
   }, [conclaves]);
 
 
@@ -534,15 +528,15 @@ export default function Registrations({ loggedInMember }) {
 
                   {/* Top line tags: status & region */}
                   <div className="flex justify-between items-start gap-3">
-                    <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider ${c.status === 'Running'
+                    <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider ${normalizeStatus(c.status) === 'Running'
                       ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
-                      : c.status === 'Upcoming'
+                      : normalizeStatus(c.status) === 'Upcoming'
                         ? 'bg-amber-50 text-amber-800 border border-amber-100'
-                        : c.status === 'Completed'
+                        : normalizeStatus(c.status) === 'Completed'
                           ? 'bg-zinc-100 text-zinc-650 border border-zinc-200'
                           : 'bg-zinc-50 text-zinc-400 border border-zinc-200/50'
                       }`}>
-                      {c.status}
+                      {normalizeStatus(c.status)}
                     </span>
 
                     <span className="px-2 py-0.5 bg-zinc-50 text-zinc-600 border border-zinc-200/80 rounded text-[9px] font-extrabold uppercase tracking-wide">
@@ -637,14 +631,7 @@ export default function Registrations({ loggedInMember }) {
                       >
                         {isRegistered ? 'Attended' : 'Completed'}
                       </button>
-                    ) : isRegistered ? (
-                      <button
-                        onClick={() => handleDeregister(c.id, c.name)}
-                        className="py-1.5 px-3 border border-red-200 text-brand-red rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-red-50 transition-smooth cursor-pointer"
-                      >
-                        Cancel Seat
-                      </button>
-                    ) : isBeforeReg ? (
+                    ) : isRegistered ? null : isBeforeReg ? (
                       <button
                         disabled
                         className="py-1.5 px-3 bg-zinc-100 text-zinc-400 border border-zinc-200 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-not-allowed opacity-60"
@@ -838,46 +825,6 @@ export default function Registrations({ loggedInMember }) {
                 </div>
               </div>
 
-              <div className="text-[10px] font-black text-brand-red uppercase tracking-wider border-b border-zinc-100 pb-1 mt-3">
-                Conclave Preferences
-              </div>
-
-              {/* Grid 2: Preferences */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[9.5px] font-bold uppercase text-zinc-450 block mb-1">Meal Preference</label>
-                  <select
-                    value={regForm.mealPreference}
-                    onChange={(e) => setRegForm(prev => ({ ...prev, mealPreference: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-[11.5px] focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-semibold text-zinc-700 cursor-pointer"
-                  >
-                    <option value="Veg">Veg</option>
-                    <option value="Non-Veg">Non-Veg</option>
-                    <option value="Jain">Jain</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[9.5px] font-bold uppercase text-zinc-450 block mb-1">Accommodation?</label>
-                  <select
-                    value={regForm.needsAccommodation}
-                    onChange={(e) => setRegForm(prev => ({ ...prev, needsAccommodation: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-[11.5px] focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-semibold text-zinc-700 cursor-pointer"
-                  >
-                    <option value="No">No</option>
-                    <option value="Yes">Yes</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[9.5px] font-bold uppercase text-zinc-450 block mb-1">Special Requirements / Notes</label>
-                <textarea
-                  value={regForm.specialInstructions}
-                  onChange={(e) => setRegForm(prev => ({ ...prev, specialInstructions: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-[11.5px] focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20 min-h-[50px] font-medium text-zinc-700"
-                  placeholder="Allergies, access needs, or pairing request notes..."
-                />
-              </div>
 
               {/* Registration Fee & UPI Payment Section */}
               {selectedConclaveForReg?.paymentDetails && (
