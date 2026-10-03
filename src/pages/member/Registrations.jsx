@@ -513,8 +513,10 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
             };
             const regStartStr = normaliseDate(c.regStartDate);
             const regEndStr = normaliseDate(c.regEndDate);
-            const isBeforeReg = regStartStr && todayStr < regStartStr;
-            const isAfterReg = regEndStr && todayStr > regEndStr;
+            const isRegistrationForcedOpen = c.registrationOverride === 'open' || c.isRegistrationOpen === true;
+            const isRegistrationForcedClosed = c.registrationOverride === 'closed' || c.isRegistrationOpen === false;
+            const isBeforeReg = !isRegistrationForcedOpen && (isRegistrationForcedClosed || (regStartStr && todayStr < regStartStr));
+            const isAfterReg = !isRegistrationForcedOpen && (isRegistrationForcedClosed || (regEndStr && todayStr > regEndStr));
 
             return (
               <div

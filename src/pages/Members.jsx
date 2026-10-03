@@ -13,13 +13,106 @@ import {
   Eye,
   Edit3,
   Trash2,
-  Edit
+  Edit,
+  Lock
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
 
 export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin }) {
+  const isSuperadmin = useMemo(() => {
+    const role = (loggedInAdmin?.role || '').toLowerCase();
+    const email = (loggedInAdmin?.email || '').toLowerCase();
+    return role === 'superadmin' || email.includes('superadmin');
+  }, [loggedInAdmin]);
+
+  const [allowAdminAddMembers, setAllowAdminAddMembers] = useState(false);
+  const [isScheduleLocked, setIsScheduleLocked] = useState(false);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [activeConclaveId, setActiveConclaveId] = useState(selectedConclaveId || '');
+
+  useEffect(() => {
+    if (selectedConclaveId) {
+      setActiveConclaveId(selectedConclaveId);
+    }
+  }, [selectedConclaveId]);
+
+  // Load conclave permissions
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadPermissions() {
+      let targetId = activeConclaveId || selectedConclaveId;
+      if (!targetId) {
+        try {
+          const list = await api.get('/admin/conclaves');
+          if (Array.isArray(list) && list.length > 0) {
+            targetId = list[0].id;
+            if (!isCancelled) setActiveConclaveId(targetId);
+          }
+        } catch { }
+      }
+      if (!targetId) return;
+
+      try {
+        const res = await api.get(`/admin/conclaves/${targetId}/permissions`);
+        if (!isCancelled && res) {
+          if (res.allowAdminAddMembers !== undefined) {
+            setAllowAdminAddMembers(Boolean(res.allowAdminAddMembers));
+          }
+          if (res.isScheduleLocked !== undefined) {
+            setIsScheduleLocked(Boolean(res.isScheduleLocked));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load conclave permissions:", err);
+      }
+    }
+    loadPermissions();
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedConclaveId, activeConclaveId]);
+
+  // When conclave schedule is generated and locked, even admin cannot add members!
+  const canPerformMemberActions = !isScheduleLocked && (isSuperadmin || allowAdminAddMembers);
+
+  const handleToggleAdminPermission = async () => {
+    if (isScheduleLocked) {
+      showToast("Cannot modify permissions because schedule is generated and locked.", "error");
+      return;
+    }
+    let targetId = activeConclaveId || selectedConclaveId;
+    if (!targetId) {
+      try {
+        const list = await api.get('/admin/conclaves');
+        if (Array.isArray(list) && list.length > 0) {
+          targetId = list[0].id;
+          setActiveConclaveId(targetId);
+        }
+      } catch { }
+    }
+    if (!targetId) {
+      showToast("Please select a conclave first.", "error");
+      return;
+    }
+
+    const nextValue = !allowAdminAddMembers;
+    setIsPermissionsLoading(true);
+    try {
+      const res = await api.put(`/admin/conclaves/${targetId}/permissions`, {
+        allowAdminAddMembers: nextValue
+      });
+      setAllowAdminAddMembers(nextValue);
+      showToast(res.message || (nextValue ? "Admin member addition enabled." : "Admin member addition restricted."), "success");
+    } catch (err) {
+      console.error("Failed to update permissions:", err);
+      showToast(err.message || "Failed to update permissions.", "error");
+    } finally {
+      setIsPermissionsLoading(false);
+    }
+  };
+
   const [members, setMembers] = useState(() => {
     const cached = localStorage.getItem('bni_admin_members_cache');
     if (cached) {
@@ -44,11 +137,12 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           });
         }
 
-        let targetConclaveId = selectedConclaveId;
+        let targetConclaveId = activeConclaveId || selectedConclaveId;
         if (viewScope === 'conclave' && !targetConclaveId) {
           const conclavesList = await api.get('/admin/conclaves').catch(() => []);
           if (Array.isArray(conclavesList) && conclavesList.length > 0) {
             targetConclaveId = conclavesList[0].id;
+            setActiveConclaveId(targetConclaveId);
           }
         }
 
@@ -282,6 +376,10 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   });
 
   const openAddModal = () => {
+    if (isScheduleLocked) {
+      showToast("Cannot add members because this conclave schedule is generated and locked.", "error");
+      return;
+    }
     setEditingMember(null);
     setFormData({
       name: '',
@@ -314,51 +412,105 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     setIsFormOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       showToast("Please enter the member's name.", "error");
       return;
     }
 
-    if (editingMember) {
-      // Edit mode
-      if (editingMember.isCaptain !== formData.isCaptain) {
-        api.post(`/admin/conclaves/${selectedConclaveId}/registrations/${editingMember.id}/role`, {
-          role: formData.isCaptain ? 'captain' : 'member'
-        }).then(() => {
-          showToast(`Role updated to ${formData.isCaptain ? 'Captain' : 'Member'} successfully.`);
-        }).catch(err => {
-          console.error("Failed to sync role to backend:", err);
-          showToast("Failed to update role on backend.", "error");
-        });
+    let targetConclaveId = activeConclaveId || selectedConclaveId;
+    if (!targetConclaveId) {
+      const conclavesList = await api.get('/admin/conclaves').catch(() => []);
+      if (Array.isArray(conclavesList) && conclavesList.length > 0) {
+        targetConclaveId = conclavesList[0].id;
+        setActiveConclaveId(targetConclaveId);
       }
-
-      setMembers(prev => prev.map(m => m.id === editingMember.id ? {
-        ...m,
-        ...formData,
-        avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || m.avatar
-      } : m));
-
-      setSelectedMember(prev => prev && prev.id === editingMember.id ? {
-        ...prev,
-        ...formData,
-        avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || prev.avatar
-      } : prev);
-    } else {
-      // Add mode
-      const newMember = {
-        ...formData,
-        id: `BNI-00${Math.floor(100 + Math.random() * 900)}`,
-        avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
-        joinDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        history: [{ event: 'Created manually', date: new Date().toLocaleDateString(), role: formData.isCaptain ? 'Captain' : 'Member' }],
-        conclaveIds: [selectedConclaveId]
-      };
-      setMembers(prev => [newMember, ...prev]);
     }
 
-    setIsFormOpen(false);
+    if (editingMember) {
+      // Edit mode
+      try {
+        if (targetConclaveId) {
+          await api.put(`/admin/conclaves/${targetConclaveId}/members/${editingMember.id}`, {
+            name: formData.name.trim(),
+            category: formData.category,
+            email: formData.email.trim(),
+            phone: formData.phone.trim(),
+            company: formData.company.trim(),
+            chapter: formData.chapter.trim(),
+            address: formData.address.trim(),
+            role: formData.isCaptain ? 'captain' : 'member',
+            status: formData.status
+          });
+
+          if (editingMember.isCaptain !== formData.isCaptain) {
+            await api.post(`/admin/conclaves/${targetConclaveId}/registrations/${editingMember.id}/role`, {
+              role: formData.isCaptain ? 'captain' : 'member'
+            }).catch(() => {});
+          }
+        }
+
+        setMembers(prev => prev.map(m => m.id === editingMember.id ? {
+          ...m,
+          ...formData,
+          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || m.avatar
+        } : m));
+
+        setSelectedMember(prev => prev && prev.id === editingMember.id ? {
+          ...prev,
+          ...formData,
+          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || prev.avatar
+        } : prev);
+
+        showToast("Member updated successfully.", "success");
+        setIsFormOpen(false);
+      } catch (err) {
+        console.error("Failed to update member:", err);
+        showToast(err.message || "Failed to update member.", "error");
+      }
+    } else {
+      // Add mode
+      if (isScheduleLocked) {
+        showToast("Cannot add members because this conclave schedule is generated and locked.", "error");
+        return;
+      }
+      try {
+        let addedId = `BNI-00${Math.floor(100 + Math.random() * 900)}`;
+        if (targetConclaveId) {
+          const res = await api.post(`/admin/conclaves/${targetConclaveId}/members`, {
+            name: formData.name.trim(),
+            category: formData.category,
+            email: formData.email.trim(),
+            phone: formData.phone.trim(),
+            company: formData.company.trim(),
+            chapter: formData.chapter.trim(),
+            address: formData.address.trim(),
+            role: formData.isCaptain ? 'captain' : 'member',
+            status: formData.status
+          });
+          if (res?.registration?.userId) {
+            addedId = res.registration.userId;
+          }
+        }
+
+        const newMember = {
+          ...formData,
+          id: addedId,
+          uid: addedId,
+          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
+          joinDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          history: [{ event: 'Created manually', date: new Date().toLocaleDateString(), role: formData.isCaptain ? 'Captain' : 'Member' }],
+          conclaveIds: [targetConclaveId]
+        };
+        setMembers(prev => [newMember, ...prev]);
+        showToast("Member added successfully.", "success");
+        setIsFormOpen(false);
+      } catch (err) {
+        console.error("Failed to add member:", err);
+        showToast(err.message || "Failed to add member.", "error");
+      }
+    }
   };
 
   // Conclave-specific members subset
@@ -497,11 +649,17 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
   // Import members from CSV file
   const handleImport = (e) => {
+    if (isScheduleLocked) {
+      showToast("Cannot import members because this conclave schedule is generated and locked.", "error");
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
 
+    let targetConclaveId = activeConclaveId || selectedConclaveId;
+
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
       if (lines.length <= 1) return;
@@ -527,12 +685,30 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             chapter: chapter || 'Peak Performance',
             avatar: avatar,
             history: [{ event: 'Imported via CSV', date: new Date().toLocaleDateString(), role: 'Active Member' }],
-            conclaveIds: [selectedConclaveId]
+            conclaveIds: [targetConclaveId]
           });
         }
       }
 
       if (newMembers.length > 0) {
+        if (targetConclaveId) {
+          for (const m of newMembers) {
+            try {
+              await api.post(`/admin/conclaves/${targetConclaveId}/members`, {
+                name: m.name,
+                category: m.category,
+                email: m.email,
+                phone: m.phone,
+                company: m.company,
+                chapter: m.chapter,
+                role: m.isCaptain ? 'captain' : 'member',
+                status: m.status
+              });
+            } catch (err) {
+              console.warn("Failed to sync imported member to backend:", m.name, err);
+            }
+          }
+        }
         setMembers(prev => [...newMembers, ...prev]);
         showToast(`Successfully imported ${newMembers.length} members from CSV!`, 'success');
       }
@@ -609,22 +785,55 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             Manage registered BNI members and chapter seating details.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-          <input
-            type="file"
-            id="csv-file-input"
-            accept=".csv"
-            onChange={handleImport}
-            className="hidden"
-          />
-          <button
-            onClick={handleDownloadTemplate}
-            title="Download formatted CSV template for member import"
-            className="flex items-center justify-center gap-1 px-3 py-2 border border-zinc-250 bg-zinc-50 text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-100 transition-smooth cursor-pointer shadow-3xs"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            Template
-          </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+          {/* Schedule Locked Notice */}
+          {isScheduleLocked && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg shadow-3xs">
+              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
+                  Schedule Locked
+                </span>
+                <span className="text-[11px] font-extrabold text-amber-800">
+                  Member additions closed
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Superadmin toggle for allowing regular admins to add/manage members */}
+          {isSuperadmin && (
+            <div className={`flex items-center gap-2.5 px-3 py-1.5 bg-white border border-zinc-250 rounded-lg shadow-3xs ${isScheduleLocked ? 'opacity-60' : ''}`}>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">
+                  Admin Member Add
+                </span>
+                <span className={`text-[11px] font-extrabold ${isScheduleLocked ? 'text-zinc-500' : allowAdminAddMembers ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                  {isScheduleLocked ? 'Locked (OFF)' : allowAdminAddMembers ? 'Allowed (ON)' : 'Restricted (OFF)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!isScheduleLocked && allowAdminAddMembers}
+                disabled={isPermissionsLoading || isScheduleLocked}
+                onClick={handleToggleAdminPermission}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  !isScheduleLocked && allowAdminAddMembers ? 'bg-emerald-600' : 'bg-zinc-300'
+                } ${isPermissionsLoading || isScheduleLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isScheduleLocked ? 'Schedule is locked - Member additions closed' : allowAdminAddMembers ? 'Click to revoke Admin permission to add/manage members' : 'Click to grant Admin permission to add/manage members'}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    !isScheduleLocked && allowAdminAddMembers ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+
+          {/* Export button always available for attendee check-in/badges */}
           <button
             onClick={handleExport}
             className="flex items-center justify-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer shadow-3xs"
@@ -632,20 +841,41 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             <Upload className="w-4 h-4 text-zinc-400" />
             Export
           </button>
-          <button
-            onClick={() => document.getElementById('csv-file-input').click()}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer shadow-3xs"
-          >
-            <Download className="w-4 h-4 text-zinc-400" />
-            Import
-          </button>
-          <button
-            onClick={openAddModal}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-red hover:bg-red-700 text-white font-bold text-button rounded-lg transition-smooth shadow-md cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Add Member
-          </button>
+
+          {/* Member action buttons: conditionally visible only if not schedule locked AND has permission */}
+          {!isScheduleLocked && canPerformMemberActions && (
+            <>
+              <input
+                type="file"
+                id="csv-file-input"
+                accept=".csv"
+                onChange={handleImport}
+                className="hidden"
+              />
+              <button
+                onClick={handleDownloadTemplate}
+                title="Download formatted CSV template for member import"
+                className="flex items-center justify-center gap-1 px-3 py-2 border border-zinc-250 bg-zinc-50 text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-100 transition-smooth cursor-pointer shadow-3xs"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                Template
+              </button>
+              <button
+                onClick={() => document.getElementById('csv-file-input')?.click()}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer shadow-3xs"
+              >
+                <Download className="w-4 h-4 text-zinc-400" />
+                Import
+              </button>
+              <button
+                onClick={openAddModal}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-red hover:bg-red-700 text-white font-bold text-button rounded-lg transition-smooth shadow-md cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add Member
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -883,20 +1113,24 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => openEditModal(member)}
-                          className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-brand-red transition-smooth cursor-pointer"
-                          title="Edit Profile"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(member)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-zinc-400 hover:text-brand-red transition-smooth cursor-pointer"
-                          title="Delete Member"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canPerformMemberActions && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(member)}
+                              className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-brand-red transition-smooth cursor-pointer"
+                              title="Edit Profile"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget(member)}
+                              className="p-1.5 hover:bg-red-50 rounded-lg text-zinc-400 hover:text-brand-red transition-smooth cursor-pointer"
+                              title="Delete Member"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -940,12 +1174,14 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </button>
                     <h3 className="text-section-heading font-extrabold text-zinc-955">Member Details</h3>
                   </div>
-                  <button
-                    onClick={() => openEditModal(selectedMember)}
-                    className="p-1.5 hover:bg-zinc-200 rounded-lg text-brand-red hover:bg-brand-red/5 transition-smooth cursor-pointer"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
+                  {canPerformMemberActions && (
+                    <button
+                      onClick={() => openEditModal(selectedMember)}
+                      className="p-1.5 hover:bg-zinc-200 rounded-lg text-brand-red hover:bg-brand-red/5 transition-smooth cursor-pointer"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Drawer Content */}
@@ -1337,10 +1573,29 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setMembers(prev => prev.filter(m => m.id !== deleteTarget.id));
-                  showToast(`Member "${deleteTarget.name}" has been deleted.`, 'success');
-                  setDeleteTarget(null);
+                onClick={async () => {
+                  if (!deleteTarget) return;
+                  if (isScheduleLocked) {
+                    showToast("Cannot delete members because this conclave schedule is generated and locked.", "error");
+                    setDeleteTarget(null);
+                    return;
+                  }
+                  const targetConclaveId = activeConclaveId || selectedConclaveId || members[0]?.conclaveIds?.[0];
+                  try {
+                    if (targetConclaveId) {
+                      await api.delete(`/admin/conclaves/${targetConclaveId}/members/${deleteTarget.id}`);
+                    }
+                    setMembers(prev => prev.filter(m => m.id !== deleteTarget.id));
+                    if (selectedMember && selectedMember.id === deleteTarget.id) {
+                      setSelectedMember(null);
+                    }
+                    showToast(`Member "${deleteTarget.name}" has been deleted.`, 'success');
+                  } catch (err) {
+                    console.error("Failed to delete member:", err);
+                    showToast(err.message || "Failed to delete member.", 'error');
+                  } finally {
+                    setDeleteTarget(null);
+                  }
                 }}
                 className="px-3.5 py-1.5 bg-brand-red hover:bg-red-700 text-white text-button rounded-lg transition-smooth cursor-pointer text-[10px] font-bold"
               >
@@ -1377,11 +1632,31 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setMembers(prev => prev.filter(m => !selectedRows.has(m.id)));
-                  showToast(`Successfully deleted ${selectedRows.size} members.`, 'success');
-                  setSelectedRows(new Set());
-                  setIsBulkDeleteConfirmOpen(false);
+                onClick={async () => {
+                  if (isScheduleLocked) {
+                    showToast("Cannot delete members because this conclave schedule is generated and locked.", "error");
+                    setIsBulkDeleteConfirmOpen(false);
+                    return;
+                  }
+                  const targetConclaveId = activeConclaveId || selectedConclaveId || members[0]?.conclaveIds?.[0];
+                  const uids = Array.from(selectedRows);
+                  try {
+                    if (targetConclaveId) {
+                      await Promise.all(
+                        uids.map(uid => api.delete(`/admin/conclaves/${targetConclaveId}/members/${uid}`).catch(err => {
+                          console.error(`Failed to delete member ${uid}:`, err);
+                        }))
+                      );
+                    }
+                    setMembers(prev => prev.filter(m => !selectedRows.has(m.id)));
+                    showToast(`Successfully deleted ${selectedRows.size} members.`, 'success');
+                    setSelectedRows(new Set());
+                  } catch (err) {
+                    console.error("Failed to bulk delete members:", err);
+                    showToast("Failed to delete some members.", 'error');
+                  } finally {
+                    setIsBulkDeleteConfirmOpen(false);
+                  }
                 }}
                 className="px-3.5 py-1.5 bg-brand-red hover:bg-red-700 text-white text-button rounded-lg transition-smooth cursor-pointer text-[10px] font-bold"
               >
@@ -1397,7 +1672,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
 
       {/* Floating Bulk Actions Bar */}
-      {selectedRows.size > 0 && (
+      {selectedRows.size > 0 && canPerformMemberActions && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-zinc-900 text-white rounded-lg shadow-2xl py-2 px-4 flex items-center gap-3.5 border border-zinc-800 animate-slide-up text-body-sm font-semibold select-none">
           <span className="text-[10px] font-extrabold uppercase tracking-wide bg-zinc-800 px-2 py-0.5 rounded text-zinc-350">{selectedRows.size} Selected</span>
           <div className="w-px h-4 bg-zinc-800" />

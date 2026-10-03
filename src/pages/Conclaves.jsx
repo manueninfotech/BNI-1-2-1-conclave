@@ -12,6 +12,7 @@ import {
   Eye,
   Edit3,
   CreditCard,
+  Lock,
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import { ResponsiveContainer, BarChart, Bar, XAxis } from 'recharts';
@@ -225,6 +226,19 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
             progress = 0;
           }
 
+          const calculatedCaptains =
+            (c.captainCount !== undefined && c.captainCount !== null && c.captainCount > 0)
+              ? c.captainCount
+              : (c.captainsCount !== undefined && c.captainsCount !== null && c.captainsCount > 0)
+              ? c.captainsCount
+              : Array.isArray(c.captains)
+              ? c.captains.length
+              : Array.isArray(c.participants)
+              ? c.participants.filter(p => p.role === 'captain' || p.role === 'Captain' || p.isCaptain || p.isTableCaptain).length
+              : Array.isArray(c.schedule?.rounds?.[0]?.tables)
+              ? new Set(c.schedule.rounds[0].tables.map(t => t.captainId).filter(Boolean)).size
+              : (c.scheduleSummary?.tableCount || 0);
+
           return {
             ...c,
             state,
@@ -239,13 +253,32 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
             status,
             memberCount: c.registrationCount ?? c.memberCount ?? 0,
             memberLimit: c.memberLimit || 100,
-            captainCount: c.captainCount || 0,
+            captainCount: calculatedCaptains,
             captainLimit: c.captainLimit || 12,
             progress
           };
         });
         setConclaves(mapped);
         localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(mapped));
+
+        // Enrich captain counts in background if any conclave shows 0 but has members
+        mapped.forEach(async (cItem) => {
+          if (!cItem.captainCount && (cItem.memberCount > 0 || cItem.registrationCount > 0)) {
+            try {
+              const regData = await api.get(`/admin/conclaves/${cItem.id}/registrations`);
+              if (regData && regData.counts && typeof regData.counts.captainsDesignated === 'number') {
+                const caps = regData.counts.captainsDesignated;
+                if (caps > 0) {
+                  setConclaves(prev => {
+                    const next = prev.map(item => item.id === cItem.id ? { ...item, captainCount: caps } : item);
+                    localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(next));
+                    return next;
+                  });
+                }
+              }
+            } catch {}
+          }
+        });
       } catch (err) {
         console.error("Failed to load conclaves from API:", err);
       } finally {
@@ -432,6 +465,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     endDate: '',
     regStartDate: new Date().toISOString().slice(0, 10),
     regEndDate: '',
+    isRegistrationOpen: true,
     memberLimit: 500,
     captainLimit: 20,
     status: 'Draft',
@@ -655,11 +689,13 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       endTime: '17:00',
       regStartDate: new Date().toISOString().slice(0, 10),
       regEndDate: '',
+      isRegistrationOpen: true,
       memberLimit: 100,
       captainLimit: 12,
       status: 'Upcoming',
       region: defaultReg,
       coordinator: defaultCoord,
+      allowAdminAddMembers: true,
       description: '',
       registrationFee: 0,
       bankName: '',
@@ -689,6 +725,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
+        isRegistrationOpen: Boolean(formData.isRegistrationOpen),
+        registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
+        allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
         dateRange: formData.dateRange || 'TBD',
         region: formData.region || loggedInAdmin?.region || loggedInAdmin?.scope || '',
         coordinator: formData.coordinator || loggedInAdmin?.name || 'Administrator',
@@ -736,6 +775,34 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     }
   };
 
+  const handleToggleRegistration = async (conclave, e) => {
+    e.stopPropagation();
+    if (conclave.isScheduleLocked || conclave.status === 'locked') {
+      showToast('Schedule Locked', 'Registration cannot be toggled because the schedule is generated and locked.');
+      return;
+    }
+    const currentStatus = conclave.registrationOverride === 'open' || conclave.isRegistrationOpen === true;
+    const newStatus = !currentStatus;
+    try {
+      await api.post(`/admin/conclaves/${conclave.id}/registration`, { open: newStatus });
+      setConclaves(prev => prev.map(c => c.id === conclave.id ? {
+        ...c,
+        isRegistrationOpen: newStatus,
+        registrationOverride: newStatus ? 'open' : 'closed',
+        status: newStatus ? (c.status === 'Completed' ? 'Completed' : 'Upcoming') : c.status
+      } : c));
+      showToast(
+        newStatus ? 'Registration Opened' : 'Registration Closed',
+        newStatus
+          ? `${conclave.name} is now open for registrations (even after close date).`
+          : `${conclave.name} registrations are now closed.`
+      );
+    } catch (err) {
+      console.error("Failed to toggle registration:", err);
+      showToast('Error', err.message || 'Failed to update registration status.');
+    }
+  };
+
   const openEditModal = (c) => {
     const pay = c.paymentDetails || {};
     setFormData({
@@ -750,6 +817,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       endTime: formatTimeForInput(c.endTime) || '17:00',
       regStartDate: formatDateForInput(c.regStartDate),
       regEndDate: formatDateForInput(c.regEndDate),
+      isScheduleLocked: Boolean(c.isScheduleLocked),
+      isRegistrationOpen: c.isScheduleLocked ? false : (c.registrationOverride ? c.registrationOverride === 'open' : (c.isRegistrationOpen ?? true)),
+      allowAdminAddMembers: Boolean(c.allowAdminAddMembers),
       memberCount: c.memberCount || 0,
       memberLimit: c.memberLimit ?? 100,
       captainCount: c.captainCount || 0,
@@ -785,6 +855,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
+        isRegistrationOpen: Boolean(formData.isRegistrationOpen),
+        registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
+        allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
         memberLimit: Number(formData.memberLimit) || 100,
         captainLimit: Number(formData.captainLimit) || 12,
         description: formData.description,
@@ -986,6 +1059,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                 <th className="px-5 py-4 text-center">Members</th>
                 <th className="px-5 py-4 text-center">Captains</th>
                 <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4 text-center">Registration</th>
                 <th className="px-5 py-4">Progress</th>
                 <th className="px-5 py-4 text-right">Actions</th>
               </tr>
@@ -993,7 +1067,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
             <tbody className="divide-y divide-zinc-100 text-table-text">
               {filteredConclaves.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="p-8 text-center text-zinc-400 font-medium">
+                  <td colSpan="12" className="p-8 text-center text-zinc-400 font-medium">
                     No conclaves found matching the filter tags.
                   </td>
                 </tr>
@@ -1075,6 +1149,40 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                           <span className="inline-flex items-center gap-1 text-zinc-700 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span> Completed
                           </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        {conclave.status === 'Completed' || conclave.isScheduleLocked || conclave.status === 'locked' ? (
+                          <span className="text-[10px] text-zinc-400 font-bold uppercase inline-flex items-center gap-1">
+                            {conclave.isScheduleLocked || conclave.status === 'locked' ? (
+                              <>
+                                <Lock className="w-3 h-3 text-amber-500" />
+                                Locked
+                              </>
+                            ) : (
+                              'Closed'
+                            )}
+                          </span>
+                        ) : (
+                          <div className="inline-flex items-center gap-2">
+                            <label className="relative inline-flex items-center cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(conclave.registrationOverride === 'open' || conclave.isRegistrationOpen === true)}
+                                onChange={(e) => isHisCreated && handleToggleRegistration(conclave, e)}
+                                disabled={!isHisCreated || conclave.isScheduleLocked || conclave.status === 'locked'}
+                                className="sr-only peer"
+                              />
+                              <div className={`w-8 h-4.5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-3.5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600 ${!isHisCreated || conclave.isScheduleLocked || conclave.status === 'locked' ? 'opacity-40 cursor-not-allowed' : ''}`}></div>
+                            </label>
+                            <span className={`text-[10px] font-extrabold uppercase tracking-wider ${
+                              conclave.registrationOverride === 'open' || conclave.isRegistrationOpen === true
+                                ? 'text-emerald-600'
+                                : 'text-zinc-400'
+                            }`}>
+                              {conclave.registrationOverride === 'open' || conclave.isRegistrationOpen === true ? 'ON' : 'OFF'}
+                            </span>
+                          </div>
                         )}
                       </td>
                       <td className="px-5 py-4 w-32">
@@ -1515,6 +1623,32 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                 </div>
               </div>
 
+              {/* Registration Override Toggle */}
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-zinc-900 uppercase">Registration Status</span>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                      formData.isRegistrationOpen ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
+                    }`}>
+                      {formData.isRegistrationOpen ? 'OPEN (ON)' : 'CLOSED (OFF)'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">
+                    When ON, registrations remain active even if the close date has passed, until switched OFF.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.isRegistrationOpen)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isRegistrationOpen: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Members Limit</label>
@@ -1807,6 +1941,80 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   />
                 </div>
               </div>
+
+              {/* Registration Override Toggle */}
+              <div className={`bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between ${formData.isScheduleLocked ? 'opacity-70' : ''}`}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-zinc-900 uppercase">Registration Status</span>
+                    {formData.isScheduleLocked ? (
+                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" />
+                        LOCKED (CLOSED)
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                        formData.isRegistrationOpen ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
+                      }`}>
+                        {formData.isRegistrationOpen ? 'OPEN (ON)' : 'CLOSED (OFF)'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">
+                    {formData.isScheduleLocked
+                      ? 'Schedule is generated and locked. Registration is permanently closed.'
+                      : 'When ON, registrations remain active even if the close date has passed, until switched OFF.'}
+                  </p>
+                </div>
+                <label className={`relative inline-flex items-center select-none ${formData.isScheduleLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    disabled={Boolean(formData.isScheduleLocked)}
+                    checked={!formData.isScheduleLocked && Boolean(formData.isRegistrationOpen)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isRegistrationOpen: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 ${formData.isScheduleLocked ? 'opacity-40' : ''}`}></div>
+                </label>
+              </div>
+
+              {/* Admin Member Access Toggle (Superadmin only) */}
+              {isSuperadmin && (
+                <div className={`bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between ${formData.isScheduleLocked ? 'opacity-70' : ''}`}>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-zinc-900 uppercase">Admin Member Access</span>
+                      {formData.isScheduleLocked ? (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5" />
+                          LOCKED (OFF)
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                          formData.allowAdminAddMembers ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
+                        }`}>
+                          {formData.allowAdminAddMembers ? 'ALLOWED (ON)' : 'RESTRICTED (OFF)'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      {formData.isScheduleLocked
+                        ? 'Schedule is generated and locked. Member additions are closed for all administrators.'
+                        : 'When ON, regular admins can add, import, export, edit, and delete members for this conclave.'}
+                    </p>
+                  </div>
+                  <label className={`relative inline-flex items-center select-none ${formData.isScheduleLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <input
+                      type="checkbox"
+                      disabled={Boolean(formData.isScheduleLocked)}
+                      checked={!formData.isScheduleLocked && Boolean(formData.allowAdminAddMembers)}
+                      onChange={(e) => setFormData(prev => ({ ...prev, allowAdminAddMembers: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 ${formData.isScheduleLocked ? 'opacity-40' : ''}`}></div>
+                  </label>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>

@@ -7,7 +7,6 @@ import BusinessTypes from './pages/BusinessTypes';
 import Captains from './pages/Captains';
 import ActiveUsers from './pages/ActiveUsers';
 import Conclaves from './pages/Conclaves';
-import Snapshot from './pages/Snapshot';
 import ScheduleGen from './pages/ScheduleGen';
 import ScheduleReview from './pages/ScheduleReview';
 import RoundRunner from './pages/RoundRunner';
@@ -119,7 +118,7 @@ export default function App() {
     const lastPart = parts[parts.length - 1];
     const validTabs = [
       'dashboard', 'members', 'active-users', 'business-types', 'captains',
-      'conclaves', 'snapshot', 'schedule-gen', 'schedule-review',
+      'conclaves', 'schedule-gen', 'schedule-review',
       'round-runner', 'reports', 'admins', 'referrals', 'profile', 'registrations',
       'my-schedule', 'current-round', 'history', 'my-table', 'schedule'
     ];
@@ -193,7 +192,7 @@ export default function App() {
       const lastPart = parts[parts.length - 1];
       const validTabs = [
         'dashboard', 'members', 'active-users', 'business-types', 'captains',
-        'conclaves', 'snapshot', 'schedule-gen', 'schedule-review',
+        'conclaves', 'schedule-gen', 'schedule-review',
         'round-runner', 'reports', 'admins', 'referrals', 'profile', 'registrations',
         'my-schedule', 'current-round', 'history', 'my-table', 'schedule'
       ];
@@ -798,9 +797,6 @@ export default function App() {
             <Captains searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
           ) : activeTab === 'conclaves' ? (
             <Conclaves loggedInAdmin={loggedInAdmin} setActiveTab={handleTabChange} />
-          ) : activeTab === 'snapshot' ? (
-            <Snapshot selectedConclaveId={selectedConclaveId} searchQuery={searchQuery} />
-
           ) : activeTab === 'schedule-gen' ? (
             <ScheduleGen selectedConclaveId={selectedConclaveId} showGenWarning={showGenWarning} clearGenWarning={clearGenWarning} />
           ) : activeTab === 'schedule-review' ? (

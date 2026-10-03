@@ -90,6 +90,10 @@ async function getAuthHeaders() {
     activeSession = localStorage.getItem('bni_logged_member');
   } else if (role === 'captain') {
     activeSession = localStorage.getItem('bni_logged_captain');
+  } else if (role === 'superadmin') {
+    activeSession = localStorage.getItem('bni_superadmin_profile') || localStorage.getItem('bni_logged_admin');
+    if (!headers['X-User-Id']) headers['X-User-Id'] = 'superadmin';
+    if (!headers['X-User-Email']) headers['X-User-Email'] = 'superadmin@bni.com';
   } else {
     activeSession = localStorage.getItem('bni_logged_admin');
   }

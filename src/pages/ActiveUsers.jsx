@@ -2,19 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Search,
-  ChevronRight,
   X,
   Download,
-  MoreVertical,
-  CheckCircle2,
-  Clock,
   RefreshCw,
   Info,
   Eye,
   LogIn,
-  Camera,
-  Bell,
-  LogOut
+
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
@@ -23,7 +17,6 @@ import {
   BarChart,
   Bar,
   XAxis,
-  YAxis,
   Tooltip,
   PieChart,
   Pie,
@@ -36,7 +29,7 @@ export default function ActiveUsers({ searchQuery, selectedConclaveId }) {
   const [sessions, setSessions] = useState(() => {
     const cached = localStorage.getItem('bni_active_users_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return [];
   });
@@ -390,7 +383,7 @@ export default function ActiveUsers({ searchQuery, selectedConclaveId }) {
 
         {/* KPI 3 */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Ready for Snapshot</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">Active Now</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{totalActiveSessions}</span>
           </div>
@@ -562,13 +555,12 @@ export default function ActiveUsers({ searchQuery, selectedConclaveId }) {
                 <th className="px-5 py-4 text-center">Auto Logout</th>
                 <th className="px-5 py-4">Session</th>
                 <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 text-table-text">
               {filteredSessions.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center text-zinc-400 font-medium">
+                  <td colSpan="7" className="p-8 text-center text-zinc-400 font-medium">
                     No active sessions found matching filters.
                   </td>
                 </tr>
@@ -641,33 +633,6 @@ export default function ActiveUsers({ searchQuery, selectedConclaveId }) {
                           <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> Idle
                         </span>
                       )}
-                    </td>
-                    <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setSelectedSession(session)}
-                          className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-900 transition-smooth cursor-pointer"
-                          title="Session Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => showToast('Notification Sent', `Sent session ping alert to ${session.name}.`)}
-                          className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-brand-red transition-smooth cursor-pointer"
-                          title="Send Session Ping"
-                        >
-                          <Bell className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeleteTarget(session);
-                          }}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-zinc-400 hover:text-brand-red transition-smooth cursor-pointer"
-                          title="Force Terminate Session"
-                        >
-                          <LogOut className="w-4 h-4" />
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))

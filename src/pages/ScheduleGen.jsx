@@ -321,14 +321,24 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/lock-schedule`);
       const updatedConclaves = conclaves.map(c =>
-        c.id === selectedConclaveId ? { ...c, isScheduleLocked: true } : c
+        c.id === selectedConclaveId
+          ? {
+              ...c,
+              isScheduleLocked: true,
+              isRegistrationOpen: false,
+              registrationOverride: 'closed',
+              status: (c.status === 'Completed' || c.status === 'running') ? c.status : 'registrationClosed'
+            }
+          : c
       );
       setConclaves(updatedConclaves);
       try {
         localStorage.setItem('bni_schedule_gen_conclaves_cache', JSON.stringify(updatedConclaves));
+        localStorage.setItem('bni_conclaves_cache', JSON.stringify(updatedConclaves));
+        localStorage.setItem('bni_superadmin_conclaves_cache', JSON.stringify(updatedConclaves));
       } catch (e) { }
       setIsModalOpen(false);
-      showToast('Conclave Locked Successfully', 'Seating assignments are now frozen and published.');
+      showToast('Conclave Locked Successfully', 'Seating assignments are now frozen, published, and conclave registration is closed.');
     } catch (err) {
       console.error("Backend conclave lock failed:", err.message);
       showToast('Error', err.message || 'Failed to lock conclave. Please try again.');

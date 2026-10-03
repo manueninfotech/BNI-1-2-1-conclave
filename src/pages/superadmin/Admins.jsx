@@ -75,6 +75,21 @@ export default function SuperadminAdmins({ searchQuery }) {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Lock background body scroll when drawer or modal is open
+  useEffect(() => {
+    if (activeAdmin || activeRegion || showAdminModal || showRegionModal || resetPasswordTarget || confirmModal) {
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+    };
+  }, [activeAdmin, activeRegion, showAdminModal, showRegionModal, resetPasswordTarget, confirmModal]);
+
   const loadData = async () => {
     setIsLoading(false);
     try {
@@ -521,14 +536,20 @@ export default function SuperadminAdmins({ searchQuery }) {
       )}
 
       {/* Admin detail drawer */}
-      {activeAdmin && createPortal(
+      {createPortal(
         <>
           <div
             onClick={() => setActiveAdmin(null)}
-            className="fixed top-14 left-0 lg:left-[220px] right-0 bottom-0 bg-black/40 backdrop-blur-xs z-[55] transition-opacity duration-300"
+            className={`fixed inset-0 bg-black/40 backdrop-blur-xs z-[9999] transition-opacity duration-300 ${
+              activeAdmin ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
           />
-          <div className="fixed top-14 right-0 bottom-0 w-full max-w-lg bg-white shadow-xl z-[60] p-6 overflow-y-auto border-l border-zinc-200 animate-slide-in flex flex-col justify-between">
-            {(() => {
+          <div
+            className={`fixed right-0 top-0 bottom-0 h-screen w-full max-w-[480px] bg-white border-l border-zinc-100 shadow-2xl transform transition-transform duration-300 flex flex-col overflow-hidden z-[10000] ${
+              activeAdmin ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
+            }`}
+          >
+            {activeAdmin && (() => {
               const adminName = activeAdmin.name || activeAdmin.email?.split('@')[0] || 'Unnamed Admin';
               const adminRegion = activeAdmin.region || (activeAdmin.email?.includes('admin') || activeAdmin.email?.includes('super') ? 'Global (Superadmin)' : 'Guntur Region');
               const adminMobile = activeAdmin.mobile || 'N/A';
@@ -537,103 +558,107 @@ export default function SuperadminAdmins({ searchQuery }) {
 
               return (
                 <>
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center pb-4 border-b border-zinc-200">
-                      <div>
-                        <h2 className="text-base font-black text-zinc-900 leading-tight">Admin Profile Details</h2>
-                      </div>
+                  {/* Drawer Header */}
+                  <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 shrink-0">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => setActiveAdmin(null)}
-                        className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-455 cursor-pointer"
+                        className="p-1.5 hover:bg-zinc-200 rounded-lg text-zinc-400 hover:text-zinc-700 transition-smooth cursor-pointer"
                       >
                         <X className="w-4 h-4" />
                       </button>
-                    </div>
-
-                    <div className="space-y-5">
-                      <div className="flex items-center gap-3.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
-                        <div className="w-12 h-12 rounded-full bg-brand-red/10 text-brand-red flex items-center justify-center font-black text-[13px]">
-                          {adminInitials}
-                        </div>
-                        <div>
-                          <h3 className="text-[13.5px] font-black text-zinc-900 leading-none">{adminName}</h3>
-                          <p className="text-[10px] text-zinc-455 font-bold uppercase tracking-wider mt-1">{adminRegion}</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
-                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Email Address</span>
-                          <span className="text-body-sm font-bold text-zinc-800 mt-1 block truncate">{activeAdmin.email}</span>
-                        </div>
-                        <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
-                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Mobile Number</span>
-                          <span className="text-body-sm font-bold text-zinc-800 mt-1 block">{adminMobile}</span>
-                        </div>
-                      </div>
-
-                      {/* Region Metrics */}
-                      <div className="space-y-3">
-                        <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Linked Region Summary</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
-                            <CalendarRange className="w-4 h-4 text-brand-red" />
-                            <div>
-                              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
-                              <span className="text-[13px] font-black text-zinc-900">
-                                {conclaves.filter(c => (c.region || 'Guntur Region') === adminRegion).length} Created
-                              </span>
-                            </div>
-                          </div>
-                          <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
-                            <Users className="w-4 h-4 text-brand-red" />
-                            <div>
-                              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
-                              <span className="text-[13px] font-black text-zinc-900">
-                                {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).length} Registered
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Region Members List preview */}
-                      <div className="space-y-3">
-                        <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Registered Members</h4>
-                        <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200 max-h-[220px] overflow-y-auto">
-                          {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).map(member => (
-                            <div key={member.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
-                              <div>
-                                <p className="font-black text-zinc-800">{member.name}</p>
-                                <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">{member.company} • {member.category}</p>
-                              </div>
-                              <span className="text-[10px] bg-zinc-50 border border-zinc-200 text-zinc-500 font-bold px-2 py-0.5 rounded-full">
-                                {member.chapter}
-                              </span>
-                            </div>
-                          ))}
-                          {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).length === 0 && (
-                            <p className="p-4 text-center text-zinc-400 text-caption font-semibold">No registered members in this region.</p>
-                          )}
-                        </div>
+                      <div>
+                        <h3 className="text-section-heading font-extrabold text-zinc-950">Admin Details</h3>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-6 border-t border-zinc-200 flex flex-col gap-2">
+                  {/* Drawer Body */}
+                  <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-6">
+                    <div className="flex items-center gap-3.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
+                      <div className="w-12 h-12 rounded-full bg-brand-red/10 text-brand-red flex items-center justify-center font-black text-[13px] shrink-0">
+                        {adminInitials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-[13.5px] font-black text-zinc-900 leading-none truncate">{adminName}</h3>
+                        <p className="text-[10px] text-zinc-455 font-bold uppercase tracking-wider mt-1 truncate">{adminRegion}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Email Address</span>
+                        <span className="text-body-sm font-bold text-zinc-800 mt-1 block truncate select-all">{activeAdmin.email}</span>
+                      </div>
+                      <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Mobile Number</span>
+                        <span className="text-body-sm font-bold text-zinc-800 mt-1 block select-all">{adminMobile}</span>
+                      </div>
+                    </div>
+
+                    {/* Region Metrics */}
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Linked Region Summary</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
+                          <CalendarRange className="w-4 h-4 text-brand-red shrink-0" />
+                          <div>
+                            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
+                            <span className="text-[13px] font-black text-zinc-900">
+                              {conclaves.filter(c => (c.region || 'Guntur Region') === adminRegion).length} Created
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
+                          <Users className="w-4 h-4 text-brand-red shrink-0" />
+                          <div>
+                            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
+                            <span className="text-[13px] font-black text-zinc-900">
+                              {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).length} Registered
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Region Members List preview */}
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Registered Members</h4>
+                      <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200 max-h-[220px] overflow-y-auto">
+                        {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).map(member => (
+                          <div key={member.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
+                            <div>
+                              <p className="font-black text-zinc-800">{member.name}</p>
+                              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">{member.company} • {member.category}</p>
+                            </div>
+                            <span className="text-[10px] bg-zinc-50 border border-zinc-200 text-zinc-500 font-bold px-2 py-0.5 rounded-full">
+                              {member.chapter}
+                            </span>
+                          </div>
+                        ))}
+                        {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).length === 0 && (
+                          <p className="p-4 text-center text-zinc-400 text-caption font-semibold">No registered members in this region.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Drawer Footer */}
+                  <div className="p-4 border-t border-zinc-100 bg-white flex items-center gap-3 shrink-0">
                     <button
                       onClick={() => {
+                        const target = activeAdmin;
                         setActiveAdmin(null);
-                        handleOpenResetPassword(activeAdmin);
+                        handleOpenResetPassword(target);
                       }}
-                      className="w-full py-2.5 bg-brand-red hover:bg-red-750 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2"
+                      className="flex-1 py-2.5 px-4 bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-800 text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
                       Reset Password
                     </button>
                     <button
                       onClick={() => setActiveAdmin(null)}
-                      className="w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer"
+                      className="flex-1 py-2.5 px-4 bg-brand-red hover:bg-red-750 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer text-center shadow-xs"
                     >
                       Close View
                     </button>
@@ -647,84 +672,110 @@ export default function SuperadminAdmins({ searchQuery }) {
       )}
 
       {/* Region detail drawer */}
-      {activeRegion && createPortal(
+      {createPortal(
         <>
           <div
             onClick={() => setActiveRegion(null)}
-            className="fixed top-14 left-0 lg:left-[220px] right-0 bottom-0 bg-black/40 backdrop-blur-xs z-[55] transition-opacity duration-300"
+            className={`fixed inset-0 bg-black/40 backdrop-blur-xs z-[9999] transition-opacity duration-300 ${
+              activeRegion ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
           />
-          <div className="fixed top-14 right-0 bottom-0 w-full max-w-lg bg-white shadow-xl z-[60] p-6 overflow-y-auto border-l border-zinc-200 animate-slide-in flex flex-col justify-between">
-            <div className="space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-zinc-200">
-                <div>
-                  <h2 className="text-base font-black text-zinc-900 leading-tight">Region Details Overview</h2>
-                </div>
-                <button
-                  onClick={() => setActiveRegion(null)}
-                  className="p-1.5 rounded-full hover:bg-zinc-100 text-zinc-450"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-5">
-                <div className="flex items-center gap-3.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
-                  <div className="w-12 h-12 rounded-full bg-brand-red/10 text-brand-red flex items-center justify-center">
-                    <Globe className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-[13.5px] font-black text-zinc-900 leading-none">{activeRegion.name}</h3>
-                    <p className="text-[10px] text-zinc-450 font-bold uppercase tracking-wider mt-1">{activeRegion.status} Status</p>
-                  </div>
-                </div>
-
-                {/* Region stats metrics */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
-                    <CalendarRange className="w-4 h-4 text-brand-red shrink-0" />
+          <div
+            className={`fixed right-0 top-0 bottom-0 h-screen w-full max-w-[480px] bg-white border-l border-zinc-100 shadow-2xl transform transition-transform duration-300 flex flex-col overflow-hidden z-[10000] ${
+              activeRegion ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
+            }`}
+          >
+            {activeRegion && (
+              <>
+                {/* Drawer Header */}
+                <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setActiveRegion(null)}
+                      className="p-1.5 hover:bg-zinc-200 rounded-lg text-zinc-400 hover:text-zinc-700 transition-smooth cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                     <div>
-                      <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
-                      <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.conclavesCount} total</span>
-                    </div>
-                  </div>
-                  <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
-                    <Users className="w-4 h-4 text-brand-red shrink-0" />
-                    <div>
-                      <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
-                      <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.membersCount} active</span>
+                      <h3 className="text-section-heading font-extrabold text-zinc-950">Region Details</h3>
                     </div>
                   </div>
                 </div>
 
-                {/* Conclaves list under this region */}
-                <div className="space-y-3">
-                  <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Created Conclaves</h4>
-                  <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200">
-                    {conclaves.filter(c => (c.region || 'Guntur Region') === activeRegion.name).map(conclave => (
-                      <div key={conclave.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
-                        <div>
-                          <p className="font-black text-zinc-800">{conclave.name || conclave.title || 'Unnamed Conclave'}</p>
-                          <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">{conclave.venueLocation || conclave.venue || 'TBD Venue'} • {conclave.date ? new Date(conclave.date).toLocaleDateString() : 'TBD Date'}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${conclave.status?.toLowerCase() === 'completed' ? 'bg-zinc-100 text-zinc-650' : 'bg-emerald-50 text-emerald-700'
-                          }`}>
-                          {conclave.status}
-                        </span>
+                {/* Drawer Body */}
+                <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-6">
+                  <div className="flex items-center gap-3.5 bg-zinc-50 p-4 rounded-xl border border-zinc-200">
+                    <div className="w-12 h-12 rounded-full bg-brand-red/10 text-brand-red flex items-center justify-center shrink-0">
+                      <Globe className="w-6 h-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[13.5px] font-black text-zinc-900 leading-none truncate">{activeRegion.name}</h3>
+                      <p className="text-[10px] text-zinc-450 font-bold uppercase tracking-wider mt-1">{activeRegion.status} Status</p>
+                    </div>
+                  </div>
+
+                  {/* Region stats metrics */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
+                      <CalendarRange className="w-4 h-4 text-brand-red shrink-0" />
+                      <div>
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
+                        <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.conclavesCount} total</span>
                       </div>
-                    ))}
+                    </div>
+                    <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
+                      <Users className="w-4 h-4 text-brand-red shrink-0" />
+                      <div>
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
+                        <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.membersCount} active</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Conclaves list under this region */}
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Created Conclaves</h4>
+                    <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200 max-h-[260px] overflow-y-auto">
+                      {conclaves.filter(c => (c.region || 'Guntur Region') === activeRegion.name).map(conclave => (
+                        <div key={conclave.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
+                          <div>
+                            <p className="font-black text-zinc-800">{conclave.name || conclave.title || 'Unnamed Conclave'}</p>
+                            <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">{conclave.venueLocation || conclave.venue || 'TBD Venue'} • {conclave.date ? new Date(conclave.date).toLocaleDateString() : 'TBD Date'}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${conclave.status?.toLowerCase() === 'completed' ? 'bg-zinc-100 text-zinc-650' : 'bg-emerald-50 text-emerald-700'
+                            }`}>
+                            {conclave.status}
+                          </span>
+                        </div>
+                      ))}
+                      {conclaves.filter(c => (c.region || 'Guntur Region') === activeRegion.name).length === 0 && (
+                        <p className="p-4 text-center text-zinc-400 text-caption font-semibold">No conclaves created in this region.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="pt-6 border-t border-zinc-200">
-              <button
-                onClick={() => setActiveRegion(null)}
-                className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer"
-              >
-                Close View
-              </button>
-            </div>
+                {/* Drawer Footer */}
+                <div className="p-4 border-t border-zinc-100 bg-white flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => {
+                      const target = activeRegion;
+                      setActiveRegion(null);
+                      handleOpenRegionModal(target);
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-800 text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer text-center"
+                  >
+                    Edit Region
+                  </button>
+                  <button
+                    onClick={() => setActiveRegion(null)}
+                    className="flex-1 py-2.5 px-4 bg-brand-red hover:bg-red-750 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer text-center shadow-xs"
+                  >
+                    Close View
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </>,
         document.body
@@ -732,7 +783,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
       {/* Admin Form Modal */}
       {showAdminModal && createPortal(
-        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-zinc-250 rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] relative z-10 overflow-hidden animate-scale-up flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50">
               <h3 className="text-body-md font-black text-zinc-900 leading-tight">
@@ -740,7 +791,7 @@ export default function SuperadminAdmins({ searchQuery }) {
               </h3>
               <button
                 onClick={() => setShowAdminModal(false)}
-                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455"
+                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -832,7 +883,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
       {/* Region Form Modal */}
       {showRegionModal && createPortal(
-        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-zinc-250 rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] relative z-10 overflow-hidden animate-scale-up flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50">
               <h3 className="text-body-md font-black text-zinc-900 leading-tight">
@@ -840,7 +891,7 @@ export default function SuperadminAdmins({ searchQuery }) {
               </h3>
               <button
                 onClick={() => setShowRegionModal(false)}
-                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455"
+                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -917,7 +968,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
       {/* Reset Password Modal */}
       {resetPasswordTarget && createPortal(
-        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-zinc-250 rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] relative z-10 overflow-hidden animate-scale-up flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50">
               <h3 className="text-body-md font-black text-zinc-900 leading-tight">
@@ -925,7 +976,7 @@ export default function SuperadminAdmins({ searchQuery }) {
               </h3>
               <button
                 onClick={() => setResetPasswordTarget(null)}
-                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455"
+                className="p-1 rounded-full hover:bg-zinc-200 text-zinc-455 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1041,7 +1092,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
       {/* Confirmation Modal */}
       {confirmModal && createPortal(
-        <div className="fixed top-14 left-0 lg:left-[220px] right-0 bottom-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-[100] animate-fade-in">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-[10002] animate-fade-in p-4">
           <div className="bg-white rounded-xl border border-zinc-200 shadow-xl max-w-sm w-full p-5 space-y-4 animate-scale-up">
             <div className="flex gap-3 items-start">
               <div className="p-2 bg-red-50 text-brand-red rounded-lg">

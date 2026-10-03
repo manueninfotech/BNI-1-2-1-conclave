@@ -558,44 +558,6 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
             Manage table captain assignments and availability.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-          <input
-            type="file"
-            id="csv-captain-input"
-            accept=".csv"
-            onChange={handleImport}
-            className="hidden"
-          />
-          <button
-            onClick={handleDownloadTemplate}
-            title="Download formatted CSV template for captain import"
-            className="flex items-center justify-center gap-1 px-3 py-2 border border-zinc-250 bg-zinc-50 text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-100 transition-smooth cursor-pointer shadow-3xs"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            Template
-          </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer shadow-3xs"
-          >
-            <Upload className="w-4 h-4 text-zinc-400" />
-            Export
-          </button>
-          <button
-            onClick={() => document.getElementById('csv-captain-input').click()}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 border border-zinc-200 bg-white text-zinc-700 font-bold text-[11px] rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer shadow-3xs"
-          >
-            <Download className="w-4 h-4 text-zinc-400" />
-            Import
-          </button>
-          <button
-            onClick={openAddModal}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-red hover:bg-red-700 text-white font-bold text-button rounded-lg transition-smooth shadow-md cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Assign Captain
-          </button>
-        </div>
       </div>
 
       {/* Scope Navigation Tabs */}
