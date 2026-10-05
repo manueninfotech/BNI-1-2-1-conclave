@@ -14,11 +14,68 @@ import {
   Edit3,
   Trash2,
   Edit,
-  Lock
+  Lock,
+  CreditCard
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
+
+export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
+  let state = (memberOrReg?.state || '').trim();
+  let country = (memberOrReg?.country || '').trim();
+  const region = (memberOrReg?.region || memberOrReg?.userRegion || fallbackRegion || '').trim();
+  const address = (memberOrReg?.address || (typeof memberOrReg?.location === 'string' ? memberOrReg.location : '') || '').trim();
+  const combined = `${region} ${address}`.toLowerCase();
+
+  if (!state || state === 'N/A') {
+    if (combined.includes('guntur') || combined.includes('vijayawada') || combined.includes('visakhapatnam') || combined.includes('vizag') || combined.includes('tirupati') || combined.includes('amaravati') || combined.includes('andhra')) {
+      state = 'Andhra Pradesh';
+    } else if (combined.includes('hyderabad') || combined.includes('secunderabad') || combined.includes('warangal') || combined.includes('telangana')) {
+      state = 'Telangana';
+    } else if (combined.includes('bangalore') || combined.includes('bengaluru') || combined.includes('karnataka') || combined.includes('mysore')) {
+      state = 'Karnataka';
+    } else if (combined.includes('chennai') || combined.includes('tamil nadu') || combined.includes('coimbatore')) {
+      state = 'Tamil Nadu';
+    } else if (combined.includes('mumbai') || combined.includes('pune') || combined.includes('maharashtra') || combined.includes('nagpur')) {
+      state = 'Maharashtra';
+    } else if (combined.includes('delhi') || combined.includes('noida') || combined.includes('gurgaon') || combined.includes('ncr')) {
+      state = 'Delhi';
+    } else if (combined.includes('ahmedabad') || combined.includes('gujarat') || combined.includes('surat')) {
+      state = 'Gujarat';
+    } else if (combined.includes('kochi') || combined.includes('kerala') || combined.includes('thiruvananthapuram')) {
+      state = 'Kerala';
+    } else if (combined.includes('kolkata') || combined.includes('west bengal')) {
+      state = 'West Bengal';
+    } else if (combined.includes('singapore')) {
+      state = 'Central Region';
+    } else if (combined.includes('london')) {
+      state = 'Greater London';
+    } else if (combined.includes('dubai')) {
+      state = 'Dubai';
+    } else {
+      state = 'Andhra Pradesh';
+    }
+  }
+
+  if (!country || country === 'N/A') {
+    if (combined.includes('singapore')) {
+      country = 'Singapore';
+    } else if (combined.includes('london') || combined.includes('united kingdom') || combined.includes('uk')) {
+      country = 'United Kingdom';
+    } else if (combined.includes('dubai') || combined.includes('uae') || combined.includes('emirates')) {
+      country = 'United Arab Emirates';
+    } else if (combined.includes('usa') || combined.includes('united states') || combined.includes('america')) {
+      country = 'United States';
+    } else if (combined.includes('australia') || combined.includes('sydney')) {
+      country = 'Australia';
+    } else {
+      country = 'India';
+    }
+  }
+
+  return { state, country };
+}
 
 export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin }) {
   const isSuperadmin = useMemo(() => {
@@ -155,6 +212,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   const uid = r.userId || r.uid || r.id;
                   const master = userMap.get(uid) || {};
                   const userRegion = r.region || master.region || (typeof r.location === 'string' ? r.location : '') || 'Global BNI Network';
+                  const loc = resolveLocationDetails({ ...master, ...r }, userRegion);
                   return {
                     ...master,
                     ...r,
@@ -167,7 +225,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     category: r.category || master.category || master.businessCategory || 'General',
                     chapter: r.chapter || master.chapter || 'N/A',
                     region: userRegion,
-                    userRegion: userRegion
+                    userRegion: userRegion,
+                    state: r.state || master.state || loc.state,
+                    country: r.country || master.country || loc.country
                   };
                 });
               }
@@ -194,7 +254,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   res.registrations.forEach(r => {
                     const uid = r.userId || r.uid || r.id;
                     const existing = memberMap.get(uid) || {};
-                    const userRegion = r.region || master.region || existing.region || (typeof r.location === 'string' ? r.location : '') || 'Global';
+                    const userRegion = r.region || existing.region || (typeof r.location === 'string' ? r.location : '') || 'Global';
+                    const loc = resolveLocationDetails({ ...existing, ...r }, userRegion);
                     memberMap.set(uid, {
                       ...r,
                       ...existing,
@@ -206,8 +267,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       company: existing.company || r.company || existing.businessName || 'Self Employed',
                       category: existing.category || r.category || existing.businessCategory || 'General',
                       chapter: existing.chapter || r.chapter || 'N/A',
-                      state: existing.state || r.state || '',
-                      country: existing.country || r.country || '',
+                      state: existing.state || r.state || loc.state,
+                      country: existing.country || r.country || loc.country,
                       userRegion: userRegion
                     });
                   });
@@ -229,6 +290,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             ? (r.location.place || r.location.city || '')
             : (r.location || r.address || '');
           const fallbackLocation = locStr || (r.chapter ? `${r.chapter}, ${resolvedRegion}` : resolvedRegion);
+          const locDetails = resolveLocationDetails(r, resolvedRegion);
+          const finalState = r.state || locDetails.state;
+          const finalCountry = r.country || locDetails.country;
 
           const rawStatus = (r.status || '').toLowerCase();
           const isActiveMember = rawStatus === 'active' || rawStatus === 'pending' || rawStatus === 'registered' || rawStatus === 'confirmed' || r.isActive === true || !r.status;
@@ -242,6 +306,12 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             ? new Date(rawDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
             : new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
+          const pay = r.payment || {};
+          const paymentStatus = pay.status || r.paymentStatus || 'paid';
+          const paymentMethod = pay.method || r.paymentMethod || 'admin_direct';
+          const paymentAmount = pay.amount !== undefined ? pay.amount : (r.paymentAmount || 0);
+          const transactionId = pay.transactionId || r.transactionId || '';
+
           return {
             id: r.id || r.uid || `mem_${Math.random()}`,
             name: displayName,
@@ -250,10 +320,20 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             company: fallbackCompany,
             category: fallbackCategory,
             address: fallbackLocation,
-            state: r.state || '',
-            country: r.country || '',
+            state: finalState,
+            country: finalCountry,
             chapter: r.chapter || '',
             region: resolvedRegion,
+            payment: {
+              status: paymentStatus,
+              method: paymentMethod,
+              amount: paymentAmount,
+              transactionId: transactionId
+            },
+            paymentStatus,
+            paymentMethod,
+            paymentAmount,
+            transactionId,
             isCaptain: r.role === 'captain' || r.isTableCaptain === true,
             status: isActiveMember ? 'Active' : 'Inactive',
             joinDate: joinDateFormatted,
@@ -339,11 +419,11 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
   const [toast, setToast] = useState(null);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = (message, type = 'success', duration = 4000) => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
-    }, 3000);
+    }, duration);
   };
 
   const getMemberRegion = (m) => {
@@ -363,17 +443,76 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     setCurrentPage(1);
   }, [searchVal, categoryFilter, captainFilter, statusFilter, stateFilter, countryFilter, viewScope]);
 
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = localStorage.getItem('bni_categories_cache');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [
+      'Advertising',
+      'Architecture',
+      'Banking',
+      'Builder',
+      'Business Consultant',
+      'CA',
+      'Catering',
+      'Corporate Gifting',
+      'Digital Marketing',
+      'Finance',
+      'Financial Consultant',
+      'Graphic Design',
+      'HR Services',
+      'IT Services',
+      'Interiors',
+      'Legal Services',
+      'Marketing',
+      'Real Estate'
+    ];
+  });
+
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const res = await api.get('/categories').catch(() => null)
+          || await api.get('/admin/categories').catch(() => null);
+        const list = Array.isArray(res?.categories) ? res.categories : (Array.isArray(res) ? res : []);
+        if (list.length > 0) {
+          setCategories(list);
+          localStorage.setItem('bni_categories_cache', JSON.stringify(list));
+        }
+      } catch (err) {
+        console.error("Failed to load categories:", err);
+      }
+    }
+    loadCategories();
+  }, []);
+
   const [formData, setFormData] = useState({
     name: '',
     category: 'Real Estate',
     email: '',
     phone: '',
     company: '',
-    chapter: 'Peak Performance',
+    chapter: '',
     address: '',
+    region: 'Guntur Region',
+    state: 'Andhra Pradesh',
+    country: 'India',
+    paymentStatus: 'paid',
+    paymentMethod: 'UPI',
+    paymentAmount: '0',
+    transactionId: '',
     isCaptain: false,
     status: 'Active'
   });
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(categories);
+    if (formData.category && formData.category.trim()) {
+      set.add(formData.category.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [categories, formData.category]);
 
   const openAddModal = () => {
     if (isScheduleLocked) {
@@ -383,12 +522,19 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     setEditingMember(null);
     setFormData({
       name: '',
-      category: 'Real Estate',
+      category: categories[0] || 'Real Estate',
       email: '',
       phone: '',
       company: '',
-      chapter: 'Peak Performance',
+      chapter: '',
       address: '',
+      region: loggedInAdmin?.region && loggedInAdmin.region !== 'Global' ? loggedInAdmin.region : 'Guntur Region',
+      state: 'Andhra Pradesh',
+      country: 'India',
+      paymentStatus: 'paid',
+      paymentMethod: 'UPI',
+      paymentAmount: '0',
+      transactionId: '',
       isCaptain: false,
       status: 'Active'
     });
@@ -398,15 +544,22 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   const openEditModal = (member) => {
     setEditingMember(member);
     setFormData({
-      name: member.name,
-      category: member.category,
-      email: member.email,
-      phone: member.phone,
-      company: member.company,
-      chapter: member.chapter,
-      address: member.address,
-      isCaptain: member.isCaptain,
-      status: member.status
+      name: member.name || '',
+      category: member.category || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      company: member.company || '',
+      chapter: member.chapter || '',
+      address: member.address || '',
+      region: member.region || member.userRegion || 'Guntur Region',
+      state: member.state || 'Andhra Pradesh',
+      country: member.country || 'India',
+      paymentStatus: member.payment?.status || member.paymentStatus || 'paid',
+      paymentMethod: member.payment?.method || member.paymentMethod || 'UPI',
+      paymentAmount: member.payment?.amount !== undefined ? String(member.payment.amount) : (member.paymentAmount !== undefined ? String(member.paymentAmount) : '0'),
+      transactionId: member.payment?.transactionId || member.transactionId || '',
+      isCaptain: Boolean(member.isCaptain),
+      status: member.status || 'Active'
     });
     setSelectedMember(null); // Close the details side drawer
     setIsFormOpen(true);
@@ -416,6 +569,18 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     e.preventDefault();
     if (!formData.name.trim()) {
       showToast("Please enter the member's name.", "error");
+      return;
+    }
+    if (!formData.email.trim()) {
+      showToast("Please enter the member's email address.", "error");
+      return;
+    }
+    if (!formData.phone.trim()) {
+      showToast("Please enter the member's mobile number.", "error");
+      return;
+    }
+    if (!formData.chapter.trim()) {
+      showToast("Please enter the BNI chapter name.", "error");
       return;
     }
 
@@ -428,21 +593,30 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       }
     }
 
+    const payload = {
+      name: formData.name.trim(),
+      category: formData.category,
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      company: formData.company.trim(),
+      chapter: formData.chapter.trim(),
+      address: formData.address.trim(),
+      region: formData.region,
+      state: formData.state,
+      country: formData.country,
+      paymentStatus: formData.paymentStatus,
+      paymentMethod: formData.paymentMethod,
+      paymentAmount: Number(formData.paymentAmount) || 0,
+      transactionId: formData.transactionId.trim(),
+      role: formData.isCaptain ? 'captain' : 'member',
+      status: formData.status
+    };
+
     if (editingMember) {
       // Edit mode
       try {
         if (targetConclaveId) {
-          await api.put(`/admin/conclaves/${targetConclaveId}/members/${editingMember.id}`, {
-            name: formData.name.trim(),
-            category: formData.category,
-            email: formData.email.trim(),
-            phone: formData.phone.trim(),
-            company: formData.company.trim(),
-            chapter: formData.chapter.trim(),
-            address: formData.address.trim(),
-            role: formData.isCaptain ? 'captain' : 'member',
-            status: formData.status
-          });
+          await api.put(`/admin/conclaves/${targetConclaveId}/members/${editingMember.id}`, payload);
 
           if (editingMember.isCaptain !== formData.isCaptain) {
             await api.post(`/admin/conclaves/${targetConclaveId}/registrations/${editingMember.id}/role`, {
@@ -451,15 +625,25 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           }
         }
 
+        const updatedData = {
+          ...formData,
+          payment: {
+            status: formData.paymentStatus,
+            method: formData.paymentMethod,
+            amount: Number(formData.paymentAmount) || 0,
+            transactionId: formData.transactionId.trim()
+          }
+        };
+
         setMembers(prev => prev.map(m => m.id === editingMember.id ? {
           ...m,
-          ...formData,
+          ...updatedData,
           avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || m.avatar
         } : m));
 
         setSelectedMember(prev => prev && prev.id === editingMember.id ? {
           ...prev,
-          ...formData,
+          ...updatedData,
           avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || prev.avatar
         } : prev);
 
@@ -477,20 +661,16 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       }
       try {
         let addedId = `BNI-00${Math.floor(100 + Math.random() * 900)}`;
+        let defaultPw = null;
+        let loginId = null;
         if (targetConclaveId) {
-          const res = await api.post(`/admin/conclaves/${targetConclaveId}/members`, {
-            name: formData.name.trim(),
-            category: formData.category,
-            email: formData.email.trim(),
-            phone: formData.phone.trim(),
-            company: formData.company.trim(),
-            chapter: formData.chapter.trim(),
-            address: formData.address.trim(),
-            role: formData.isCaptain ? 'captain' : 'member',
-            status: formData.status
-          });
+          const res = await api.post(`/admin/conclaves/${targetConclaveId}/members`, payload);
           if (res?.registration?.userId) {
             addedId = res.registration.userId;
+          }
+          if (res?.defaultPassword) {
+            defaultPw = res.defaultPassword;
+            loginId = res.loginIdentifier || formData.phone.trim() || formData.email.trim();
           }
         }
 
@@ -498,13 +678,23 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           ...formData,
           id: addedId,
           uid: addedId,
+          payment: {
+            status: formData.paymentStatus,
+            method: formData.paymentMethod,
+            amount: Number(formData.paymentAmount) || 0,
+            transactionId: formData.transactionId.trim()
+          },
           avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
           joinDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
           history: [{ event: 'Created manually', date: new Date().toLocaleDateString(), role: formData.isCaptain ? 'Captain' : 'Member' }],
           conclaveIds: [targetConclaveId]
         };
         setMembers(prev => [newMember, ...prev]);
-        showToast("Member added successfully.", "success");
+        if (defaultPw) {
+          showToast(`Member created! Login ID: ${loginId} | Password: ${defaultPw}`, "success", 12000);
+        } else {
+          showToast("Member added successfully.", "success");
+        }
         setIsFormOpen(false);
       } catch (err) {
         console.error("Failed to add member:", err);
@@ -532,13 +722,53 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   }, [members]);
 
   const statesList = useMemo(() => {
-    const list = new Set(members.map(m => m.state).filter(v => v && v !== 'N/A'));
-    return ['All', ...Array.from(list).sort()];
+    const defaultStates = [
+      'Andhra Pradesh',
+      'Telangana',
+      'Karnataka',
+      'Tamil Nadu',
+      'Maharashtra',
+      'Gujarat',
+      'Delhi',
+      'Kerala',
+      'Goa',
+      'Madhya Pradesh',
+      'Rajasthan',
+      'Uttar Pradesh',
+      'West Bengal',
+      'Punjab',
+      'Haryana',
+      'Central Region',
+      'Greater London',
+      'Dubai'
+    ];
+    const memberStates = members
+      .map(m => m.state)
+      .filter(v => v && v !== 'N/A' && v.trim() !== '');
+
+    const combined = new Set([...memberStates, ...defaultStates]);
+    const sorted = Array.from(combined).sort((a, b) => a.localeCompare(b));
+    return ['All', ...sorted];
   }, [members]);
 
   const countriesList = useMemo(() => {
-    const list = new Set(members.map(m => m.country).filter(v => v && v !== 'N/A'));
-    return ['All', ...Array.from(list).sort()];
+    const defaultCountries = [
+      'India',
+      'Singapore',
+      'United Arab Emirates',
+      'United States',
+      'United Kingdom',
+      'Australia',
+      'Canada',
+      'Malaysia'
+    ];
+    const memberCountries = members
+      .map(m => m.country)
+      .filter(v => v && v !== 'N/A' && v.trim() !== '');
+
+    const combined = new Set([...memberCountries, ...defaultCountries]);
+    const sorted = Array.from(combined).sort((a, b) => a.localeCompare(b));
+    return ['All', ...sorted];
   }, [members]);
 
   const chaptersList = useMemo(() => {
@@ -552,7 +782,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     const tokens = q ? q.split(/\s+/) : [];
 
     return conclaveMembers.filter(member => {
-      const memberText = `${member.name || ''} ${member.id || ''} ${member.email || ''} ${member.phone || ''} ${member.company || ''} ${member.category || ''} ${member.chapter || ''} ${member.address || ''}`.toLowerCase();
+      const memberText = `${member.name || ''} ${member.id || ''} ${member.email || ''} ${member.phone || ''} ${member.company || ''} ${member.category || ''} ${member.chapter || ''} ${member.address || ''} ${member.state || ''} ${member.country || ''}`.toLowerCase();
       const matchesSearch = !q || tokens.every(token => memberText.includes(token));
 
       const matchesCategory = categoryFilter === 'All' || member.category === categoryFilter;
@@ -567,8 +797,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       const memberReg = (member.region || getMemberRegion(member) || '').toLowerCase().trim();
       const matchesViewScope = viewScope === 'conclave' || viewScope === 'global' || !adminReg || adminReg === 'global' || adminReg.includes('global') || memberReg.includes(adminReg) || adminReg.includes(memberReg);
 
-      const matchesState = stateFilter === 'All' || member.state === stateFilter;
-      const matchesCountry = countryFilter === 'All' || member.country === countryFilter;
+      const matchesState = stateFilter === 'All' ||
+        (member.state && member.state.toLowerCase() === stateFilter.toLowerCase()) ||
+        (!member.state && stateFilter === 'Andhra Pradesh');
+
+      const matchesCountry = countryFilter === 'All' ||
+        (member.country && member.country.toLowerCase() === countryFilter.toLowerCase()) ||
+        (!member.country && countryFilter === 'India');
 
       return matchesSearch && matchesCategory && matchesCaptain && matchesStatus && matchesViewScope && matchesState && matchesCountry;
     });
@@ -1285,6 +1520,47 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </div>
                   </section>
 
+                  {/* Payment Details */}
+                  <section className="space-y-3 bg-zinc-50/80 p-3.5 rounded-xl border border-zinc-200/80">
+                    <div className="flex items-center justify-between border-b border-zinc-200/70 pb-2">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+                        Registration Payment
+                      </span>
+                      <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${
+                        (selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : (selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {selectedMember.payment?.status || selectedMember.paymentStatus || 'Paid'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-body-sm">
+                      <div>
+                        <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Amount</span>
+                        <span className="font-extrabold text-zinc-800">
+                          ₹{Number(selectedMember.payment?.amount !== undefined ? selectedMember.payment.amount : (selectedMember.paymentAmount || 0)).toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Method</span>
+                        <span className="font-bold text-zinc-800 uppercase text-[11px]">
+                          {selectedMember.payment?.method || selectedMember.paymentMethod || 'Admin Direct'}
+                        </span>
+                      </div>
+                      {(selectedMember.payment?.transactionId || selectedMember.transactionId) && (
+                        <div className="col-span-2 pt-1 border-t border-zinc-150">
+                          <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Transaction Ref / ID</span>
+                          <span className="font-mono text-[11px] font-bold text-zinc-700 select-all">
+                            {selectedMember.payment?.transactionId || selectedMember.transactionId}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
                   {/* Conclave History */}
                   <section className="space-y-3.5">
                     <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Conclave Activity</h5>
@@ -1397,7 +1673,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 <div className="grid grid-cols-2 gap-4">
                   {/* Full Name */}
                   <div className="col-span-2 space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Full Name</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Full Name <span className="text-brand-red font-black">*</span>
+                    </label>
                     <input
                       type="text"
                       required
@@ -1410,40 +1688,42 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                   {/* Classification / Category */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Classification</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Classification <span className="text-brand-red font-black">*</span>
+                    </label>
                     <select
+                      required
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-medium text-zinc-700 cursor-pointer"
                     >
-                      <option value="Real Estate">Real Estate</option>
-                      <option value="Marketing">Marketing</option>
-                      <option value="Finance">Finance</option>
-                      <option value="Corporate Gifting">Corporate Gifting</option>
-                      <option value="IT Services">IT Services</option>
-                      <option value="HR Services">HR Services</option>
-                      <option value="Legal Services">Legal Services</option>
-                      <option value="Graphic Design">Graphic Design</option>
+                      <option value="" disabled>Select Classification</option>
+                      {categoryOptions.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
                     </select>
                   </div>
 
                   {/* Chapter */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">BNI Chapter</label>
-                    <select
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      BNI Chapter <span className="text-brand-red font-black">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
                       value={formData.chapter}
                       onChange={(e) => setFormData({ ...formData, chapter: e.target.value })}
-                      className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-medium text-zinc-700 cursor-pointer"
-                    >
-                      <option value="Peak Performance">Peak Performance</option>
-                      <option value="Apex Chapter">Apex Chapter</option>
-                      <option value="Capital Chapter">Capital Chapter</option>
-                    </select>
+                      className="w-full px-3.5 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none transition-smooth"
+                      placeholder="e.g. Apex Chapter"
+                    />
                   </div>
 
                   {/* Email */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Email Address</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Email Address <span className="text-brand-red font-black">*</span>
+                    </label>
                     <input
                       type="email"
                       required
@@ -1456,7 +1736,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                   {/* Phone */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Mobile Number</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Mobile Number <span className="text-brand-red font-black">*</span>
+                    </label>
                     <input
                       type="text"
                       required
@@ -1469,7 +1751,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                   {/* Company Name */}
                   <div className="col-span-2 space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Company Name</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Company Name <span className="text-brand-red font-black">*</span>
+                    </label>
                     <input
                       type="text"
                       required
@@ -1482,15 +1766,112 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                   {/* Office Location */}
                   <div className="col-span-2 space-y-1.5">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Office Location</label>
+                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                      Office Location <span className="text-zinc-400 font-normal lowercase">(optional)</span>
+                    </label>
                     <input
                       type="text"
-                      required
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                       className="w-full px-3.5 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none transition-smooth"
-                      placeholder="Full business office address"
+                      placeholder="Office address or city"
                     />
+                  </div>
+
+                  {/* Location & Jurisdiction Section */}
+                  <div className="col-span-2 pt-3 border-t border-zinc-100 space-y-3">
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider block">
+                      Region &amp; Geography
+                    </span>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Region</label>
+                        <input
+                          type="text"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-1 focus:ring-brand-red outline-none"
+                          placeholder="e.g. Guntur Region"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">State</label>
+                        <input
+                          type="text"
+                          value={formData.state}
+                          onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-1 focus:ring-brand-red outline-none"
+                          placeholder="e.g. Andhra Pradesh"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Country</label>
+                        <input
+                          type="text"
+                          value={formData.country}
+                          onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-1 focus:ring-brand-red outline-none"
+                          placeholder="e.g. India"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Details Section */}
+                  <div className="col-span-2 pt-3 border-t border-zinc-100 space-y-3 bg-zinc-50/60 p-3.5 rounded-xl border border-zinc-200/60">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+                      Registration Payment Details
+                    </span>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Payment Status</label>
+                        <select
+                          value={formData.paymentStatus}
+                          onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-white font-medium focus:ring-1 focus:ring-brand-red outline-none cursor-pointer"
+                        >
+                          <option value="paid">Paid</option>
+                          <option value="pending">Pending / Unpaid</option>
+                          <option value="waived">Waived / Free</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Payment Method</label>
+                        <select
+                          value={formData.paymentMethod}
+                          onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-white font-medium focus:ring-1 focus:ring-brand-red outline-none cursor-pointer"
+                        >
+                          <option value="UPI">UPI</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                          <option value="Razorpay">Razorpay / Online</option>
+                          <option value="admin_direct">Admin Direct</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Amount (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.paymentAmount}
+                          onChange={(e) => setFormData({ ...formData, paymentAmount: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-1 focus:ring-brand-red outline-none"
+                          placeholder="e.g. 2500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9.5px] text-zinc-500 font-bold uppercase block">Transaction / Ref ID (optional)</label>
+                        <input
+                          type="text"
+                          value={formData.transactionId}
+                          onChange={(e) => setFormData({ ...formData, transactionId: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-1 focus:ring-brand-red outline-none"
+                          placeholder="e.g. UPI-12345678"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Role Toggle & Status Select */}

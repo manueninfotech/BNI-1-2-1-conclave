@@ -31,6 +31,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
     phone: '',
     company: '',
     category: '',
+    membership: '',
     region: '',
     chapter: ''
   });
@@ -47,8 +48,13 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
     e.preventDefault();
     setError('');
 
-    if (!formData.name || !formData.email || !formData.password || !formData.phone || !formData.company || !formData.category || !formData.region || !formData.chapter) {
+    if (!formData.name || !formData.email || !formData.password || !formData.phone || !formData.company || !formData.category) {
       setError('Please fill in all required fields.');
+      return;
+    }
+
+    if (!formData.membership) {
+      setError('Choose whether you are a BNI or Non-BNI member.');
       return;
     }
 
@@ -63,8 +69,13 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
       const emailLower = formData.email.trim().toLowerCase();
 
       // Clean up chapter name: remove any leading "BNI" or region name if accidentally typed
-      let cleanChapter = formData.chapter.trim();
-      cleanChapter = cleanChapter.replace(/^BNI\s+/i, '').replace(new RegExp(`^${formData.region.trim()}\\s+`, 'i'), '');
+      let cleanChapter = (formData.chapter || '').trim();
+      const trimmedRegion = (formData.region || '').trim();
+      if (cleanChapter && trimmedRegion) {
+        cleanChapter = cleanChapter.replace(/^BNI\s+/i, '').replace(new RegExp(`^${trimmedRegion}\\s+`, 'i'), '');
+      } else if (cleanChapter) {
+        cleanChapter = cleanChapter.replace(/^BNI\s+/i, '');
+      }
 
       // 1. Create Firebase Auth Account
       const userCredential = await createUserWithEmailAndPassword(auth, emailLower, formData.password);
@@ -103,8 +114,9 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
         businessName: formData.company.trim(),
         category: formData.category.trim(),
         businessCategory: formData.category.trim(),
-        region: formData.region.trim(),
-        location: formData.region.trim().toLowerCase(),
+        membership: formData.membership,
+        region: trimmedRegion,
+        location: trimmedRegion.toLowerCase(),
         country: 'India',
         chapter: cleanChapter,
         role: 'member'
@@ -331,12 +343,49 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
               </div>
             </div>
 
+            {/* Membership Type Selection */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest flex items-center justify-between">
+                <span>Membership Status <span className="text-brand-red">*</span></span>
+                <span className="text-[10px] font-bold text-zinc-500">
+                  {formData.membership === 'BNI' ? 'BNI Member' : formData.membership === 'Non-BNI' ? 'Non-BNI Member' : 'Please choose'}
+                </span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100/90 rounded-xl border border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, membership: 'BNI' }))}
+                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    formData.membership === 'BNI'
+                      ? 'bg-brand-red text-white shadow-sm shadow-red-500/25'
+                      : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>BNI Member</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, membership: 'Non-BNI' }))}
+                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    formData.membership === 'Non-BNI'
+                      ? 'bg-zinc-850 text-white shadow-sm shadow-zinc-900/25'
+                      : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Non-BNI Member</span>
+                </button>
+              </div>
+            </div>
+
             {/* Region & Chapter Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Region Text Input */}
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest">
-                  Region <span className="text-brand-red">*</span>
+                <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest flex items-center justify-between">
+                  <span>Region</span>
+                  <span className="text-[9.5px] text-zinc-400 font-normal">Optional</span>
                 </label>
                 <div className="relative">
                   <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -345,17 +394,17 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                     name="region"
                     value={formData.region}
                     onChange={handleChange}
-                    placeholder="e.g. Guntur Central"
-                    required
+                    placeholder={formData.membership === 'BNI' ? 'e.g. Guntur Central' : 'e.g. Guntur / Andhra Pradesh'}
                     className="w-full pl-10 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-body-md font-semibold outline-none focus:border-zinc-800 transition-smooth placeholder-zinc-400 text-zinc-900"
                   />
                 </div>
               </div>
 
-              {/* Clean Chapter Name */}
+              {/* Chapter Name */}
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest">
-                  Chapter Name <span className="text-brand-red">*</span>
+                <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest flex items-center justify-between">
+                  <span>Chapter Name</span>
+                  <span className="text-[9.5px] text-zinc-400 font-normal">Optional</span>
                 </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -364,15 +413,16 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                     name="chapter"
                     value={formData.chapter}
                     onChange={handleChange}
-                    placeholder="e.g. Titans / Express"
-                    required
+                    placeholder={formData.membership === 'BNI' ? 'e.g. Titans / Express' : 'Optional for Non-BNI'}
                     className="w-full pl-10 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-body-md font-semibold outline-none focus:border-zinc-800 transition-smooth placeholder-zinc-400 text-zinc-900"
                   />
                 </div>
               </div>
             </div>
             <p className="text-[9.5px] text-zinc-400 font-medium -mt-1">
-              Enter Region and Chapter separately (do not include "BNI" in chapter name).
+              {formData.membership === 'Non-BNI'
+                ? 'For Non-BNI attendees, Region and Chapter are optional.'
+                : 'Enter Region and Chapter separately (do not include "BNI" in chapter name).'}
             </p>
 
             {/* Password */}

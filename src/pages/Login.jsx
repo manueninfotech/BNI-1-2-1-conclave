@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Award, Lock, Mail, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
+import { Award, Lock, Mail, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { auth } from '../config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 
 export default function Login({ onLogin, onSwitchToSignUp }) {
   const [inputVal, setInputVal] = useState('');
@@ -9,6 +9,14 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Forgot password state
+  const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [forgotError, setForgotError] = useState('');
+
   const [authNotice, setAuthNotice] = useState(() => {
     const msg = localStorage.getItem('bni_auth_notice');
     if (msg) {
@@ -17,6 +25,64 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
     }
     return null;
   });
+
+  const handleForgotPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+
+    const targetEmail = forgotEmail.trim();
+    if (!targetEmail) {
+      setForgotError('Please enter your registered email address.');
+      return;
+    }
+
+    if (!targetEmail.includes('@') || !targetEmail.includes('.')) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      // 1. Verify with backend whether this account actually exists in Firebase/Firestore
+      const defaultBackendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:3000/api'
+        : 'https://conclave-backend.blackpond-26884e90.centralindia.azurecontainerapps.io/api';
+      const apiBase = import.meta.env.VITE_API_URL || defaultBackendUrl;
+
+      const checkResp = await fetch(`${apiBase}/auth/check-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail })
+      }).catch(() => null);
+
+      if (checkResp && checkResp.ok) {
+        const checkData = await checkResp.json();
+        if (!checkData.exists) {
+          setForgotError(checkData.error || 'No account found with this email address. Please make sure you are registered or create an account.');
+          setForgotLoading(false);
+          return;
+        }
+      }
+
+      // 2. Dispatch password reset email via Firebase Auth
+      await sendPasswordResetEmail(auth, targetEmail);
+      setForgotSuccess('A password reset link has been sent to your email. Please check your inbox and spam folder.');
+    } catch (err) {
+      console.error('Password reset error:', err);
+      if (err.code === 'auth/user-not-found') {
+        setForgotError('No account found with this email address. If you registered with mobile only, your default password is your 10-digit mobile number, or you can contact your Conclave Admin.');
+      } else if (err.code === 'auth/invalid-email') {
+        setForgotError('Please enter a valid email address.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setForgotError('Too many password reset requests. Please wait a few moments before trying again.');
+      } else {
+        setForgotError(err.message || 'Failed to send password reset email. Please try again.');
+      }
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -287,6 +353,21 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
                   <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest" htmlFor="password-input">
                     Password
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const raw = inputVal.trim();
+                      if (raw.includes('@')) {
+                        setForgotEmail(raw);
+                      }
+                      setIsForgotOpen(true);
+                      setForgotError('');
+                      setForgotSuccess('');
+                    }}
+                    className="text-[11px] text-brand-red font-bold hover:underline cursor-pointer transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -353,6 +434,122 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
             </p>
           </div>
         </div>
+
+        {/* Forgot Password Modal */}
+        {isForgotOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 max-w-md w-full p-6 relative overflow-hidden">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-brand-red shrink-0">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-zinc-900 leading-tight">Reset Password</h3>
+                    <p className="text-xs text-zinc-500 font-medium">Receive instructions to set a new password</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsForgotOpen(false)}
+                  className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {forgotSuccess ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="text-xs text-emerald-800 leading-relaxed font-semibold">
+                      {forgotSuccess}
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium leading-relaxed">
+                    Click the link in the email to set a new password, then return here to sign in.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgotOpen(false);
+                      setForgotSuccess('');
+                    }}
+                    className="w-full bg-zinc-900 hover:bg-black text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                  <p className="text-xs text-zinc-600 leading-relaxed font-medium">
+                    Enter the email address associated with your BNI member account. We will send you an official reset link.
+                  </p>
+
+                  {forgotError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-brand-red text-xs font-semibold leading-relaxed">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-brand-red" />
+                      <span>{forgotError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-widest" htmlFor="forgot-email">
+                      Registered Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <input
+                        id="forgot-email"
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        disabled={forgotLoading}
+                        placeholder="e.g. member@domain.com"
+                        className="w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-semibold outline-none focus:border-brand-red focus:bg-white transition-colors placeholder-zinc-400 text-zinc-900"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-zinc-50 border border-zinc-200/80 rounded-lg">
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                      <strong className="text-zinc-700">Registered with mobile only?</strong> Your initial password was set to your 10-digit mobile number. You can also reach out to your conclave admin for assistance.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotOpen(false)}
+                      disabled={forgotLoading}
+                      className="w-1/2 py-2.5 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 rounded-lg text-sm font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="w-1/2 bg-brand-red hover:bg-red-700 text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-70 shadow-sm"
+                    >
+                      {forgotLoading ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <span>Send Link</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
       </div>
     );

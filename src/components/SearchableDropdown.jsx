@@ -16,8 +16,8 @@ export default function SearchableDropdown({ label, options, value, onChange, pl
   }, []);
 
   const filteredOptions = useMemo(() => {
-    return options.filter(opt =>
-      opt.toLowerCase().includes(search.toLowerCase())
+    return (options || []).filter(opt =>
+      typeof opt === 'string' && opt.trim() !== '' && opt.toLowerCase().includes(search.toLowerCase())
     );
   }, [options, search]);
 
@@ -58,7 +58,7 @@ export default function SearchableDropdown({ label, options, value, onChange, pl
       </div>
 
       {isOpen && (
-        <div className="origin-top-right absolute right-0 mt-1 w-48 rounded-lg shadow-lg bg-white border border-zinc-100 ring-1 ring-black/5 z-[60] animate-fade-in">
+        <div className="origin-top-left absolute left-0 sm:left-auto sm:right-0 mt-1 min-w-[200px] w-max max-w-[280px] rounded-lg shadow-xl bg-white border border-zinc-150 ring-1 ring-black/5 z-[70] animate-fade-in">
           <div className="p-2 border-b border-zinc-100">
             <input
               type="text"

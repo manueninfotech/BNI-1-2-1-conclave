@@ -13,6 +13,7 @@ import RoundRunner from './pages/RoundRunner';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
+import ResetPassword from './pages/ResetPassword';
 import CaptainHeader from './components/CaptainHeader';
 import CaptainDashboard from './pages/captain/Dashboard';
 import CaptainTable from './pages/captain/Table';
@@ -52,10 +53,10 @@ export default function App() {
     const storedRole = localStorage.getItem('bni_user_role');
     if (storedRole) return storedRole;
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
-    if (path.startsWith('superadmin') || path.includes('/superadmin')) return 'superadmin';
-    if (path.startsWith('captain') || path.includes('/captain')) return 'captain';
-    if (path.startsWith('member') || path.includes('/member')) return 'member';
-    if (path.startsWith('admin') || path.includes('/admin')) return 'admin';
+    if (path.startsWith('superadmin/') || path === 'superadmin') return 'superadmin';
+    if (path.startsWith('admin/') || path === 'admin') return 'admin';
+    if (path.startsWith('captain/') || path === 'captain') return 'captain';
+    if (path.startsWith('member/') || path === 'member') return 'member';
     return 'admin';
   });
 
@@ -167,6 +168,7 @@ export default function App() {
   const mainRef = useRef(null);
 
   // Handle URL updates when switching tabs
+  // Handle URL updates when switching tabs
   const handleTabChange = (tabId) => {
     // Guard: if trying to navigate to current-round while conclave isn't live, redirect to my-schedule
     const conclaveStatusNow = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
@@ -174,13 +176,10 @@ export default function App() {
       Number(conclaveSyncData?.conclaveStatus?.currentRound) > 0;
     const resolvedTab = (tabId === 'current-round' && !isLiveNow) ? 'my-schedule' : tabId;
     setActiveTab(resolvedTab);
-    const path = window.location.pathname.replace(/^\/|\/$/g, '');
-    let activeRole = userRole;
-    if (path.startsWith('captain') || path.includes('/captain')) activeRole = 'captain';
-    else if (path.startsWith('member') || path.includes('/member')) activeRole = 'member';
-    else if (path.startsWith('superadmin') || path.includes('/superadmin')) activeRole = 'superadmin';
-    else if (path.startsWith('admin') || path.includes('/admin')) activeRole = 'admin';
 
+    // Always use the user's authenticated role as the URL prefix.
+    // Never inspect `path.includes('/captain')` which corrupted the URL when visiting '/admin/captains'.
+    const activeRole = userRole || localStorage.getItem('bni_user_role') || 'admin';
     window.history.pushState({}, '', `/${activeRole}/${resolvedTab}`);
   };
 
@@ -198,16 +197,16 @@ export default function App() {
       ];
       const cleanTab = validTabs.includes(lastPart) ? lastPart : 'dashboard';
 
-      if (path.startsWith('superadmin/') || path.includes('/superadmin/')) {
+      if (path.startsWith('superadmin/') || path === 'superadmin') {
         setUserRole('superadmin');
         setActiveTab(cleanTab);
-      } else if (path.startsWith('admin/') || path.includes('/admin/')) {
+      } else if (path.startsWith('admin/') || path === 'admin') {
         setUserRole('admin');
         setActiveTab(cleanTab);
-      } else if (path.startsWith('captain/') || path.includes('/captain/')) {
+      } else if (path.startsWith('captain/') || path === 'captain') {
         setUserRole('captain');
         setActiveTab(cleanTab);
-      } else if (path.startsWith('member/') || path.includes('/member/')) {
+      } else if (path.startsWith('member/') || path === 'member') {
         setUserRole('member');
         setActiveTab(cleanTab);
       } else {
@@ -220,6 +219,28 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [userRole]);
+
+  // Route correction guard: ensure admin-only tabs are never under /captain/ or /member/,
+  // and automatically fix corrupted URLs like /captain/members -> /admin/members
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const adminOnlyTabs = [
+      'members', 'active-users', 'business-types', 'captains',
+      'conclaves', 'schedule-gen', 'schedule-review', 'round-runner', 'reports', 'settings'
+    ];
+    const path = window.location.pathname.replace(/^\/|\/$/g, '');
+
+    if (adminOnlyTabs.includes(activeTab)) {
+      if (userRole === 'admin' || userRole === 'superadmin') {
+        if (!path.startsWith('admin/') && !path.startsWith('superadmin/')) {
+          window.history.replaceState({}, '', `/${userRole}/${activeTab}`);
+        }
+      } else if (userRole === 'captain') {
+        setActiveTab('dashboard');
+        window.history.replaceState({}, '', `/captain/dashboard`);
+      }
+    }
+  }, [isLoggedIn, userRole, activeTab]);
 
 
 
@@ -514,7 +535,12 @@ export default function App() {
 
   useEffect(() => {
     if (!isLoggedIn) {
-      window.history.pushState({}, '', '/login');
+      const path = window.location.pathname.replace(/^\/|\/$/g, '');
+      const searchParams = new URLSearchParams(window.location.search);
+      const isReset = path === 'reset-password' || searchParams.get('mode') === 'resetPassword' || searchParams.get('oobCode');
+      if (!isReset && path !== 'signup' && path !== 'login') {
+        window.history.pushState({}, '', '/login');
+      }
     }
   }, [isLoggedIn]);
 
@@ -524,10 +550,28 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  const [authView, setAuthView] = useState('login');
+  const [authView, setAuthView] = useState(() => {
+    const path = window.location.pathname.replace(/^\/|\/$/g, '');
+    const searchParams = new URLSearchParams(window.location.search);
+    if (path === 'reset-password' || searchParams.get('mode') === 'resetPassword' || searchParams.get('oobCode')) {
+      return 'reset-password';
+    }
+    if (path === 'signup') return 'signup';
+    return 'login';
+  });
 
-  // If not logged in, render Login or SignUp page
+  // If not logged in, render Login, SignUp or ResetPassword page
   if (!isLoggedIn) {
+    if (authView === 'reset-password') {
+      return (
+        <ResetPassword
+          onBackToLogin={() => {
+            setAuthView('login');
+            window.history.pushState({}, '', '/login');
+          }}
+        />
+      );
+    }
     if (authView === 'signup') {
       return (
         <SignUp

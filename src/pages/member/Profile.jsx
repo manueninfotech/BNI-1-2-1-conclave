@@ -107,11 +107,6 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
               </div>
 
               <h2 className="text-lg font-black text-zinc-900 leading-tight">{profileData.name}</h2>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="px-2.5 py-0.5 bg-red-50 border border-red-100 text-brand-red text-[9px] font-black rounded-full uppercase tracking-wider">
-                  Platinum Member
-                </span>
-              </div>
 
               <p className="text-[12px] text-zinc-500 font-semibold mt-2.5 leading-snug">
                 {profileData.category} at <strong className="text-zinc-800 font-bold">{profileData.company}</strong>
