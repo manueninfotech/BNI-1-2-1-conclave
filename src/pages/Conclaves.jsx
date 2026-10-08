@@ -716,6 +716,12 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     }
 
     try {
+      // An inverted registration window (start after end) makes the backend
+      // report "registration not open" and members can't register — guard it.
+      if (formData.regStartDate && formData.regEndDate && formData.regStartDate > formData.regEndDate) {
+        showToast('Invalid registration dates', 'Registration start must be on or before registration end.');
+        return;
+      }
       const payload = {
         name: formData.name,
         venueLocation: formData.venue,
@@ -842,6 +848,10 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
+      if (formData.regStartDate && formData.regEndDate && formData.regStartDate > formData.regEndDate) {
+        showToast('Invalid registration dates', 'Registration start must be on or before registration end.');
+        return;
+      }
       const payload = {
         name: formData.name,
         venueLocation: formData.venue,
