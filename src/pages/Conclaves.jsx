@@ -121,6 +121,112 @@ const formatTimeNice = (val, fallback = '') => {
   return String(val);
 };
 
+/**
+ * Registration fee + payment setup for the conclave form.
+ *
+ * The fee is the headline — members pay it ONLINE via Razorpay automatically, so
+ * that's all most organisers need. The UPI / bank-account fields are only for
+ * organisers who ALSO want to accept offline (manual) payment, so they're tucked
+ * behind an optional toggle instead of being dumped on everyone "out of nowhere."
+ * A free conclave (fee 0) shows no payment fields at all.
+ */
+function FeeAndPaymentSection({ formData, setFormData }) {
+  const set = (patch) => setFormData((prev) => ({ ...prev, ...patch }));
+  const fee = Number(formData.registrationFee) || 0;
+  const hasOffline = Boolean(
+    (formData.upiId || '').trim() || (formData.accountNumber || '').trim() ||
+    (formData.bankName || '').trim() || (formData.ifscCode || '').trim()
+  );
+  const [showOffline, setShowOffline] = useState(hasOffline);
+
+  const field = (label, key, { placeholder = '', mono = false, upper = false } = {}) => (
+    <div>
+      <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">{label}</label>
+      <input
+        value={formData[key] || ''}
+        onChange={(e) => set({ [key]: e.target.value })}
+        className={`w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white ${mono ? 'font-mono' : ''} ${upper ? 'uppercase' : ''}`}
+        placeholder={placeholder}
+        type="text"
+      />
+    </div>
+  );
+
+  return (
+    <div className="border-t border-zinc-100 pt-3.5 space-y-3 bg-zinc-50/40 p-3.5 rounded-xl">
+      <div className="flex items-center gap-2">
+        <CreditCard className="w-4 h-4 text-brand-red" />
+        <h4 className="text-[11px] font-extrabold uppercase text-zinc-800 tracking-wider">Registration & Payment</h4>
+      </div>
+
+      {/* Fee — the one field everyone sets */}
+      <div>
+        <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Registration Fee (₹)</label>
+        <input
+          value={formData.registrationFee}
+          onChange={(e) => set({ registrationFee: e.target.value })}
+          className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-bold text-emerald-700"
+          placeholder="0 = free"
+          type="number"
+          min="0"
+        />
+        <p className="text-[10px] text-zinc-400 font-semibold mt-1">
+          {fee > 0
+            ? 'Members pay this online (card / UPI / netbanking) via Razorpay — collected automatically.'
+            : 'Leave as 0 for a free conclave.'}
+        </p>
+      </div>
+
+      {fee > 0 && (
+        <>
+          {/* Optional offline payment — hidden unless the organiser opts in */}
+          <label className="flex items-center justify-between gap-3 bg-white border border-zinc-200 rounded-lg px-3 py-2 cursor-pointer">
+            <div>
+              <span className="text-[11px] font-bold text-zinc-800">Also accept offline payment</span>
+              <p className="text-[10px] text-zinc-400 font-semibold">UPI / bank transfer you reconcile by hand. Optional — online covers most members.</p>
+            </div>
+            <input type="checkbox" checked={showOffline} onChange={(e) => setShowOffline(e.target.checked)} className="w-4 h-4 accent-brand-red shrink-0" />
+          </label>
+
+          {showOffline && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {field('UPI ID (e.g. name@upi)', 'upiId', { placeholder: 'bni.guntur@upi', mono: true })}
+                {field('Account Holder Name', 'accountHolderName', { placeholder: 'BNI Guntur Chapter' })}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {field('Bank Name', 'bankName', { placeholder: 'HDFC Bank' })}
+                {field('Account Number', 'accountNumber', { placeholder: '50100234567890', mono: true })}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {field('IFSC Code', 'ifscCode', { placeholder: 'HDFC0001234', mono: true, upper: true })}
+                <div />
+              </div>
+
+              {formData.upiId && (
+                <div className="p-2.5 bg-white rounded-lg border border-emerald-200 flex items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={generateQrCodeUrl(generateUpiUri({ upiId: formData.upiId, name: formData.accountHolderName || formData.name, amount: formData.registrationFee, note: `${formData.name || 'Conclave'} Registration` }), 120)}
+                      alt="Generated UPI QR Code"
+                      className="w-14 h-14 bg-white p-1 rounded border border-zinc-200 shrink-0"
+                    />
+                    <div>
+                      <span className="text-[8.5px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">UPI QR Preview</span>
+                      <p className="text-xs font-black text-zinc-900 mt-1">{formData.upiId}</p>
+                      <p className="text-[10px] text-zinc-500 font-semibold">Registration Fee: ₹{formData.registrationFee || 0}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
   // Component-scoped so the render (e.g. the Superadmin-only toggles in the form)
   // can read it — the inner callbacks re-derive their own copies in their scopes.
@@ -1705,104 +1811,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                 />
               </div>
 
-              {/* Bank Account & UPI Setup */}
-              <div className="border-t border-zinc-100 pt-3.5 space-y-3 bg-zinc-50/40 p-3.5 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-brand-red" />
-                  <h4 className="text-[11px] font-extrabold uppercase text-zinc-800 tracking-wider">
-                    Registration Fee & Bank Account (UPI)
-                  </h4>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Registration Fee (₹)</label>
-                    <input
-                      value={formData.registrationFee}
-                      onChange={(e) => setFormData(prev => ({ ...prev, registrationFee: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-bold text-emerald-700"
-                      placeholder="0 for Free"
-                      type="number"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">UPI ID (e.g. name@upi)</label>
-                    <input
-                      value={formData.upiId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, upiId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono text-zinc-800"
-                      placeholder="bni.guntur@upi"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Account Holder Name</label>
-                    <input
-                      value={formData.accountHolderName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accountHolderName: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white"
-                      placeholder="BNI Guntur Chapter"
-                      type="text"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Bank Name</label>
-                    <input
-                      value={formData.bankName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white"
-                      placeholder="HDFC Bank"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Account Number</label>
-                    <input
-                      value={formData.accountNumber}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono"
-                      placeholder="50100234567890"
-                      type="text"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">IFSC Code</label>
-                    <input
-                      value={formData.ifscCode}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ifscCode: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono uppercase"
-                      placeholder="HDFC0001234"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                {formData.upiId && (
-                  <div className="p-2.5 bg-white rounded-lg border border-emerald-200 flex items-center justify-between gap-3 shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={generateQrCodeUrl(generateUpiUri({ upiId: formData.upiId, name: formData.accountHolderName || formData.name, amount: formData.registrationFee, note: `${formData.name || 'Conclave'} Registration` }), 120)}
-                        alt="Generated UPI QR Code"
-                        className="w-14 h-14 bg-white p-1 rounded border border-zinc-200 shrink-0"
-                      />
-                      <div>
-                        <span className="text-[8.5px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                          Dynamic QR Preview
-                        </span>
-                        <p className="text-xs font-black text-zinc-900 mt-1">{formData.upiId}</p>
-                        <p className="text-[10px] text-zinc-500 font-semibold">Registration Fee: ₹{formData.registrationFee || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Registration fee + optional offline payment details */}
+              <FeeAndPaymentSection formData={formData} setFormData={setFormData} />
             </div>
 
             <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-2.5">
@@ -2071,104 +2081,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                 />
               </div>
 
-              {/* Bank Account & UPI Setup */}
-              <div className="border-t border-zinc-100 pt-3.5 space-y-3 bg-zinc-50/40 p-3.5 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-brand-red" />
-                  <h4 className="text-[11px] font-extrabold uppercase text-zinc-800 tracking-wider">
-                    Registration Fee & Bank Account (UPI)
-                  </h4>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Registration Fee (₹)</label>
-                    <input
-                      value={formData.registrationFee}
-                      onChange={(e) => setFormData(prev => ({ ...prev, registrationFee: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-bold text-emerald-700"
-                      placeholder="0 for Free"
-                      type="number"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">UPI ID (e.g. name@upi)</label>
-                    <input
-                      value={formData.upiId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, upiId: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono text-zinc-800"
-                      placeholder="bni.guntur@upi"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Account Holder Name</label>
-                    <input
-                      value={formData.accountHolderName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accountHolderName: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white"
-                      placeholder="BNI Guntur Chapter"
-                      type="text"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Bank Name</label>
-                    <input
-                      value={formData.bankName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white"
-                      placeholder="HDFC Bank"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Account Number</label>
-                    <input
-                      value={formData.accountNumber}
-                      onChange={(e) => setFormData(prev => ({ ...prev, accountNumber: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono"
-                      placeholder="50100234567890"
-                      type="text"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">IFSC Code</label>
-                    <input
-                      value={formData.ifscCode}
-                      onChange={(e) => setFormData(prev => ({ ...prev, ifscCode: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-mono uppercase"
-                      placeholder="HDFC0001234"
-                      type="text"
-                    />
-                  </div>
-                </div>
-
-                {formData.upiId && (
-                  <div className="p-2.5 bg-white rounded-lg border border-emerald-200 flex items-center justify-between gap-3 shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={generateQrCodeUrl(generateUpiUri({ upiId: formData.upiId, name: formData.accountHolderName || formData.name, amount: formData.registrationFee, note: `${formData.name || 'Conclave'} Registration` }), 120)}
-                        alt="Generated UPI QR Code"
-                        className="w-14 h-14 bg-white p-1 rounded border border-zinc-200 shrink-0"
-                      />
-                      <div>
-                        <span className="text-[8.5px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                          Dynamic QR Preview
-                        </span>
-                        <p className="text-xs font-black text-zinc-900 mt-1">{formData.upiId}</p>
-                        <p className="text-[10px] text-zinc-500 font-semibold">Registration Fee: ₹{formData.registrationFee || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Registration fee + optional offline payment details */}
+              <FeeAndPaymentSection formData={formData} setFormData={setFormData} />
             </div>
 
             <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-2.5">
