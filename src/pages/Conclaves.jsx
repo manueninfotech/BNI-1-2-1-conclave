@@ -122,6 +122,9 @@ const formatTimeNice = (val, fallback = '') => {
 };
 
 export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
+  // Component-scoped so the render (e.g. the Superadmin-only toggles in the form)
+  // can read it — the inner callbacks re-derive their own copies in their scopes.
+  const isSuperadmin = loggedInAdmin?.role === 'superadmin';
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
