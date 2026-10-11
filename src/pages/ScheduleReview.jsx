@@ -265,6 +265,42 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
     return list;
   }, [conclaveKPIs.rounds]);
 
+  // WHY repeats happen. The engine never seats two of the same category at one
+  // table, so a category with many members can only be spread so far across the
+  // tables each round — once a category is dense relative to the table count, the
+  // engine runs out of fresh, category-safe seats and has to reuse pairings. This
+  // surfaces the densest categories so the admin sees the structural cause rather
+  // than guessing. Computed from the roster, independent of the produced schedule.
+  const repeatReasonAnalysis = useMemo(() => {
+    const participantsList = conclave?.participants || [];
+    const tableCount = conclaveKPIs?.tables || 0;
+    if (participantsList.length === 0) return { dense: [], tableCount };
+
+    const catOf = (p) => {
+      const c = p.businessCategory || p.category || p.businessType || p.profession || p.industry || p.classification;
+      return (c && c.trim() && c.toLowerCase() !== 'uncategorized') ? c.trim() : 'General Business';
+    };
+
+    const counts = new Map();
+    participantsList.forEach((p) => {
+      const c = catOf(p);
+      counts.set(c, (counts.get(c) || 0) + 1);
+    });
+
+    // A category with 2+ members constrains seating; one at/above the table count
+    // is the hard driver (it can't get a fresh partner set every round).
+    const dense = [...counts.entries()]
+      .filter(([, n]) => n >= 2)
+      .map(([category, count]) => ({
+        category,
+        count,
+        forcesRepeats: tableCount > 0 && count >= tableCount,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { dense, tableCount };
+  }, [conclave, conclaveKPIs]);
+
   const [expandedRules, setExpandedRules] = useState(new Set(['rule-2']));
   const [isValidating, setIsValidating] = useState(false);
 
@@ -1053,6 +1089,36 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
 
             {/* Modal Scrollable Body */}
             <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-1 flex-1">
+              {/* WHY — the structural cause, shown whenever there are repeats. */}
+              {repeatPairingDetails.length > 0 && repeatReasonAnalysis.dense.length > 0 && (
+                <div className="p-4 rounded-xl border border-amber-200/80 bg-amber-50/50 space-y-2.5">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-[11.5px] text-amber-900 font-semibold leading-relaxed">
+                      Why these happen: two members of the same business category are never
+                      seated together, so dense categories limit how far the engine can spread
+                      people out. With <span className="font-black">{repeatReasonAnalysis.tableCount} tables</span>,
+                      the categories below are the hardest to separate — the usual cause of repeat pairings.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {repeatReasonAnalysis.dense.map((d, i) => (
+                      <span
+                        key={i}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold border ${d.forcesRepeats
+                          ? 'bg-red-50 border-brand-red/20 text-brand-red'
+                          : 'bg-white border-amber-200 text-amber-800'}`}
+                        title={d.forcesRepeats
+                          ? `${d.count} members can't be kept apart across ${repeatReasonAnalysis.tableCount} tables`
+                          : `${d.count} members in this category`}
+                      >
+                        {d.count}× {d.category}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {repeatPairingDetails.length === 0 ? (
                 <div className="p-8 text-center bg-emerald-50/40 rounded-xl border border-emerald-100 space-y-2">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto font-black text-lg">✓</div>

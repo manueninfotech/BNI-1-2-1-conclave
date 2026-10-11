@@ -299,11 +299,19 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       console.warn('Backend schedule generation failed:', msg);
 
       const isCaptainError = msg.toLowerCase().includes('captain');
+      const details = err.details || {};
       if (typeof showGenWarning === 'function') {
         showGenWarning({
           type: isCaptainError ? 'captain' : 'error',
           title: isCaptainError ? 'Captain Count Mismatch' : 'Schedule Generation Failed',
           message: msg,
+          // The engine returns exactly WHY it refused: blocking issues, soft
+          // warnings, the derived roster math, and a one-line hint. Surface all
+          // of it instead of a generic "failed" so the admin can act.
+          issues: Array.isArray(details.issues) ? details.issues : [],
+          warnings: Array.isArray(details.warnings) ? details.warnings : [],
+          derived: details.derived || null,
+          hint: details.hint || null,
         });
       }
 

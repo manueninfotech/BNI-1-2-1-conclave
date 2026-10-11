@@ -13,6 +13,7 @@ import {
   LogOut,
   X,
   ChevronDown,
+  MessageSquare,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -29,6 +30,7 @@ const navItems = [
   { id: 'captains', label: 'Captains', Icon: Award },
   { id: 'business-types', label: 'Business Types', Icon: Layers },
   { id: 'reports', label: 'Reports', Icon: BarChart3 },
+  { id: 'feedback', label: 'Feedback', Icon: MessageSquare },
   { id: 'settings', label: 'Settings', Icon: SettingsIcon },
 ];
 
