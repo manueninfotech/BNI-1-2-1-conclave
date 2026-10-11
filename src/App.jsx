@@ -31,6 +31,7 @@ import AdminProfile from './pages/admin/Profile';
 import Referrals from './pages/Referrals';
 import Settings from './pages/Settings';
 import Feedback from './pages/Feedback';
+import Payments from './pages/Payments';
 
 import { Sparkles, ShieldAlert, X } from 'lucide-react';
 import SuperadminLayout from './components/SuperadminLayout';
@@ -894,6 +895,8 @@ export default function App() {
             <Settings />
           ) : activeTab === 'feedback' ? (
             <Feedback selectedConclaveId={selectedConclaveId} />
+          ) : activeTab === 'payments' ? (
+            <Payments selectedConclaveId={selectedConclaveId} />
           ) : activeTab === 'profile' ? (
             <AdminProfile loggedInAdmin={loggedInAdmin} role="admin" onLogout={handleLogout} />
           ) : (

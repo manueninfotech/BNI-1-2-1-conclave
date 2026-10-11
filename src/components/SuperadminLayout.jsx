@@ -11,9 +11,11 @@ import {
   Check,
   AlertTriangle,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Wallet
 } from 'lucide-react';
 import SuperadminDashboard from '../pages/superadmin/Dashboard';
+import SuperadminRevenue from '../pages/superadmin/Revenue';
 import SuperadminAdmins from '../pages/superadmin/Admins';
 import SuperadminConclaves from '../pages/superadmin/Conclaves';
 import SuperadminMembers from '../pages/superadmin/Members';
@@ -140,6 +142,7 @@ export default function SuperadminLayout({
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+    { id: 'revenue', label: 'Revenue', Icon: Wallet },
     { id: 'admins', label: 'Admins & Regions', Icon: Award },
     { id: 'conclaves', label: 'Global Conclaves', Icon: CalendarRange },
     { id: 'members', label: 'Global Members', Icon: Users },
@@ -393,6 +396,8 @@ export default function SuperadminLayout({
         <main className="flex-1 overflow-y-auto p-6 md:p-8 pb-20 md:pb-24">
           {activeTab === 'dashboard' ? (
             <SuperadminDashboard setActiveTab={setActiveTab} />
+          ) : activeTab === 'revenue' ? (
+            <SuperadminRevenue />
           ) : activeTab === 'admins' ? (
             <SuperadminAdmins searchQuery={searchQuery} />
           ) : activeTab === 'conclaves' ? (
