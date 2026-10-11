@@ -227,6 +227,30 @@ function FeeAndPaymentSection({ formData, setFormData }) {
   );
 }
 
+/**
+ * Client-side mirror of the backend conclave timing rules, so the admin gets an
+ * immediate, specific error instead of a 400 after saving. Returns the first
+ * violation message, or null when the window is valid.
+ */
+function conclaveTimingError(fd) {
+  const mk = (date, time, end) => {
+    if (!date) return null;
+    const [h, m] = String(time || (end ? '23:59' : '00:00')).split(':').map(Number);
+    const d = new Date(`${date}T00:00:00`);
+    if (isNaN(d.getTime())) return null;
+    d.setHours(h || 0, m || 0, end ? 59 : 0, 0);
+    return d;
+  };
+  const eventStart = mk(fd.startDate, fd.startTime, false);
+  const eventEnd = mk(fd.endDate || fd.startDate, fd.endTime, true);
+  const regStart = mk(fd.regStartDate, fd.regStartTime, false);
+  const regEnd = mk(fd.regEndDate, fd.regEndTime, true);
+  if (eventStart && eventEnd && eventEnd < eventStart) return 'The conclave can’t end before it starts — check the event date & time.';
+  if (regStart && regEnd && regEnd <= regStart) return 'Registration must open before it closes.';
+  if (regEnd && eventStart && regEnd > eventStart) return 'Registration must close before the conclave starts.';
+  return null;
+}
+
 export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
   // Component-scoped so the render (e.g. the Superadmin-only toggles in the form)
   // can read it — the inner callbacks re-derive their own copies in their scopes.
@@ -574,6 +598,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     endDate: '',
     regStartDate: new Date().toISOString().slice(0, 10),
     regEndDate: '',
+    regStartTime: '',
+    regEndTime: '',
     isRegistrationOpen: true,
     memberLimit: 500,
     captainLimit: 20,
@@ -798,6 +824,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       endTime: '17:00',
       regStartDate: new Date().toISOString().slice(0, 10),
       regEndDate: '',
+      regStartTime: '',
+      regEndTime: '',
       isRegistrationOpen: true,
       memberLimit: 100,
       captainLimit: 12,
@@ -827,8 +855,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     try {
       // An inverted registration window (start after end) makes the backend
       // report "registration not open" and members can't register — guard it.
-      if (formData.regStartDate && formData.regEndDate && formData.regStartDate > formData.regEndDate) {
-        showToast('Invalid registration dates', 'Registration start must be on or before registration end.');
+      const timingErr = conclaveTimingError(formData);
+      if (timingErr) {
+        showToast('Check the dates & times', timingErr);
         return;
       }
       const payload = {
@@ -840,6 +869,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
+        regStartTime: formData.regStartTime || undefined,
+        regEndTime: formData.regEndTime || undefined,
         isRegistrationOpen: Boolean(formData.isRegistrationOpen),
         registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
         allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
@@ -932,6 +963,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       endTime: formatTimeForInput(c.endTime) || '17:00',
       regStartDate: formatDateForInput(c.regStartDate),
       regEndDate: formatDateForInput(c.regEndDate),
+      regStartTime: formatTimeForInput(c.regStartTime) || '',
+      regEndTime: formatTimeForInput(c.regEndTime) || '',
       isScheduleLocked: Boolean(c.isScheduleLocked),
       isRegistrationOpen: c.isScheduleLocked ? false : (c.registrationOverride ? c.registrationOverride === 'open' : (c.isRegistrationOpen ?? true)),
       allowAdminAddMembers: Boolean(c.allowAdminAddMembers),
@@ -957,8 +990,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (formData.regStartDate && formData.regEndDate && formData.regStartDate > formData.regEndDate) {
-        showToast('Invalid registration dates', 'Registration start must be on or before registration end.');
+      const timingErr = conclaveTimingError(formData);
+      if (timingErr) {
+        showToast('Check the dates & times', timingErr);
         return;
       }
       const payload = {
@@ -974,6 +1008,8 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         endTime: formData.endTime || undefined,
         regStartDate: formData.regStartDate || undefined,
         regEndDate: formData.regEndDate || undefined,
+        regStartTime: formData.regStartTime || undefined,
+        regEndTime: formData.regEndTime || undefined,
         isRegistrationOpen: Boolean(formData.isRegistrationOpen),
         registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
         allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
@@ -1742,6 +1778,28 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Time</label>
+                  <input
+                    value={formData.regStartTime || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, regStartTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Time</label>
+                  <input
+                    value={formData.regEndTime || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, regEndTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                  <p className="text-[9.5px] text-zinc-400 font-semibold mt-1">Must be on/before the conclave start.</p>
+                </div>
+              </div>
+
               {/* Registration Override Toggle */}
               <div className="bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between">
                 <div>
@@ -1754,7 +1812,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                     </span>
                   </div>
                   <p className="text-[10px] text-zinc-500 mt-0.5">
-                    When ON, registrations remain active even if the close date has passed, until switched OFF.
+                    Manually open or close registration within the window. Turning it back ON after the close time has passed won't reopen it — extend the close time instead.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer select-none">
@@ -1962,6 +2020,28 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                     className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
                     type="date"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Time</label>
+                  <input
+                    value={formData.regStartTime || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, regStartTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Time</label>
+                  <input
+                    value={formData.regEndTime || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, regEndTime: e.target.value }))}
+                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                    type="time"
+                  />
+                  <p className="text-[9.5px] text-zinc-400 font-semibold mt-1">Must be on/before the conclave start.</p>
                 </div>
               </div>
 
