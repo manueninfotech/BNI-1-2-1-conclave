@@ -13,7 +13,9 @@ import {
   Send,
   Bell,
   BellOff,
-  Volume2
+  Volume2,
+  Sparkles,
+  Play
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ResponsiveContainer, PieChart, Pie, BarChart, Bar, Cell, XAxis, YAxis, Tooltip } from 'recharts';
@@ -383,9 +385,96 @@ export default function RoundRunner({ selectedConclaveId }) {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Start next round trigger
-  const handleStartNextRound = async () => {
-    const nextRoundVal = activeRound + 1;
+  // Automatic Round Progression State
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(true);
+  const [autoStartCountdown, setAutoStartCountdown] = useState(null);
+  const autoAdvancingRoundRef = useRef(null);
+  const autoStartTimerRef = useRef(null);
+
+  // Clear countdown when activeRound changes or conclave finishes
+  useEffect(() => {
+    if (autoStartTimerRef.current) {
+      clearInterval(autoStartTimerRef.current);
+      autoStartTimerRef.current = null;
+    }
+    setAutoStartCountdown(null);
+  }, [activeRound, statusLower]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoStartTimerRef.current) {
+        clearInterval(autoStartTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Automatic round progression effect:
+  // Starts next round automatically when previous round completes
+  useEffect(() => {
+    if (!autoAdvanceEnabled) return;
+    if (statusLower !== 'running') return;
+    if (activeRound < 1) return; // Round 1 must be started manually by the admin!
+
+    const isRoundEnded = Boolean(
+      timingState.phase === 'ended' ||
+      timingState.isEnded ||
+      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral')
+    );
+
+    if (isRoundEnded) {
+      if (activeRound < totalRounds) {
+        const nextRoundNum = activeRound + 1;
+        if (autoAdvancingRoundRef.current === activeRound) return;
+        autoAdvancingRoundRef.current = activeRound;
+
+        let count = 5;
+        setAutoStartCountdown(count);
+
+        if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = setInterval(() => {
+          count -= 1;
+          if (count <= 0) {
+            clearInterval(autoStartTimerRef.current);
+            autoStartTimerRef.current = null;
+            setAutoStartCountdown(null);
+            handleStartNextRound(nextRoundNum);
+          } else {
+            setAutoStartCountdown(count);
+          }
+        }, 1000);
+      } else if (activeRound >= totalRounds) {
+        if (autoAdvancingRoundRef.current === `finished-${activeRound}`) return;
+        autoAdvancingRoundRef.current = `finished-${activeRound}`;
+
+        let count = 5;
+        setAutoStartCountdown(count);
+
+        if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = setInterval(() => {
+          count -= 1;
+          if (count <= 0) {
+            clearInterval(autoStartTimerRef.current);
+            autoStartTimerRef.current = null;
+            setAutoStartCountdown(null);
+            handleFinishConclave();
+          } else {
+            setAutoStartCountdown(count);
+          }
+        }, 1000);
+      }
+    }
+  }, [timingState.phase, timingState.isEnded, timingState.totalRemaining, activeRound, totalRounds, statusLower, autoAdvanceEnabled]);
+
+  // Start next round trigger (supports manual click and automated progression)
+  const handleStartNextRound = async (customRoundNum = null) => {
+    if (autoStartTimerRef.current) {
+      clearInterval(autoStartTimerRef.current);
+      autoStartTimerRef.current = null;
+    }
+    setAutoStartCountdown(null);
+
+    const nextRoundVal = customRoundNum !== null ? customRoundNum : (activeRound + 1);
     const now = new Date();
 
     // Optimistically start timer instantly on button click
@@ -410,30 +499,51 @@ export default function RoundRunner({ selectedConclaveId }) {
       // Reload conclaves from Express backend API to sync states
       const data = await api.get('/admin/conclaves');
       if (Array.isArray(data)) setConclaves(data);
-      showToast('Next Round Started', `Round ${nextRoundVal} started. Captains notified.`);
+      playBellSound('double');
+      showToast('Round Started', `Round ${nextRoundVal} is live! Captains & members synced.`);
     } catch (err) {
       console.error("Failed to start round:", err);
+      autoAdvancingRoundRef.current = null; // allow retry
       showToast('Start Round Failed', err.message || "Could not start next round.");
     }
   };
 
   // Finish conclave trigger
   const handleFinishConclave = async () => {
+    if (autoStartTimerRef.current) {
+      clearInterval(autoStartTimerRef.current);
+      autoStartTimerRef.current = null;
+    }
+    setAutoStartCountdown(null);
+
+    // Optimistically update conclave status to completed
+    setConclaves(prev => prev.map(c => {
+      if (c.id === selectedConclaveId) {
+        return {
+          ...c,
+          status: 'completed',
+          currentRound: totalRounds
+        };
+      }
+      return c;
+    }));
+    setTimerRunning(false);
+    setTimeLeft(0);
+    confetti({
+      particleCount: 150,
+      spread: 80,
+      origin: { y: 0.6 }
+    });
+
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/complete`);
       // Reload conclaves from Express backend API to sync states
       const data = await api.get('/admin/conclaves');
-      setConclaves(data);
-      setTimerRunning(false);
-      setTimeLeft(0);
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
+      if (Array.isArray(data)) setConclaves(data);
       showToast('Conclave Concluded', 'Live conclave completed successfully.');
     } catch (err) {
       console.error("Failed to conclude conclave:", err);
+      autoAdvancingRoundRef.current = null;
       showToast('Conclude Failed', err.message || "Could not complete conclave.");
     }
   };
@@ -454,14 +564,40 @@ export default function RoundRunner({ selectedConclaveId }) {
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           {!['completed', 'cancelled'].includes(statusLower) && (
             <>
-              {activeRound < (selectedConclave?.roundCount || 4) && (
+              {activeRound > 0 && (
                 <button
-                  onClick={handleStartNextRound}
+                  type="button"
+                  onClick={() => setAutoAdvanceEnabled(prev => !prev)}
+                  title="Toggle automatic progression between rounds"
+                  className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-xs font-bold transition-smooth cursor-pointer ${
+                    autoAdvanceEnabled
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                      : 'bg-zinc-100 border-zinc-250 text-zinc-600 hover:bg-zinc-150'
+                  }`}
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${autoAdvanceEnabled ? 'text-emerald-600 animate-pulse' : 'text-zinc-400'}`} />
+                  <span>Auto-Advance: {autoAdvanceEnabled ? 'ON' : 'PAUSED'}</span>
+                </button>
+              )}
+
+              {activeRound === 0 ? (
+                <button
+                  onClick={() => handleStartNextRound(1)}
+                  type="button"
+                  className="inline-flex items-center justify-center gap-2 h-10 px-5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>Start Round 1</span>
+                </button>
+              ) : activeRound < (selectedConclave?.roundCount || 4) && (
+                <button
+                  onClick={() => handleStartNextRound()}
                   type="button"
                   className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
+                  title="Manually force-start the next round now"
                 >
                   <RefreshCw className="w-4 h-4 text-zinc-500 animate-spin-slow" />
-                  <span>Start Round {activeRound + 1}</span>
+                  <span>Start Round {activeRound + 1} Now</span>
                 </button>
               )}
 
@@ -477,6 +613,44 @@ export default function RoundRunner({ selectedConclaveId }) {
           )}
         </div>
       </div>
+
+      {/* Auto-Start Countdown Banner */}
+      {autoStartCountdown !== null && (
+        <div className="p-4 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
+              <Sparkles className="w-5 h-5 animate-spin-slow text-amber-700" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
+                {activeRound < totalRounds ? `Round ${activeRound} Concluded` : 'All Rounds Concluded'}
+              </h4>
+              <p className="text-body-xs text-amber-900 font-semibold mt-0.5">
+                {activeRound < totalRounds
+                  ? `Round ${activeRound + 1} will start automatically in ${autoStartCountdown} second${autoStartCountdown === 1 ? '' : 's'}...`
+                  : `Live conclave will conclude automatically in ${autoStartCountdown} second${autoStartCountdown === 1 ? '' : 's'}...`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              onClick={() => {
+                if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
+                setAutoStartCountdown(null);
+                if (activeRound < totalRounds) {
+                  handleStartNextRound(activeRound + 1);
+                } else {
+                  handleFinishConclave();
+                }
+              }}
+              type="button"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-lg shadow-2xs transition-smooth cursor-pointer"
+            >
+              {activeRound < totalRounds ? `Start Round ${activeRound + 1} Now` : 'Finish Now'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Completed Conclave Notice */}
       {['completed', 'cancelled'].includes(statusLower) && (
@@ -641,9 +815,11 @@ export default function RoundRunner({ selectedConclaveId }) {
                     Move to Next Table ({formatTime(timingState.phaseRemaining)} left)
                   </span>
                 ) : timingState.phase === 'ended' ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200">
-                    <CheckCircle2 className="w-3 h-3 text-zinc-500" />
-                    Round Finished
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs animate-pulse">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    {autoStartCountdown !== null
+                      ? (activeRound < totalRounds ? `Auto-starting Round ${activeRound + 1} in ${autoStartCountdown}s` : `Auto-concluding in ${autoStartCountdown}s`)
+                      : (activeRound < totalRounds ? `Round Finished · Auto-advancing` : 'All Rounds Finished')}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
