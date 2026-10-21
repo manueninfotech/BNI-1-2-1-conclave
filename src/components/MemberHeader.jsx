@@ -81,11 +81,8 @@ export default function MemberHeader({
             alt="BNI Logo"
             className="h-8 w-auto object-contain shrink-0"
           />
-          <div className="hidden lg:flex flex-col border-l border-zinc-200 pl-2.5">
+          <div className="hidden lg:flex items-center border-l border-zinc-200 pl-2.5 h-6">
             <span className="text-[13px] font-bold text-zinc-900 tracking-tight leading-none">Member Portal</span>
-            <span className="text-[8px] text-zinc-500 font-semibold uppercase tracking-widest mt-1">
-              BNI GUNTUR
-            </span>
           </div>
         </div>
 
