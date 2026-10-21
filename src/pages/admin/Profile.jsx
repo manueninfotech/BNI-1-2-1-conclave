@@ -48,7 +48,8 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     designation: isSuperadmin ? 'Global Administrator' : 'Regional Administrator',
     organization: isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office',
     region: isSuperadmin ? 'All Regions (Global)' : (loggedInAdmin?.chapter || loggedInAdmin?.region || 'BNI Region'),
-    joinedDate: formatJoinedDate(loggedInAdmin?.createdAt)
+    joinedDate: formatJoinedDate(loggedInAdmin?.createdAt),
+    uid: loggedInAdmin?.uid || loggedInAdmin?.id || ''
   });
 
   const [conclavesCount, setConclavesCount] = useState(0);
@@ -90,7 +91,8 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
             designation: isSuperadmin ? 'Global Administrator' : (fresh.designation || prev.designation),
             organization: isSuperadmin ? 'BNI Global LLC' : (fresh.organizationNode || fresh.organization || prev.organization),
             region: isSuperadmin ? 'All Regions (Global)' : (fresh.region || fresh.scope || prev.region),
-            joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate)
+            joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate),
+            uid: fresh.uid || fresh.id || prev.uid
           }));
         }
       } catch (err) {
@@ -133,7 +135,8 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
 
   // Role details
   const roleBadge = isSuperadmin ? 'Super Administrator' : 'Regional Administrator';
-  const displayId = loggedInAdmin?.uid ? `ADM-${loggedInAdmin.uid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'BNI-SYS-0001' : 'BNI-ADM-0042');
+  const adminUid = profileData.uid || loggedInAdmin?.uid || loggedInAdmin?.id;
+  const displayId = adminUid ? `ADM-${adminUid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'BNI-SYS-0001' : 'BNI-ADM-0042');
 
   // KPIs from real backend
   const kpis = isSuperadmin

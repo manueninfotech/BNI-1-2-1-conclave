@@ -3,14 +3,9 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
-import BusinessTypes from './pages/BusinessTypes';
 import Captains from './pages/Captains';
-import ActiveUsers from './pages/ActiveUsers';
 import Conclaves from './pages/Conclaves';
-import ScheduleGen from './pages/ScheduleGen';
-import ScheduleReview from './pages/ScheduleReview';
-import RoundRunner from './pages/RoundRunner';
-import Reports from './pages/Reports';
+import ScheduleHub from './pages/ScheduleHub';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ResetPassword from './pages/ResetPassword';
@@ -120,9 +115,9 @@ export default function App() {
     const parts = path.split('/');
     const lastPart = parts[parts.length - 1];
     const validTabs = [
-      'dashboard', 'members', 'active-users', 'business-types', 'captains',
-      'conclaves', 'schedule-gen', 'schedule-review',
-      'round-runner', 'reports', 'admins', 'referrals', 'profile', 'registrations',
+      'dashboard', 'members', 'captains',
+      'conclaves', 'schedule-hub', 'schedule-gen', 'schedule-review',
+      'round-runner', 'admins', 'referrals', 'profile', 'registrations',
       'my-schedule', 'current-round', 'history', 'my-table', 'schedule'
     ];
     return validTabs.includes(lastPart) ? lastPart : 'dashboard';
@@ -192,9 +187,9 @@ export default function App() {
       const parts = path.split('/');
       const lastPart = parts[parts.length - 1];
       const validTabs = [
-        'dashboard', 'members', 'active-users', 'business-types', 'captains',
-        'conclaves', 'schedule-gen', 'schedule-review',
-        'round-runner', 'reports', 'admins', 'referrals', 'profile', 'registrations',
+        'dashboard', 'members', 'captains',
+        'conclaves', 'schedule-hub', 'schedule-gen', 'schedule-review',
+        'round-runner', 'admins', 'referrals', 'profile', 'registrations',
         'my-schedule', 'current-round', 'history', 'my-table', 'schedule'
       ];
       const cleanTab = validTabs.includes(lastPart) ? lastPart : 'dashboard';
@@ -227,8 +222,8 @@ export default function App() {
   useEffect(() => {
     if (!isLoggedIn) return;
     const adminOnlyTabs = [
-      'members', 'active-users', 'business-types', 'captains',
-      'conclaves', 'schedule-gen', 'schedule-review', 'round-runner', 'reports', 'settings'
+      'members', 'captains',
+      'conclaves', 'schedule-hub', 'schedule-gen', 'schedule-review', 'round-runner', 'settings'
     ];
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
 
@@ -875,22 +870,26 @@ export default function App() {
             <Dashboard setActiveTab={handleTabChange} selectedConclaveId={selectedConclaveId} setSelectedConclaveId={setSelectedConclaveId} loggedInAdmin={loggedInAdmin} />
           ) : activeTab === 'members' ? (
             <Members searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
-          ) : activeTab === 'active-users' ? (
-            <ActiveUsers searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
-          ) : activeTab === 'business-types' ? (
-            <BusinessTypes searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
           ) : activeTab === 'captains' ? (
             <Captains searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
           ) : activeTab === 'conclaves' ? (
             <Conclaves loggedInAdmin={loggedInAdmin} setActiveTab={handleTabChange} />
-          ) : activeTab === 'schedule-gen' ? (
-            <ScheduleGen selectedConclaveId={selectedConclaveId} showGenWarning={showGenWarning} clearGenWarning={clearGenWarning} />
-          ) : activeTab === 'schedule-review' ? (
-            <ScheduleReview setActiveTab={handleTabChange} selectedConclaveId={selectedConclaveId} />
-          ) : activeTab === 'round-runner' ? (
-            <RoundRunner selectedConclaveId={selectedConclaveId} />
-          ) : activeTab === 'reports' ? (
-            <Reports selectedConclaveId={selectedConclaveId} />
+          ) : (activeTab === 'schedule-hub' || activeTab === 'schedule-gen' || activeTab === 'schedule-review' || activeTab === 'round-runner') ? (
+            <ScheduleHub
+              selectedConclaveId={selectedConclaveId}
+              showGenWarning={showGenWarning}
+              clearGenWarning={clearGenWarning}
+              searchQuery={searchQuery}
+              initialStage={
+                activeTab === 'round-runner'
+                  ? 'runner'
+                  : activeTab === 'schedule-review'
+                  ? 'review'
+                  : activeTab === 'schedule-gen'
+                  ? 'generate'
+                  : 'auto'
+              }
+            />
           ) : activeTab === 'settings' ? (
             <Settings />
           ) : activeTab === 'feedback' ? (

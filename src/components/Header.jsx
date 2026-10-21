@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu } from 'lucide-react';
+import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
 
 export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId }) {
@@ -196,12 +196,25 @@ export default function Header({ searchQuery, setSearchQuery, activeTab, setActi
         <div className="relative" ref={profileDropdownRef}>
           <button
             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className="w-8.5 h-8.5 rounded-full bg-brand-red text-white flex items-center justify-center font-black text-xs border border-brand-red/10 shadow-sm cursor-pointer select-none hover:bg-red-750 transition-colors"
+            className="flex items-center gap-2.5 p-1 sm:px-2.5 sm:py-1 rounded-xl hover:bg-zinc-100/80 transition-smooth cursor-pointer group text-left"
           >
-            {(() => {
-              const name = loggedInAdmin?.name || 'Admin';
-              return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            })()}
+            <div className="w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-xs border border-brand-red/10 shadow-xs shrink-0 select-none">
+              {(() => {
+                const name = loggedInAdmin?.name || 'Admin';
+                return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+              })()}
+            </div>
+
+            <div className="hidden sm:flex flex-col min-w-0">
+              <span className="text-[12px] font-bold text-zinc-900 leading-tight truncate max-w-[130px] group-hover:text-brand-red transition-colors">
+                {loggedInAdmin?.name || 'Admin'}
+              </span>
+              <span className="text-[9.5px] text-zinc-400 font-semibold uppercase tracking-wider leading-none mt-0.5 truncate">
+                {loggedInAdmin?.region ? `${loggedInAdmin.region} Admin` : (loggedInAdmin?.role || 'Admin')}
+              </span>
+            </div>
+
+            <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform duration-200 hidden sm:block ${showProfileDropdown ? 'rotate-180 text-zinc-700' : 'group-hover:text-zinc-600'}`} />
           </button>
 
           {showProfileDropdown && (

@@ -160,24 +160,18 @@ export default function SuperadminLayout({
       )}
 
       {/* Superadmin Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-[240px] h-screen flex flex-col py-6 bg-zinc-50 border-r border-red-100 text-sidebar font-medium shrink-0 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:w-[220px] ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[270px] h-screen flex flex-col pt-4 pb-6 bg-zinc-50 border-r border-red-100 text-sidebar font-medium shrink-0 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:w-[260px] ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
 
         {/* Branding Header */}
-        <div className="px-4 mb-6 shrink-0 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src="/BNI-Guntur-Logo.png"
-              alt="BNI Logo"
-              className="h-8 w-auto object-contain shrink-0"
-            />
-            <div className="border-l-2 border-brand-red/30 pl-3 flex flex-col justify-center min-w-0">
-              <h1 className="text-[10px] font-bold text-brand-red leading-tight tracking-tight whitespace-nowrap">1-1-CONCLAVE</h1>
-              <p className="text-[7px] text-zinc-500 font-semibold tracking-wider uppercase whitespace-nowrap mt-0.5">Super Administrator</p>
-            </div>
-          </div>
+        <div className="px-4 mb-4 shrink-0 flex items-center justify-center relative">
+          <img
+            src="/bni-conclave.png"
+            alt="BNI 121 Conclave Logo"
+            className="h-16 w-auto object-contain"
+          />
           <button
             onClick={() => setIsSidebarOpen(false)}
-            className="lg:hidden p-1 rounded-lg hover:bg-zinc-200 text-zinc-550"
+            className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-zinc-200 text-zinc-550"
           >
             <X className="w-[18px] h-[18px]" />
           </button>

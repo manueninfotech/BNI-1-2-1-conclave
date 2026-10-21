@@ -50,6 +50,9 @@ export function calculateRoundTiming({
   startedAt,
   personsPerTable = 6,
   isRunning = true,
+  isPaused = false,
+  pausedAt = null,
+  elapsedMsBeforePause = null,
   now = Date.now(),
 } = {}) {
   const p = Math.max(1, Number(personsPerTable) || 6);
@@ -60,11 +63,12 @@ export function calculateRoundTiming({
 
   const startMs = parseStartTime(startedAt);
 
-  // If not started, paused, or invalid start time
+  // If not started or invalid start time
   if (isNaN(startMs) || !isRunning) {
     return {
       phase: 'not_started',
       phaseLabel: 'Ready to Start',
+      isPaused: false,
       isTalking: false,
       isReferral: false,
       isReferralOpen: false,
@@ -90,7 +94,11 @@ export function calculateRoundTiming({
     };
   }
 
-  const elapsedSecs = Math.max(0, Math.floor((now - startMs) / 1000));
+  const effectiveNow = isPaused
+    ? (pausedAt ? parseStartTime(pausedAt) : (elapsedMsBeforePause ? startMs + Number(elapsedMsBeforePause) : now))
+    : now;
+
+  const elapsedSecs = Math.max(0, Math.floor((effectiveNow - startMs) / 1000));
   const totalRemaining = Math.max(0, ROUND_BLOCK_DURATION_SECS - elapsedSecs);
   const progressPercent = Math.min(100, Math.round((elapsedSecs / ROUND_BLOCK_DURATION_SECS) * 100));
 

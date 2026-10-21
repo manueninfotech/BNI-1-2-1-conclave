@@ -455,7 +455,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
       document.body.style.overflow = '';
     };
   }, [selectedConclave]);
-  const [viewScope, setViewScope] = useState('global'); // 'region' or 'global' - default to global so all conclaves are visible
+  const [viewScope, setViewScope] = useState('region'); // Default to 'My Region' on open
 
   // Checked rows
   const [selectedRows, setSelectedRows] = useState(new Set());
@@ -1625,15 +1625,13 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   <button
                     onClick={() => {
                       if (setActiveTab) {
-                        setActiveTab('reports');
-                      } else {
-                        showToast('Fetching reports...', 'Starting file generation.');
+                        setActiveTab('schedule-review');
                       }
                       setSelectedConclave(null);
                     }}
                     className="flex-1 py-2.5 bg-brand-red hover:bg-red-700 text-white rounded-lg text-button font-bold transition-smooth shadow-sm cursor-pointer"
                   >
-                    View Reports
+                    View Schedule
                   </button>
                 </div>
               </>

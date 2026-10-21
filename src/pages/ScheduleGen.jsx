@@ -14,12 +14,13 @@ import {
   StopCircle,
   Lock,
   ShieldAlert,
+  ArrowRight,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
 
-export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearGenWarning }) {
+export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearGenWarning, onScheduleReady, isHubMode = false }) {
   // Read locked state from local storage conclaves
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_schedule_gen_conclaves_cache');
@@ -518,18 +519,20 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
   );
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6 animate-fade-in">
+    <div className={`w-full flex flex-col gap-6 animate-fade-in ${isHubMode ? '' : 'p-4 sm:p-6 max-w-[1600px] mx-auto'}`}>
 
       {/* Header Section */}
-      <div className="border-b border-zinc-100 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Schedule Generation</h2>
-          <p className="text-body-text text-zinc-500 mt-2">
-            Generate seating assignments for <span className="font-bold text-brand-red">{conclaveName}</span>.
-          </p>
-        </div>
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isHubMode ? 'pb-1' : 'border-b border-zinc-100 pb-6'}`}>
+        {!isHubMode && (
+          <div>
+            <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Schedule Generation</h2>
+            <p className="text-body-text text-zinc-500 mt-2">
+              Generate seating assignments for <span className="font-bold text-brand-red">{conclaveName}</span>.
+            </p>
+          </div>
+        )}
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className={`flex flex-wrap items-center gap-3 shrink-0 ${isHubMode ? 'ml-auto' : ''}`}>
           {!isConclaveCompleted && (
             <>
               <button
@@ -875,7 +878,8 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                       <StopCircle className="w-4 h-4" /> Abort Generation Task
                     </button>
                   ) : progress === 100 ? (
-                    <button
+                    <>
+                      <button
                       onClick={() => {
                         if (isLocked) {
                           showToast('Already Locked', 'This conclave is already locked.');
@@ -892,6 +896,17 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                       <Lock className="w-4 h-4" />
                       {isLocked ? 'Conclave Locked' : 'Lock Conclave & Publish'}
                     </button>
+                    {onScheduleReady && (
+                      <button
+                        type="button"
+                        onClick={onScheduleReady}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-[11px] uppercase tracking-wider transition-smooth cursor-pointer mt-2 shadow-sm"
+                      >
+                        <span>Review Generated Matrix</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
                   ) : (
                     <button
                       onClick={handleStartGeneration}

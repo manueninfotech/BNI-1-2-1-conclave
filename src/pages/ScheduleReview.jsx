@@ -10,14 +10,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   LockKeyhole,
-  ArrowRightLeft,
   X,
   Clock,
-  Save,
 } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function ScheduleReview({ setActiveTab, searchQuery: globalSearchQuery, selectedConclaveId }) {
+export default function ScheduleReview({ setActiveTab, searchQuery: globalSearchQuery, selectedConclaveId, onNavigateToRunner, isHubMode = false }) {
   const [conclave, setConclave] = useState(() => {
     const cached = localStorage.getItem('bni_schedule_review_conclave_cache');
     if (cached) {
@@ -364,17 +362,10 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
     ];
   }, [activeConclave?.score]);
 
-  // Manual swap states
-  const [swapTarget, setSwapTarget] = useState(null);
-  const [destTableId, setDestTableId] = useState('');
-  const [swapMode, setSwapMode] = useState('move');
-  const [targetMemberId, setTargetMemberId] = useState('');
-
   // KPI state
   const [issuesCount, setIssuesCount] = useState(0);
   const [warningsCount, setWarningsCount] = useState(0);
   const [overallScore, setOverallScore] = useState(100);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Validation affected list
   const [affectedList, setAffectedList] = useState([]);
@@ -425,8 +416,12 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
       setConclave(full);
       showToast('Round Started', `Round ${roundNumber} started.`);
       // Navigate to Round Runner tab so admin sees live running timer
-      window.history.pushState({}, '', '/admin/round-runner');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+      if (typeof onNavigateToRunner === 'function') {
+        onNavigateToRunner();
+      } else {
+        window.history.pushState({}, '', '/admin/round-runner');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
     } catch (err) {
       console.error('Failed to start round:', err.message || err);
       showToast('Start Round Failed', err.message || 'Could not start round.');
@@ -544,18 +539,20 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6 animate-fade-in relative pb-28">
+    <div className={`w-full flex flex-col gap-6 animate-fade-in relative pb-28 ${isHubMode ? '' : 'p-4 sm:p-6 max-w-[1600px] mx-auto'}`}>
 
       {/* Breadcrumbs & Header */}
-      <div className="border-b border-zinc-100 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Schedule Review</h2>
-          <p className="text-body-text text-zinc-500 mt-2">
-            Review seating assignments for <span className="font-bold text-brand-red">{conclaveName}</span> — resolve warnings before locking.
-          </p>
-        </div>
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isHubMode ? 'pb-1' : 'border-b border-zinc-100 pb-6'}`}>
+        {!isHubMode && (
+          <div>
+            <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Schedule Review</h2>
+            <p className="text-body-text text-zinc-500 mt-2">
+              Review seating assignments for <span className="font-bold text-brand-red">{conclaveName}</span> — resolve warnings before locking.
+            </p>
+          </div>
+        )}
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className={`flex flex-wrap items-center gap-3 shrink-0 ${isHubMode ? 'ml-auto' : ''}`}>
           <button
             onClick={handleRevalidate}
             type="button"
@@ -588,8 +585,12 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
           {(conclave?.status || '').toLowerCase() === 'running' && (
             <button
               onClick={() => {
-                window.history.pushState({}, '', '/admin/round-runner');
-                window.dispatchEvent(new PopStateEvent('popstate'));
+                if (typeof onNavigateToRunner === 'function') {
+                  onNavigateToRunner();
+                } else {
+                  window.history.pushState({}, '', '/admin/round-runner');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }
               }}
               type="button"
               className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition-smooth shadow-2xs cursor-pointer"
@@ -816,18 +817,6 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
                             </span>
                           </div>
                         </div>
-
-                        <div className="flex gap-1.5 opacity-0 group-hover/member:opacity-100 transition-opacity ml-2 shrink-0">
-                          <button
-                            onClick={() => {
-                              setSwapTarget({ member, table });
-                            }}
-                            className="p-1 text-zinc-400 hover:text-brand-red hover:bg-zinc-100 rounded transition-smooth cursor-pointer"
-                            title="Swap or Move Member"
-                          >
-                            <ArrowRightLeft className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -839,41 +828,7 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
       </div>
 
 
-      {/* Sticky footer action overlay */}
-      {hasUnsavedChanges && (
-        <div className="fixed bottom-0 left-0 lg:left-[220px] right-0 bg-zinc-900 border-t border-zinc-800 px-4 sm:px-6 py-4 z-40 flex justify-between items-center shadow-2xl animate-slide-up">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-zinc-800 flex items-center justify-center rounded-lg border border-zinc-700 shrink-0">
-              <Save className="w-4.5 h-4.5 text-brand-red" />
-            </div>
-            <div>
-              <p className="text-body-sm font-bold text-white">Unsaved Changes</p>
-              <p className="text-[10px] text-zinc-400 font-semibold">Manual override: 1 table modification detected.</p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                setHasUnsavedChanges(false);
-                showToast('Changes Discarded', 'Reverted back to standard algorithm seating.');
-              }}
-              className="px-4 py-1.5 text-zinc-400 hover:text-white font-bold text-button text-[10px] cursor-pointer"
-            >
-              Discard
-            </button>
-            <button
-              onClick={() => {
-                setHasUnsavedChanges(false);
-                showToast('Changes Saved', 'Override settings locked to conclave round directories.');
-              }}
-              className="px-5 py-2 bg-brand-red hover:bg-red-700 text-white font-bold text-button text-[10px] rounded-lg shadow-md transition-smooth cursor-pointer"
-            >
-              Save Changes
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Toast Alert Feedback */}
       {toast && (
@@ -889,183 +844,6 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
           >
             <X className="w-3.5 h-3.5" />
           </button>
-        </div>
-      )}
-
-      {/* Seating Swap/Move Editor Modal */}
-      {swapTarget && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 w-full max-w-md space-y-5 animate-scale-in">
-            <div className="flex justify-between items-start border-b border-zinc-100 pb-3">
-              <div>
-                <h3 className="text-body-md font-black text-zinc-950">Manual Seating Editor</h3>
-                <p className="text-[11px] text-zinc-500 font-semibold mt-0.5">Move or swap {swapTarget.member.name} ({swapTarget.member.category})</p>
-              </div>
-              <button onClick={() => { setSwapTarget(null); setDestTableId(''); setTargetMemberId(''); }} className="p-1 hover:bg-zinc-100 rounded text-zinc-400 cursor-pointer">
-                <X className="w-4.5 h-4.5" />
-              </button>
-            </div>
-
-            {/* Action Toggle */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 rounded-lg text-body-sm font-bold text-center">
-              <button
-                onClick={() => { setSwapMode('move'); setTargetMemberId(''); }}
-                className={`py-1.5 rounded-md cursor-pointer transition-smooth ${swapMode === 'move' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-              >
-                Move to Table
-              </button>
-              <button
-                onClick={() => setSwapMode('swap')}
-                className={`py-1.5 rounded-md cursor-pointer transition-smooth ${swapMode === 'swap' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-              >
-                Swap with Member
-              </button>
-            </div>
-
-            {/* Destination Selection */}
-            <div className="space-y-3.5">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] text-zinc-400 font-bold uppercase">Destination Table</label>
-                <select
-                  value={destTableId}
-                  onChange={(e) => {
-                    setDestTableId(e.target.value);
-                    setTargetMemberId('');
-                  }}
-                  className="w-full text-body-sm font-semibold border border-zinc-200 rounded-lg p-2 bg-zinc-50 outline-none cursor-pointer"
-                >
-                  <option value="">-- Select Target Table --</option>
-                  {localTables.filter(t => t.conclaveId === selectedConclaveId && t.id !== swapTarget.table.id).map(t => (
-                    <option key={t.id} value={t.id}>{t.id} ({t.members?.length || 0}/8 members)</option>
-                  ))}
-                </select>
-              </div>
-
-              {swapMode === 'swap' && destTableId && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] text-zinc-400 font-bold uppercase">Swap With Member</label>
-                  <select
-                    value={targetMemberId}
-                    onChange={(e) => setTargetMemberId(e.target.value)}
-                    className="w-full text-body-sm font-semibold border border-zinc-200 rounded-lg p-2 bg-zinc-50 outline-none cursor-pointer"
-                  >
-                    <option value="">-- Select Member to Swap --</option>
-                    {(localTables.find(t => t.id === destTableId)?.members || []).map(m => (
-                      <option key={m.id} value={m.id}>{m.name} ({m.category})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Validation Check State */}
-            {destTableId && (() => {
-              const targetTable = localTables.find(t => t.id === destTableId);
-              if (!targetTable) return null;
-
-              let conflictDetected = false;
-              let warningMsg = '';
-
-              if (swapMode === 'move') {
-                const match = targetTable.members?.find(m => m.category.toLowerCase() === swapTarget.member.category.toLowerCase());
-                if (match) {
-                  conflictDetected = true;
-                  warningMsg = `⚠️ Conflict: ${match.name} representing "${match.category}" is already seated at ${destTableId}.`;
-                }
-              } else if (swapMode === 'swap' && targetMemberId) {
-                const swapPartner = targetTable.members?.find(m => m.id === targetMemberId);
-                if (swapPartner) {
-                  const conflictAtDest = targetTable.members?.find(m => m.id !== swapPartner.id && m.category.toLowerCase() === swapTarget.member.category.toLowerCase());
-                  const conflictAtOrig = swapTarget.table.members?.find(m => m.id !== swapTarget.member.id && m.category.toLowerCase() === swapPartner.category.toLowerCase());
-
-                  if (conflictAtDest) {
-                    conflictDetected = true;
-                    warningMsg = `⚠️ Conflict at ${destTableId}: ${conflictAtDest.name} represents "${conflictAtDest.category}".`;
-                  } else if (conflictAtOrig) {
-                    conflictDetected = true;
-                    warningMsg = `⚠️ Conflict at ${swapTarget.table.id}: ${conflictAtOrig.name} represents "${conflictAtOrig.category}".`;
-                  }
-                }
-              }
-
-              return (
-                <div className={`p-3 rounded-lg border text-[11px] font-semibold flex items-center gap-2 ${conflictDetected
-                  ? 'bg-red-50/50 border-red-100 text-brand-red'
-                  : 'bg-emerald-50/50 border-emerald-100 text-emerald-800'
-                  }`}>
-                  {conflictDetected ? (
-                    <span>{warningMsg}</span>
-                  ) : (
-                    <span>✅ Seating adjustment is safe. No conflicts detected.</span>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Confirm / Cancel Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => { setSwapTarget(null); setDestTableId(''); setTargetMemberId(''); }}
-                className="flex-1 py-2 bg-white border border-zinc-200 text-zinc-700 rounded-lg text-button font-bold hover:bg-zinc-50 transition-smooth cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={!destTableId || (swapMode === 'swap' && !targetMemberId)}
-                onClick={() => {
-                  const targetTable = localTables.find(t => t.id === destTableId);
-                  if (!targetTable) return;
-
-                  let updatedTables = localTables.map(t => {
-                    if (t.id === swapTarget.table.id) {
-                      if (swapMode === 'move') {
-                        const newMembers = t.members.filter(m => m.id !== swapTarget.member.id);
-                        return {
-                          ...t,
-                          members: newMembers,
-                          capacity: `${newMembers.length}/8`
-                        };
-                      } else {
-                        const swapPartner = targetTable.members.find(m => m.id === targetMemberId);
-                        const newMembers = t.members.map(m => m.id === swapTarget.member.id ? swapPartner : m);
-                        return {
-                          ...t,
-                          members: newMembers
-                        };
-                      }
-                    }
-                    if (t.id === destTableId) {
-                      if (swapMode === 'move') {
-                        const newMembers = [...(t.members || []), swapTarget.member];
-                        return {
-                          ...t,
-                          members: newMembers,
-                          capacity: `${newMembers.length}/8`
-                        };
-                      } else {
-                        const newMembers = t.members.map(m => m.id === targetMemberId ? swapTarget.member : m);
-                        return {
-                          ...t,
-                          members: newMembers
-                        };
-                      }
-                    }
-                    return t;
-                  });
-
-                  setLocalTables(updatedTables);
-                  setHasUnsavedChanges(true);
-                  showToast('Seating Updated', `${swapTarget.member.name} has been successfully reassigned.`);
-                  setSwapTarget(null);
-                  setDestTableId('');
-                  setTargetMemberId('');
-                }}
-                className="flex-1 py-2 bg-brand-red hover:bg-red-700 text-white rounded-lg text-button font-bold transition-smooth shadow-sm cursor-pointer disabled:opacity-50"
-              >
-                Confirm Selection
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

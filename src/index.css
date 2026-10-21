@@ -4,21 +4,26 @@
 
 
 @theme {
-  --color-brand-red: #cf2e2e;
+  --color-brand-red: #CF2030;
+  --color-bni-red: #CF2030;
+  --color-sterling-grey: #C8C8C8;
+  --color-cool-grey-light: #F2F2F2;
+  --color-cool-grey-dark: #64666A;
+  --color-process-black: #000000;
   --color-zinc-55: #f7f7f8;
   --color-zinc-150: #ececec;
   --color-zinc-250: #e2e2e5;
   --color-zinc-450: #71717a;
-  --color-zinc-455: #52525b;
-  --color-zinc-505: #52525b;
+  --color-zinc-455: #64666A;
+  --color-zinc-505: #64666A;
   --color-zinc-550: #3f3f46;
   --color-zinc-650: #3f3f46;
   --color-zinc-750: #27272a;
   --color-zinc-755: #27272a;
   --color-zinc-850: #18181b;
-  --color-zinc-955: #09090b;
-  --font-display: "Plus Jakarta Sans", sans-serif;
-  --font-sans: "Plus Jakarta Sans", sans-serif;
+  --color-zinc-955: #000000;
+  --font-display: "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
@@ -266,13 +271,13 @@ main>div>* {
 select[class*="border-zinc-"],
 input[class*="border-zinc-"],
 button[class*="border-zinc-"] {
-  border-color: rgba(207, 46, 46, 0.26) !important;
+  border-color: rgba(207, 32, 48, 0.22) !important;
   box-shadow: none !important;
 }
 
 /* Quick Actions Buttons: Keep light grey shade but add the BNI red border */
 .quick-action-btn {
-  border-color: rgba(207, 46, 46, 0.26) !important;
+  border-color: rgba(207, 32, 48, 0.22) !important;
   background-color: #ffffff !important;
   /* bg-white */
   box-shadow: none !important;

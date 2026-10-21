@@ -1,26 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ResponsiveContainer, PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import {
   Users,
-  Bolt,
   Award,
   Calendar,
-  CheckCircle2,
   Clock,
   ChevronRight,
   UserCheck,
   MapPin,
-  UserPlus,
-  PlusCircle,
-  BadgeCheck,
-  Sparkles,
-  BarChart3,
-  ChevronDown,
   Send,
-  Shield
+  Shield,
+  CheckCircle2
 } from 'lucide-react';
 
 import { api } from '../services/api';
+import { colors } from '../config/theme';
 
 export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin }) {
   const [referrals, setReferrals] = useState(() => {
@@ -40,14 +34,14 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return [];
   });
   const [stats, setStats] = useState(() => {
     const cached = localStorage.getItem('bni_admin_stats_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return null;
   });
@@ -99,8 +93,6 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     loadStatsAndReferrals();
   }, [selectedConclaveId]);
 
-  // Conclave selector — from props
-  const [showPicker, setShowPicker] = useState(false);
 
   const selectedConclave = useMemo(() => {
     if (conclaves.length === 0) return null;
@@ -119,18 +111,6 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     return 0;
   }, [stats]);
 
-  const filteredCaptains = useMemo(() => {
-    const list = [];
-    if (stats && stats.counts.captains > 0) {
-      return Array.from({ length: stats.counts.captains }).map((_, i) => ({
-        id: `cap-${i}`,
-        name: `Table Captain ${i + 1}`,
-        status: 'Assigned',
-        conclaveIds: [selectedConclaveId]
-      }));
-    }
-    return list;
-  }, [stats, selectedConclaveId]);
 
   const filteredReferrals = useMemo(() => {
     return referrals.filter(r => !r.conclaveId || r.conclaveId === selectedConclaveId);
@@ -180,6 +160,38 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     });
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [filteredReferrals]);
+
+  // Referral Status Distribution Data for Donut Chart
+  const referralStatusData = useMemo(() => {
+    const total = connectedReferrals + pendingReferrals + closedReferrals;
+    if (total === 0) {
+      return [{ name: 'No Referrals', value: 1, color: '#e4e4e7' }];
+    }
+    const data = [];
+    if (connectedReferrals > 0) data.push({ name: 'Connected', value: connectedReferrals, color: '#10b981' });
+    if (pendingReferrals > 0) data.push({ name: 'Pending', value: pendingReferrals, color: '#f59e0b' });
+    if (closedReferrals > 0) data.push({ name: 'Closed', value: closedReferrals, color: colors.bniRed });
+    return data;
+  }, [connectedReferrals, pendingReferrals, closedReferrals]);
+
+  // Referral Stages Comparison Data for Bar Chart
+  const referralPipelineData = useMemo(() => [
+    { stage: 'Total', count: totalReferrals, fill: '#64666A' },
+    { stage: 'Connected', count: connectedReferrals, fill: '#10b981' },
+    { stage: 'Pending', count: pendingReferrals, fill: '#f59e0b' },
+    { stage: 'Closed', count: closedReferrals, fill: colors.bniRed }
+  ], [totalReferrals, connectedReferrals, pendingReferrals, closedReferrals]);
+
+
+  // Leaderboard data for horizontal Bar Chart
+  const leaderboardChartData = useMemo(() => {
+    if (leaderboard.length === 0) return [];
+    return leaderboard.map(item => ({
+      name: item.name.length > 12 ? item.name.substring(0, 10) + '...' : item.name,
+      fullName: item.name,
+      count: item.count
+    }));
+  }, [leaderboard]);
 
   // Status badge styles
   const getStatusStyle = (status) => {
@@ -233,280 +245,156 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     );
   }
 
-  const conclaveDate = selectedConclave.dateRange || (selectedConclave.date ? new Date(selectedConclave.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A');
+  const conclaveDate = useMemo(() => {
+    if (selectedConclave.startDate && selectedConclave.endDate) {
+      const s = new Date(selectedConclave.startDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      const e = new Date(selectedConclave.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      return s === e ? s : `${s} – ${e}`;
+    }
+    if (selectedConclave.date) {
+      return new Date(selectedConclave.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    return selectedConclave.dateRange || 'Date TBD';
+  }, [selectedConclave]);
+
   const conclaveVenue = selectedConclave.venueLocation || selectedConclave.venue || selectedConclave.location || 'N/A';
   const conclaveProgress = (selectedConclave.status || '').toLowerCase() === 'completed' ? 100 : (selectedConclave.status || '').toLowerCase() === 'running' ? 60 : 0;
 
   return (
     <div className="space-y-6 sm:space-y-8 p-4 sm:p-8 max-w-[1600px] mx-auto w-full">
-
-      {/* Page Header */}
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-100 pb-6">
-        <div>
-          <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Admin Dashboard</h2>
-          <p className="text-body-text text-zinc-500 mt-1">
-            Welcome back, {loggedInAdmin?.name || 'Admin'}.
-          </p>
+      {/* Dashboard Top Header */}
+      <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
+            {selectedConclave.name || selectedConclave.title || 'Conclave Dashboard'}
+          </h1>
+          {(selectedConclave.status || '').toLowerCase() === 'running' ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Running Live
+            </span>
+          ) : (selectedConclave.status || '').toLowerCase() === 'completed' ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-700 border border-zinc-250">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Completed
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+              {displayStatus(selectedConclave.status)}
+            </span>
+          )}
         </div>
-      </header>
 
-      {/* Conclave Selector */}
-      <div className="relative">
-        <button
-          onClick={() => setShowPicker(!showPicker)}
-          className="w-full flex items-center justify-between px-5 py-3.5 bg-white border border-zinc-200 rounded-xl shadow-sm hover:shadow-md transition-smooth cursor-pointer group"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 bg-brand-red/10 text-brand-red rounded-lg flex items-center justify-center shrink-0">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div className="text-left min-w-0">
-              <p className="text-[13px] font-black text-zinc-900 truncate">{selectedConclave.name || selectedConclave.title || 'Conclave'}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-full ${getStatusStyle(selectedConclave.status)}`}>
-                  {displayStatus(selectedConclave.status)}
-                </span>
-                <span className="text-[10px] text-zinc-400 font-semibold">{conclaveDate}</span>
-              </div>
-            </div>
-          </div>
-          <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${showPicker ? 'rotate-180' : ''}`} />
-        </button>
-
-        {showPicker && (
-          <div className="absolute z-30 top-full mt-1.5 left-0 right-0 bg-white border border-zinc-200 rounded-xl shadow-xl overflow-hidden max-h-[320px] overflow-y-auto animate-fade-in">
-            {conclaves.map(c => (
-              <button
-                key={c.id}
-                onClick={() => { setSelectedConclaveId(c.id); setShowPicker(false); }}
-                className={`w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-zinc-50 transition-smooth cursor-pointer border-b border-zinc-100 last:border-0 ${c.id === selectedConclaveId ? 'bg-red-50/30' : ''}`}
-              >
-                <div className={`w-2 h-2 rounded-full shrink-0 ${(c.status || '').toLowerCase() === 'running' ? 'bg-emerald-500 animate-pulse' : (c.status || '').toLowerCase() === 'upcoming' || (c.status || '').toLowerCase() === 'registration_open' ? 'bg-amber-400' : (c.status || '').toLowerCase() === 'completed' ? 'bg-zinc-300' : 'bg-zinc-200'}`} />
-                <div className="min-w-0 flex-1">
-                  <p className={`text-[12px] font-bold truncate ${c.id === selectedConclaveId ? 'text-brand-red' : 'text-zinc-800'}`}>{c.name || c.title || 'Conclave'}</p>
-                  <p className="text-[9.5px] text-zinc-400 font-semibold mt-0.5">
-                    {c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A'} • {c.venueLocation || c.venue || 'N/A'}
-                  </p>
-                </div>
-                <span className={`px-1.5 py-0.5 text-[7.5px] font-black uppercase tracking-wider rounded shrink-0 ${getStatusStyle(c.status)}`}>
-                  {displayStatus(c.status)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Clean metadata line */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-zinc-500 font-semibold mt-2">
+          <span className="inline-flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-brand-red" />
+            <span>{conclaveVenue}</span>
+          </span>
+          <span className="text-zinc-300">•</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+            <span>{conclaveDate}</span>
+          </span>
+          {selectedConclave.coordinator && (
+            <>
+              <span className="text-zinc-300">•</span>
+              <span className="inline-flex items-center gap-1.5">
+                <UserCheck className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Coordinator: <strong className="text-zinc-800 font-bold">{selectedConclave.coordinator}</strong></span>
+              </span>
+            </>
+          )}
+          {selectedConclave.region && (
+            <>
+              <span className="text-zinc-300">•</span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-650 text-[11px] font-bold">
+                {selectedConclave.region}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* KPI Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Live session active banner if running */}
+      {(selectedConclave.status || '').toLowerCase() === 'running' && (
+        <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs font-semibold text-emerald-950">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
+          <span><strong className="text-emerald-800 font-extrabold">Live Session Active:</strong> Table rounds are currently progressing in real time.</span>
+        </div>
+      )}
+
+      {/* Unified Core Metrics Grid — Displayed ONCE */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Card 1: Members */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <div className="flex items-center justify-between">
-            <span className="text-label-md text-zinc-500 uppercase font-semibold">Members</span>
-            <Users className="w-4 h-4 text-zinc-350" />
+            <span className="text-label-md text-zinc-500 uppercase font-semibold">Total Members</span>
+            <span className="p-2 rounded-lg bg-red-50 text-brand-red">
+              <Users className="w-4.5 h-4.5" />
+            </span>
           </div>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalMembers}</span>
-          <span className="text-[9.5px] text-zinc-400 font-semibold mt-1.5">of {selectedConclave.memberLimit || 100} capacity</span>
+          <div className="mt-3">
+            <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{totalMembers}</span>
+            <p className="text-[11px] text-zinc-400 font-semibold mt-1.5">
+              {selectedConclave.memberLimit ? `of ${selectedConclave.memberLimit} capacity` : 'Enrolled Attendees'}
+            </p>
+          </div>
         </div>
 
+        {/* Card 2: Captains */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <div className="flex items-center justify-between">
-            <span className="text-label-md text-zinc-500 uppercase font-semibold">Captains</span>
-            <Shield className="w-4 h-4 text-zinc-350" />
+            <span className="text-label-md text-zinc-500 uppercase font-semibold">Table Captains</span>
+            <span className="p-2 rounded-lg bg-red-50 text-brand-red">
+              <Shield className="w-4.5 h-4.5" />
+            </span>
           </div>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalCaptains}</span>
-          <span className="text-[9.5px] text-zinc-400 font-semibold mt-1.5">of {selectedConclave.captainLimit || 12} limit</span>
+          <div className="mt-3">
+            <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{totalCaptains}</span>
+            <p className="text-[11px] text-zinc-400 font-semibold mt-1.5">
+              {totalCaptains > 0 ? `${totalCaptains} Table Leads Assigned` : 'Table Anchors'}
+            </p>
+          </div>
         </div>
 
+        {/* Card 3: Referrals */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <div className="flex items-center justify-between">
-            <span className="text-label-md text-zinc-500 uppercase font-semibold">Referrals</span>
-            <Send className="w-4 h-4 text-zinc-350" />
+            <span className="text-label-md text-zinc-500 uppercase font-semibold">Referrals Exchanged</span>
+            <span className="p-2 rounded-lg bg-red-50 text-brand-red">
+              <Send className="w-4.5 h-4.5" />
+            </span>
           </div>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalReferrals}</span>
-          <span className="text-[9.5px] text-zinc-400 font-semibold mt-1.5">{connectedReferrals} connected, {pendingReferrals} pending</span>
+          <div className="mt-3">
+            <span className="text-display-sm font-extrabold text-brand-red leading-none">{totalReferrals}</span>
+            <p className="text-[11px] text-zinc-400 font-semibold mt-1.5">
+              {connectedReferrals} Connected · {pendingReferrals} Pending
+            </p>
+          </div>
         </div>
 
+        {/* Card 4: Conclave Progress */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <div className="flex items-center justify-between">
-            <span className="text-label-md text-zinc-500 uppercase font-semibold">Status</span>
-            <CheckCircle2 className="w-4 h-4 text-zinc-350" />
+            <span className="text-label-md text-zinc-500 uppercase font-semibold">Conclave Progress</span>
+            <span className="p-2 rounded-lg bg-zinc-100 text-zinc-600">
+              <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
+            </span>
           </div>
-          <span className={`text-display-sm font-extrabold leading-none mt-3 ${(selectedConclave.status || '').toLowerCase() === 'running' ? 'text-emerald-600' : (selectedConclave.status || '').toLowerCase() === 'completed' ? 'text-zinc-500' : 'text-amber-600'}`}>
-            {displayStatus(selectedConclave.status)}
-          </span>
-          <span className="text-[9.5px] text-zinc-400 font-semibold mt-1.5">{conclaveProgress}% complete</span>
-        </div>
-      </section>
-
-      {/* Quick Actions & Featured Conclave Highlight */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-
-        {/* Quick Management Panel */}
-        <div className="lg:col-span-3 flex flex-col gap-2.5">
-          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 px-0.5">Quick Management</span>
-
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => setActiveTab && setActiveTab('members')}
-              className="w-full flex items-center justify-between px-4 py-3.5 border quick-action-btn text-zinc-850 rounded-lg transition-smooth cursor-pointer font-bold tracking-tight"
-            >
-              <span className="text-button">Add New Member</span>
-              <UserPlus className="w-[18px] h-[18px] text-brand-red" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab && setActiveTab('conclaves')}
-              className="w-full flex items-center justify-between px-4 py-3.5 border quick-action-btn text-zinc-850 rounded-lg transition-smooth cursor-pointer font-bold tracking-tight"
-            >
-              <span className="text-button">Create Conclave</span>
-              <PlusCircle className="w-[18px] h-[18px] text-brand-red" />
-            </button>
-
-            <button
-              onClick={() => {
-                localStorage.setItem('schedule_review_tab', 'validation');
-                setActiveTab && setActiveTab('schedule-review');
-              }}
-              className="w-full flex items-center justify-between px-4 py-3.5 border quick-action-btn text-zinc-850 rounded-lg transition-smooth cursor-pointer font-bold tracking-tight"
-            >
-              <span className="text-button">Run Validation</span>
-              <BadgeCheck className="w-[18px] h-[18px] text-brand-red" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab && setActiveTab('schedule-gen')}
-              className="w-full flex items-center justify-between px-4 py-3.5 border quick-action-btn text-zinc-850 rounded-lg transition-smooth cursor-pointer font-bold tracking-tight"
-            >
-              <span className="text-button">Generate Schedule</span>
-              <Sparkles className="w-[18px] h-[18px] text-brand-red" />
-            </button>
-
-            <button
-              onClick={() => setActiveTab && setActiveTab('reports')}
-              className="w-full flex items-center justify-between px-4 py-3.5 border quick-action-btn text-zinc-850 rounded-lg transition-smooth cursor-pointer font-bold tracking-tight"
-            >
-              <span className="text-button">View Reports</span>
-              <BarChart3 className="w-[18px] h-[18px] text-brand-red" />
-            </button>
-          </div>
-        </div>
-
-        {/* Featured Conclave Highlight — Dynamic */}
-        <div className="lg:col-span-9 p-6 border border-zinc-200 bg-white text-zinc-800 flex flex-col md:flex-row gap-6 relative overflow-hidden group shadow-sm rounded-xl justify-between items-stretch">
-
-          <div className="flex-1 z-10 flex flex-col py-1">
-            <div className="flex items-center gap-3">
-              <span className="p-2.5 bg-white rounded-xl text-brand-red border border-zinc-200 shadow-inner flex items-center justify-center">
-                <Calendar className="w-5 h-5" />
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{conclaveProgress}%</span>
+              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">
+                {(selectedConclave.status || '').toLowerCase() === 'completed' ? 'Finished' : (selectedConclave.status || '').toLowerCase() === 'running' ? 'Active' : 'Scheduled'}
               </span>
-              <div>
-                <h3 className="text-headline-md font-bold leading-tight text-zinc-950">{selectedConclave.name || selectedConclave.title || 'Conclave'}</h3>
-                <div className="flex flex-wrap gap-3 mt-1.5 items-center">
-                  <span className={`text-[9px] px-2 py-0.5 rounded font-extrabold uppercase tracking-wider shadow-sm ${getStatusStyle(selectedConclave.status)}`}>
-                    {(selectedConclave.status || '').toLowerCase() === 'running' ? 'Current Conclave Running' : displayStatus(selectedConclave.status)}
-                  </span>
-                  <span className="text-label-xs text-zinc-500 flex items-center gap-1 font-semibold">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400" /> {conclaveVenue}
-                  </span>
-                  {(selectedConclave.regStartDate || selectedConclave.regEndDate || selectedConclave.registrationCloseDate) && (
-                    <span className="text-label-xs text-zinc-500 flex items-center gap-1 font-semibold bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                      <Clock className="w-3.5 h-3.5 text-zinc-400" /> Reg: {selectedConclave.regStartDate ? new Date(selectedConclave.regStartDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Open'} – {selectedConclave.regEndDate || selectedConclave.registrationCloseDate ? new Date(selectedConclave.regEndDate || selectedConclave.registrationCloseDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Close'}
-                    </span>
-                  )}
-                </div>
-              </div>
             </div>
-
-            <div className="flex flex-wrap gap-x-10 gap-y-4 py-4 border-y border-zinc-200/80 mt-5">
-              <div className="space-y-0.5">
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Members</p>
-                <p className="font-extrabold text-[15px] text-zinc-950 leading-tight mt-1">{totalMembers}</p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Captains</p>
-                <p className="font-extrabold text-[15px] text-zinc-950 leading-tight mt-1">{totalCaptains}</p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Referrals</p>
-                <p className="font-extrabold text-[15px] text-zinc-950 leading-tight mt-1">{totalReferrals} Exchanged</p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Coordinator</p>
-                <p className="font-extrabold text-[15px] text-zinc-950 leading-tight mt-1">{selectedConclave.coordinator}</p>
-              </div>
+            <div className="w-full h-2 rounded-full overflow-hidden bg-zinc-100 mt-2 border border-zinc-200/70">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-red-600 to-brand-red transition-all duration-700"
+                style={{ width: `${Math.max(conclaveProgress, 2)}%` }}
+              />
             </div>
-
-            {/* Live indicator for Running conclaves */}
-            {(selectedConclave.status || '').toLowerCase() === 'running' && (
-              <div className="mt-4 flex items-start gap-2.5">
-                <span className="flex h-2 w-2 relative mt-1 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-red opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-red"></span>
-                </span>
-                <p className="text-[11px] leading-normal font-semibold text-zinc-600">
-                  <strong className="text-brand-red font-bold">Live Session</strong> is currently in progress. Captains should check-in attendees at their respective tables.
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2 mt-auto pt-4">
-              <div className="flex justify-between text-[10px] font-bold uppercase text-zinc-555 tracking-wider">
-                <span>Conclave Progress</span>
-                <span>{conclaveProgress}%</span>
-              </div>
-              <div className="w-full h-2 rounded-full overflow-hidden bg-zinc-250 cursor-pointer pointer-events-none">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart layout="vertical" data={[{ name: 'Progress', value: conclaveProgress }]} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                    <XAxis type="number" domain={[0, 100]} hide />
-                    <YAxis type="category" dataKey="name" hide />
-                    <Tooltip formatter={(value) => `${value}%`} cursor={false} />
-                    <Bar dataKey="value" fill="#cf2e2e" radius={[4, 4, 4, 4]} background={{ fill: '#e4e4e7' }} barSize={8} activeBar={{ fill: '#cf2e2e' }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Right side: Captain activity & timeline */}
-          <div className="w-full md:w-[250px] z-10 flex flex-col justify-between min-h-[175px] md:border-l border-zinc-200/80 md:pl-6 pt-4 md:pt-0">
-            <div>
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Captain Breakdown</p>
-              <div className="space-y-3 mt-4">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  <span className="text-body-sm font-semibold text-zinc-800">{filteredCaptains.filter(c => c.status === 'Assigned').length} Assigned</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-                  <span className="text-body-sm font-semibold text-zinc-800">{filteredCaptains.filter(c => c.status === 'Available').length} Available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-zinc-400"></span>
-                  <span className="text-body-sm font-semibold text-zinc-800">{filteredCaptains.filter(c => c.status === 'Busy').length} Busy</span>
-                </div>
-              </div>
-
-              {/* Captain Avatars */}
-              <div className="flex items-center gap-2 mt-5 pl-0.5">
-                <div className="flex -space-x-1.5">
-                  {filteredCaptains.slice(0, 4).map((cap, i) => (
-                    <div key={cap.id} className={`w-6 h-6 rounded-full ${i === 0 ? 'bg-brand-red' : i === 1 ? 'bg-zinc-700' : i === 2 ? 'bg-zinc-500' : 'bg-zinc-300'} text-white flex items-center justify-center text-[7.5px] font-black border-2 border-white shadow-xs`}>
-                      {cap.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                  ))}
-                </div>
-                {filteredCaptains.length > 4 && (
-                  <span className="text-[9.5px] text-zinc-450 font-bold uppercase tracking-wider ml-1">+{filteredCaptains.length - 4} more</span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setActiveTab && setActiveTab('captains')}
-              className="w-full py-2.5 text-label-md font-bold text-zinc-800 border border-zinc-200 bg-white hover:bg-zinc-50 transition-smooth cursor-pointer mt-4 uppercase tracking-wider text-[10px] shadow-xs rounded-lg"
-            >
-              Manage Captains
-            </button>
           </div>
         </div>
       </section>
@@ -514,90 +402,174 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
       {/* Analytics: Referrals & Leaderboard */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Referrals Tracker — Dynamic */}
-        <div className="p-5 border border-zinc-200/80 rounded-xl bg-white shadow-sm hover:shadow-md transition-smooth flex flex-col justify-between">
+        {/* Referrals Status & Pipeline Chart Card */}
+        <div className="p-6 border border-zinc-200/80 rounded-xl bg-white shadow-sm hover:shadow-md transition-smooth flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-5">
-              <h4 className="text-title-lg text-zinc-950 font-semibold">Referrals Tracker</h4>
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-brand-red" />
+                <h4 className="text-title-lg text-zinc-950 font-semibold">Referrals Status & Pipeline</h4>
+              </div>
               <span className="text-label-xs text-zinc-400 font-bold uppercase tracking-wider">{selectedConclave.name}</span>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-6 mt-3">
-              <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
-                <PieChart width={128} height={128}>
-                  <Pie
-                    data={[
-                      { value: connectedReferrals + closedReferrals, fill: '#cf2e2e' },
-                      { value: Math.max(pendingReferrals, 1), fill: '#f4f4f5' }
-                    ]}
-                    dataKey="value"
-                    innerRadius={46}
-                    outerRadius={56}
-                    startAngle={90}
-                    endAngle={-270}
-                    stroke="none"
-                  />
-                </PieChart>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-display-sm text-zinc-950 font-bold leading-none">{totalReferrals}</span>
-                  <span className="text-label-xs text-zinc-400 font-bold uppercase tracking-wider mt-1">Total</span>
+            {/* Donut and Status breakdown */}
+            <div className="flex flex-col sm:flex-row items-center gap-6 pt-2">
+              <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={referralStatusData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={46}
+                      outerRadius={62}
+                      startAngle={90}
+                      endAngle={-270}
+                      paddingAngle={referralStatusData.length > 1 ? 4 : 0}
+                      stroke="none"
+                    >
+                      {referralStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color || entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value, name) => [`${value} referrals`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-display-sm text-zinc-950 font-extrabold leading-none">{totalReferrals}</span>
+                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider mt-1">Total</span>
                 </div>
               </div>
 
-              <div className="flex-1 w-full space-y-2">
-                <div className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                  <span className="text-body-sm font-semibold text-zinc-500 flex items-center gap-1.5">
-                    <span className="h-2 w-2 bg-brand-red rounded-full"></span> Connected
+              <div className="flex-1 w-full space-y-2.5">
+                <div className="flex justify-between items-center p-2.5 bg-emerald-50/50 rounded-lg border border-emerald-100/80">
+                  <span className="text-body-sm font-semibold text-emerald-900 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 bg-emerald-500 rounded-full"></span> Connected
                   </span>
-                  <span className="font-bold text-zinc-850 text-body-md">{connectedReferrals}</span>
+                  <div className="text-right">
+                    <span className="font-extrabold text-emerald-950 text-body-md">{connectedReferrals}</span>
+                    <span className="text-[9px] text-emerald-600 font-bold ml-1.5">
+                      ({totalReferrals > 0 ? Math.round((connectedReferrals / totalReferrals) * 100) : 0}%)
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                  <span className="text-body-sm font-semibold text-zinc-500 flex items-center gap-1.5">
-                    <span className="h-2 w-2 bg-amber-400 rounded-full"></span> Pending
+
+                <div className="flex justify-between items-center p-2.5 bg-amber-50/50 rounded-lg border border-amber-100/80">
+                  <span className="text-body-sm font-semibold text-amber-900 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 bg-amber-500 rounded-full"></span> Pending
                   </span>
-                  <span className="font-bold text-zinc-850 text-body-md">{pendingReferrals}</span>
+                  <div className="text-right">
+                    <span className="font-extrabold text-amber-950 text-body-md">{pendingReferrals}</span>
+                    <span className="text-[9px] text-amber-600 font-bold ml-1.5">
+                      ({totalReferrals > 0 ? Math.round((pendingReferrals / totalReferrals) * 100) : 0}%)
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                  <span className="text-body-sm font-semibold text-zinc-500 flex items-center gap-1.5">
-                    <span className="h-2 w-2 bg-zinc-400 rounded-full"></span> Closed
+
+                <div className="flex justify-between items-center p-2.5 bg-red-50/40 rounded-lg border border-red-100/80">
+                  <span className="text-body-sm font-semibold text-red-900 flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 bg-brand-red rounded-full"></span> Closed
                   </span>
-                  <span className="font-bold text-zinc-850 text-body-md">{closedReferrals}</span>
+                  <div className="text-right">
+                    <span className="font-extrabold text-red-950 text-body-md">{closedReferrals}</span>
+                    <span className="text-[9px] text-red-600 font-bold ml-1.5">
+                      ({totalReferrals > 0 ? Math.round((closedReferrals / totalReferrals) * 100) : 0}%)
+                    </span>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Referral Stages Comparison Bar Chart */}
+            <div className="mt-5 pt-4 border-t border-zinc-100">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Referral Stages Comparison</span>
+                <span className="text-[9px] font-semibold text-zinc-400">Activity Funnel</span>
+              </div>
+              <div className="w-full h-36">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={referralPipelineData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
+                    <Tooltip formatter={(value) => [`${value} referrals`, 'Volume']} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={28}>
+                      {referralPipelineData.map((entry, index) => (
+                        <Cell key={`pipe-cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Top Referral Givers — Dynamic Leaderboard */}
-        <div className="p-5 border border-zinc-200/80 rounded-xl bg-white shadow-sm hover:shadow-md transition-smooth flex flex-col justify-between">
+        {/* Top Referral Givers — Bar Chart & Leaderboard */}
+        <div className="p-6 border border-zinc-200/80 rounded-xl bg-white shadow-sm hover:shadow-md transition-smooth flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h4 className="text-title-lg text-zinc-950 font-semibold">Top Referral Givers</h4>
-              <span className="text-label-xs text-zinc-400 font-bold uppercase tracking-wider">This Conclave</span>
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-brand-red" />
+                <h4 className="text-title-lg text-zinc-950 font-semibold">Top Referral Givers</h4>
+              </div>
+              <span className="text-label-xs text-zinc-400 font-bold uppercase tracking-wider">Leaderboard</span>
             </div>
 
-            <div className="space-y-1">
-              {leaderboard.length === 0 ? (
-                <p className="text-body-sm text-zinc-400 font-semibold text-center py-6">No referrals exchanged in this conclave yet.</p>
-              ) : (
-                leaderboard.map((person, idx) => (
-                  <div key={person.name + idx} className="flex items-center justify-between py-1.5 px-2 hover:bg-zinc-50 rounded-lg transition-smooth border border-transparent hover:border-zinc-100/50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-red/10 text-brand-red font-bold text-xs flex items-center justify-center shrink-0 border border-brand-red/10">
-                        {idx + 1}
+            {leaderboard.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-12 h-12 bg-zinc-50 border border-zinc-200 rounded-full flex items-center justify-center mb-3">
+                  <Send className="w-5 h-5 text-zinc-400" />
+                </div>
+                <p className="text-body-sm text-zinc-500 font-semibold">No referrals exchanged in this conclave yet.</p>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-xs">Members who submit referrals during the conclave will automatically appear here with live metrics.</p>
+              </div>
+            ) : (
+              <div>
+                {/* Horizontal Bar Chart for Top Givers */}
+                <div className="w-full h-44 mb-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={leaderboardChartData}
+                      margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+                    >
+                      <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: '#27272a', fontWeight: 600 }}
+                        width={85}
+                      />
+                      <Tooltip formatter={(value, _, item) => [`${value} referrals`, item.payload.fullName]} />
+                      <Bar dataKey="count" fill={colors.bniRed} radius={[0, 6, 6, 0]} barSize={16} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Ranked List */}
+                <div className="space-y-1.5 pt-3 border-t border-zinc-100 max-h-48 overflow-y-auto">
+                  {leaderboard.map((person, idx) => (
+                    <div key={person.name + idx} className="flex items-center justify-between py-1.5 px-2.5 hover:bg-zinc-50 rounded-lg transition-smooth border border-transparent hover:border-zinc-100">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-7 h-7 rounded-full font-bold text-xs flex items-center justify-center shrink-0 border ${idx === 0 ? 'bg-amber-100 text-amber-800 border-amber-300' : idx === 1 ? 'bg-zinc-200 text-zinc-800 border-zinc-300' : idx === 2 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <p className="text-body-sm font-semibold text-zinc-900 leading-tight">{person.name}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-body-sm font-semibold text-zinc-900 leading-tight">{person.name}</p>
+                      <div className="text-right shrink-0">
+                        <span className="text-body-sm font-extrabold text-brand-red">{person.count}</span>
+                        <span className="text-[9px] text-zinc-400 font-semibold uppercase block tracking-wider mt-0.5">Referrals</span>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-body-sm font-bold text-brand-red">{person.count}</span>
-                      <span className="text-[9px] text-zinc-400 font-semibold uppercase block tracking-wider mt-0.5">Referrals</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
