@@ -31,6 +31,7 @@ import Payments from './pages/Payments';
 import { Sparkles, ShieldAlert, X } from 'lucide-react';
 import SuperadminLayout from './components/SuperadminLayout';
 import { api } from './services/api';
+import { getPortalContext, isMemberRegistrationAllowed } from './utils/portalDetection';
 
 export default function App() {
   // Read logged in status from localStorage - default to FALSE so visitors see Login screen
@@ -45,16 +46,11 @@ export default function App() {
     }
   });
 
-  // Read logged in user's role from localStorage or pathname
+  // Read logged in user's role from localStorage or portal URL
   const [userRole, setUserRole] = useState(() => {
     const storedRole = localStorage.getItem('bni_user_role');
     if (storedRole) return storedRole;
-    const path = window.location.pathname.replace(/^\/|\/$/g, '');
-    if (path.startsWith('superadmin/') || path === 'superadmin') return 'superadmin';
-    if (path.startsWith('admin/') || path === 'admin') return 'admin';
-    if (path.startsWith('captain/') || path === 'captain') return 'captain';
-    if (path.startsWith('member/') || path === 'member') return 'member';
-    return 'admin';
+    return getPortalContext();
   });
 
   // Read logged in admin info from localStorage
@@ -260,6 +256,18 @@ export default function App() {
   }, [activeTab]);
 
   const handleLogin = (role, payload) => {
+    const portal = getPortalContext();
+    if (portal === 'superadmin' && role !== 'superadmin') {
+      localStorage.setItem('bni_auth_notice', 'Access restricted: This portal is reserved for Superadmin accounts only.');
+      handleLogout();
+      return;
+    }
+    if (portal === 'admin' && (role !== 'admin' && role !== 'superadmin')) {
+      localStorage.setItem('bni_auth_notice', 'Access restricted: This portal is for Chapter Admins only. Please sign in through the Member portal.');
+      handleLogout();
+      return;
+    }
+
     localStorage.setItem('bni_logged_in', 'true');
     localStorage.setItem('bni_user_role', role);
     setUserRole(role);
@@ -303,7 +311,7 @@ export default function App() {
         setLoggedInAdmin(payload);
       } else {
         localStorage.removeItem('bni_logged_admin');
-        setLoggedInAdmin({ name: "Sanjay Wagle", email: "admin@bni.com", region: "Guntur Central" });
+        setLoggedInAdmin({ name: "Sanjay Wagle", email: "admin@bni.com", region: "All Regions" });
       }
 
       // Fetch live conclaves to set active ID
@@ -553,7 +561,7 @@ export default function App() {
     if (path === 'reset-password' || searchParams.get('mode') === 'resetPassword' || searchParams.get('oobCode')) {
       return 'reset-password';
     }
-    if (path === 'signup') return 'signup';
+    if (path === 'signup' && isMemberRegistrationAllowed()) return 'signup';
     return 'login';
   });
 
@@ -569,7 +577,8 @@ export default function App() {
         />
       );
     }
-    if (authView === 'signup') {
+    const allowSignUp = isMemberRegistrationAllowed();
+    if (authView === 'signup' && allowSignUp) {
       return (
         <SignUp
           onSwitchToLogin={() => setAuthView('login')}
@@ -580,7 +589,7 @@ export default function App() {
     return (
       <Login
         onLogin={handleLogin}
-        onSwitchToSignUp={() => setAuthView('signup')}
+        onSwitchToSignUp={allowSignUp ? () => setAuthView('signup') : null}
       />
     );
   }

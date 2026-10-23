@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Award, Lock, Mail, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { getPortalContext, isMemberRegistrationAllowed } from '../utils/portalDetection';
 
 export default function Login({ onLogin, onSwitchToSignUp }) {
+  const portalContext = getPortalContext();
   const [inputVal, setInputVal] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -166,7 +168,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
         };
 
         if (detectedRole === 'admin') {
-          payload.region = payload.region || "Guntur Central";
+          payload.region = payload.region || "All Regions";
         } else if (detectedRole === 'captain') {
           payload.tableId = payload.tableId || "Table 01";
           payload.chapter = payload.chapter || "Peak Performance";
@@ -252,11 +254,6 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
 
           {/* Ambient content highlights */}
           <div className="relative z-10 space-y-6 max-w-md my-auto">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase text-brand-red tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              BNI Guntur Chapter
-            </div>
-
             <h2 className="text-3xl font-extrabold text-white leading-tight">
               High-Performance Networking &amp; Seating Assignments.
             </h2>
@@ -293,9 +290,15 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
                 <Award className="w-5 h-5 text-white" />
               </div>
 
-              <h3 className="text-2xl font-black text-zinc-955 tracking-tight">Portal Login</h3>
+              <h3 className="text-2xl font-black text-zinc-955 tracking-tight">
+                {portalContext === 'superadmin' ? 'Superadmin Login' : portalContext === 'admin' ? 'Admin Portal Login' : 'Portal Login'}
+              </h3>
               <p className="text-body-md text-zinc-500 font-medium">
-                Enter your account credentials to access your portal.
+                {portalContext === 'superadmin'
+                  ? 'Enter your executive credentials to access the global console.'
+                  : portalContext === 'admin'
+                    ? 'Enter your administrator credentials to access your chapter.'
+                    : 'Enter your account credentials to access your portal.'}
               </p>
             </div>
 
@@ -413,7 +416,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
               </button>
             </form>
 
-            {onSwitchToSignUp && (
+            {onSwitchToSignUp && isMemberRegistrationAllowed() && (
               <div className="mt-5 pt-4 border-t border-zinc-100 text-center">
                 <p className="text-[11px] text-zinc-500 font-semibold">
                   New member?{' '}
