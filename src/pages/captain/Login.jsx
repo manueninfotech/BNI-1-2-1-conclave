@@ -107,12 +107,8 @@ export default function CaptainLogin({ onLogin }) {
         </div>
 
         {/* Bottom Note */}
-        <div className="relative z-10 flex items-center justify-between text-[11px] text-zinc-500 font-semibold border-t border-white/[0.06] pt-6">
-          <div className="flex items-center gap-2">
-            <Server className="w-3.5 h-3.5" />
-            <span>Server cluster node: AP-SOUTH-1</span>
-          </div>
-          <span>&copy; 2026 BNI Global LLC.</span>
+        <div className="relative z-10 flex items-center justify-center text-[11px] text-zinc-500 font-semibold border-t border-white/[0.06] pt-6">
+          <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
         </div>
 
         <div className="absolute top-1/4 right-0 w-80 h-80 rounded-full bg-brand-red/10 blur-[100px] pointer-events-none"></div>

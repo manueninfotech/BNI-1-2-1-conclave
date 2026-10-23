@@ -147,12 +147,8 @@ export default function ResetPassword({ onBackToLogin }) {
         </div>
 
         {/* Brand footer */}
-        <div className="relative z-10 flex items-center justify-between text-[10px] text-zinc-550 font-bold tracking-tight border-t border-zinc-800 pt-5">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>Security node: Auth-v2</span>
-          </div>
-          <span>&copy; 2026 BNI Global LLC.</span>
+        <div className="relative z-10 flex items-center justify-center text-[10.5px] text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
+          <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
         </div>
 
         {/* Ambient background glows */}

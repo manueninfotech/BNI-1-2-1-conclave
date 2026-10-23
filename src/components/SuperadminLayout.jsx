@@ -214,6 +214,12 @@ export default function SuperadminLayout({
               <p className="text-body-text truncate leading-tight font-extrabold text-zinc-900 group-hover:text-brand-red">Logout</p>
             </div>
           </button>
+
+          <div className="py-2.5 text-center">
+            <p className="text-[9.5px] text-zinc-400 font-semibold tracking-wide">
+              Powered by <span className="text-zinc-655 font-extrabold">Manuen Infotech</span>
+            </p>
+          </div>
         </div>
       </aside>
 

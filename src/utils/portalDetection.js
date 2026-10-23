@@ -14,23 +14,24 @@ export function getPortalContext() {
 
   // 1. Query param override (convenient for local dev/testing: ?portal=admin, ?portal=superadmin, ?portal=member)
   const portalParam = (searchParams.get('portal') || '').toLowerCase();
-  if (portalParam === 'superadmin') return 'superadmin';
+  if (portalParam === 'superadmin' || portalParam === 'super') return 'superadmin';
   if (portalParam === 'admin') return 'admin';
   if (portalParam === 'member') return 'member';
 
   // 2. Check Hostname / Subdomain
-  if (host.includes('superadmin')) {
+  // Matches bni-super.manuen.com, superadmin.bni.com, super.manuen.com, etc.
+  if (host.includes('superadmin') || host.includes('bni-super') || host.includes('super')) {
     return 'superadmin';
   }
-  if (host.includes('admin') || host.startsWith('bni-admin')) {
+  if (host.includes('admin') || host.includes('bni-admin')) {
     return 'admin';
   }
-  if (host.includes('member') || host.startsWith('bni-member')) {
+  if (host.includes('member') || host.includes('bni-member')) {
     return 'member';
   }
 
   // 3. Check Pathname
-  if (path === 'superadmin' || path.startsWith('superadmin/')) {
+  if (path === 'superadmin' || path.startsWith('superadmin/') || path === 'super' || path.startsWith('super/')) {
     return 'superadmin';
   }
   if (path === 'admin' || path.startsWith('admin/')) {

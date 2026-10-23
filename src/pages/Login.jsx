@@ -264,12 +264,8 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
           </div>
 
           {/* Brand footer */}
-          <div className="relative z-10 flex items-center justify-between text-[10px] text-zinc-550 font-bold tracking-tight border-t border-zinc-800 pt-5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>Server cluster node: AP-SOUTH-1</span>
-            </div>
-            <span>&copy; 2026 BNI Global LLC.</span>
+          <div className="relative z-10 flex items-center justify-center text-[10.5px] text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
+            <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
           </div>
 
           {/* Ambient background glows */}
@@ -435,6 +431,12 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
             <p className="text-[10px] text-zinc-450 text-center leading-relaxed font-semibold pt-4">
               This workspace is monitored for administrative compliance. Unauthorized connection attempts are logged.
             </p>
+
+            <div className="pt-2 text-center">
+              <span className="text-[10.5px] text-zinc-400 font-semibold tracking-wide">
+                Powered by <span className="font-extrabold text-zinc-700">Manuen Infotech</span>
+              </span>
+            </div>
           </div>
         </div>
 
