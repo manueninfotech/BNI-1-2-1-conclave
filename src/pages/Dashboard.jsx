@@ -433,7 +433,15 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                         <Cell key={`cell-${index}`} fill={entry.color || entry.fill} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value, name) => [`${value} referrals`, name]} />
+                    <Tooltip
+                      formatter={(value, name) => [`${value} referrals`, name]}
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e4e4e7',
+                        borderRadius: '0.5rem',
+                        boxShadow: 'none',
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -492,7 +500,16 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                   <BarChart data={referralPipelineData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }} />
                     <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
-                    <Tooltip formatter={(value) => [`${value} referrals`, 'Volume']} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
+                    <Tooltip
+                      cursor={false}
+                      formatter={(value) => [`${value} referrals`, 'Volume']}
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e4e4e7',
+                        borderRadius: '0.5rem',
+                        boxShadow: 'none',
+                      }}
+                    />
                     <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={28}>
                       {referralPipelineData.map((entry, index) => (
                         <Cell key={`pipe-cell-${index}`} fill={entry.fill} />
@@ -543,7 +560,16 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                         tick={{ fontSize: 11, fill: '#27272a', fontWeight: 600 }}
                         width={85}
                       />
-                      <Tooltip formatter={(value, _, item) => [`${value} referrals`, item.payload.fullName]} />
+                      <Tooltip
+                        cursor={false}
+                        formatter={(value, _, item) => [`${value} referrals`, item.payload.fullName]}
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          borderColor: '#e4e4e7',
+                          borderRadius: '0.5rem',
+                          boxShadow: 'none',
+                        }}
+                      />
                       <Bar dataKey="count" fill={colors.bniRed} radius={[0, 6, 6, 0]} barSize={16} />
                     </BarChart>
                   </ResponsiveContainer>

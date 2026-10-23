@@ -53,6 +53,16 @@ th {
   /* zinc-600: clean, readable mid-dark grey */
 }
 
+/* Remove dark background cursor / shadow behind chart tooltips */
+.recharts-tooltip-cursor {
+  fill: transparent !important;
+  stroke: transparent !important;
+}
+
+.recharts-default-tooltip {
+  box-shadow: none !important;
+}
+
 /* Remove bottom border lines under headings and subheadings */
 main header.border-b,
 main div.border-b.border-zinc-100,

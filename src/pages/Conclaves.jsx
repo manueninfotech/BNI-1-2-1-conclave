@@ -254,7 +254,8 @@ function conclaveTimingError(fd) {
 export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
   // Component-scoped so the render (e.g. the Superadmin-only toggles in the form)
   // can read it — the inner callbacks re-derive their own copies in their scopes.
-  const isSuperadmin = loggedInAdmin?.role === 'superadmin';
+  const isSuperadmin = loggedInAdmin?.role === 'superadmin' || loggedInAdmin?.region === 'Global';
+  const assignedAdminRegion = loggedInAdmin?.region || loggedInAdmin?.scope || '';
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
@@ -875,7 +876,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
         allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
         dateRange: formData.dateRange || 'TBD',
-        region: formData.region || loggedInAdmin?.region || loggedInAdmin?.scope || '',
+        region: isSuperadmin ? (formData.region || assignedAdminRegion) : (assignedAdminRegion || formData.region || ''),
         coordinator: formData.coordinator || loggedInAdmin?.name || 'Administrator',
         personsPerTable: Number(formData.personsPerTable) || 7,
         roundCount: Number(formData.roundCount) || 4,
@@ -1691,15 +1692,32 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Region Group *</label>
-                  <input
-                    value={formData.region}
-                    onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    placeholder="Guntur Central"
-                    type="text"
-                    required
-                  />
+                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">
+                    Region Group * {(!isSuperadmin && assignedAdminRegion) && <span className="text-zinc-400 font-semibold lowercase">(locked)</span>}
+                  </label>
+                  {isSuperadmin ? (
+                    <input
+                      value={formData.region}
+                      onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
+                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                      placeholder="Guntur Central"
+                      type="text"
+                      required
+                    />
+                  ) : (
+                    <div>
+                      <input
+                        value={assignedAdminRegion || formData.region || 'Assigned Region'}
+                        readOnly
+                        disabled
+                        className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-zinc-100 text-zinc-600 font-bold cursor-not-allowed select-none"
+                        type="text"
+                      />
+                      <span className="text-[9.5px] text-zinc-400 font-semibold block mt-1">
+                        Locked to your assigned administrator region.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1938,14 +1956,31 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Region Group</label>
-                  <input
-                    value={formData.region}
-                    onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="text"
-                    required
-                  />
+                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">
+                    Region Group * {(!isSuperadmin && assignedAdminRegion) && <span className="text-zinc-400 font-semibold lowercase">(locked)</span>}
+                  </label>
+                  {isSuperadmin ? (
+                    <input
+                      value={formData.region}
+                      onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
+                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
+                      type="text"
+                      required
+                    />
+                  ) : (
+                    <div>
+                      <input
+                        value={assignedAdminRegion || formData.region || 'Assigned Region'}
+                        readOnly
+                        disabled
+                        className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-zinc-100 text-zinc-600 font-bold cursor-not-allowed select-none"
+                        type="text"
+                      />
+                      <span className="text-[9.5px] text-zinc-400 font-semibold block mt-1">
+                        Locked to your assigned administrator region.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
