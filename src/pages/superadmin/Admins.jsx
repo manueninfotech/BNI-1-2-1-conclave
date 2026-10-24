@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { formatStatus } from '../../utils/statusUtils';
 
 export default function SuperadminAdmins({ searchQuery }) {
   const [subTab, setSubTab] = useState('admins'); // 'admins' or 'regions'
@@ -744,7 +745,7 @@ export default function SuperadminAdmins({ searchQuery }) {
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${conclave.status?.toLowerCase() === 'completed' ? 'bg-zinc-100 text-zinc-650' : 'bg-emerald-50 text-emerald-700'
                             }`}>
-                            {conclave.status}
+                            {formatStatus(conclave.status)}
                           </span>
                         </div>
                       ))}

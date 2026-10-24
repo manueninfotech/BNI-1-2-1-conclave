@@ -20,6 +20,7 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
 import { extractTextFromPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
+import { formatStatus } from '../utils/statusUtils';
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -1453,7 +1454,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                         selectedConclave.status === 'Upcoming' ? 'bg-red-50 text-brand-red border border-red-200' :
                         'bg-zinc-100 text-zinc-600 border border-zinc-200'
                       }`}>
-                        {selectedConclave.status || 'Upcoming'}
+                        {formatStatus(selectedConclave.status) || 'Upcoming'}
                       </span>
                     </div>
                     <div>

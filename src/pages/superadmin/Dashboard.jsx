@@ -9,6 +9,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { formatStatus } from '../../utils/statusUtils';
 
 export default function SuperadminDashboard({ setActiveTab }) {
   const [admins, setAdmins] = useState(() => {
@@ -294,11 +295,11 @@ export default function SuperadminDashboard({ setActiveTab }) {
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-150 whitespace-nowrap">
-                    {conclave.status}
+                    {formatStatus(conclave.status)}
                   </span>
                 </div>
               ))}
-              {conclaves.filter(c => ['active', 'running', 'registration open'].includes(c.status?.toLowerCase())).length === 0 && (
+              {conclaves.filter(c => ['active', 'running', 'registration open', 'registrationopen'].includes(c.status?.toLowerCase())).length === 0 && (
                 <p className="text-[11.5px] text-zinc-500 font-semibold p-4 text-center">No active conclaves currently running.</p>
               )}
             </div>

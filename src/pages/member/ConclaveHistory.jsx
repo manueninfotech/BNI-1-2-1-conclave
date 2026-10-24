@@ -13,6 +13,7 @@ import {
 
 import { api } from '../../services/api';
 import { downloadOrViewAgendaDocument } from '../../utils/documentUtils';
+import { formatStatus } from '../../utils/statusUtils';
 
 const formatTimeNice = (val, fallback = '') => {
   if (!val) return fallback;
@@ -301,11 +302,11 @@ export default function MemberConclaveHistory({ loggedInMember }) {
                         <h3 className="text-body-md font-black text-zinc-900 leading-tight group-hover:text-brand-red transition-smooth">
                           {conclave.title}
                         </h3>
-                        <span className={`px-2 py-0.5 text-[8.5px] font-black rounded uppercase tracking-wider ${conclave.status === 'Completed'
+                        <span className={`px-2 py-0.5 text-[8.5px] font-black rounded uppercase tracking-wider ${conclave.status?.toLowerCase() === 'completed'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                           : 'bg-zinc-150 text-zinc-500 border border-zinc-200'
                           }`}>
-                          {conclave.status}
+                          {formatStatus(conclave.status)}
                         </span>
                       </div>
 

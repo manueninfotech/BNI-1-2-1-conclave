@@ -19,6 +19,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
+import { formatStatus } from '../utils/statusUtils';
 
 export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearGenWarning, onScheduleReady, isHubMode = false }) {
   // Read locked state from local storage conclaves
@@ -573,7 +574,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         <div className="p-4 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-900 text-xs font-bold flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>This conclave is marked as <strong>{selectedConclave?.status}</strong>. Schedule generation and parameter modifications are disabled.</span>
+            <span>This conclave is marked as <strong>{formatStatus(selectedConclave?.status)}</strong>. Schedule generation and parameter modifications are disabled.</span>
           </div>
           <span className="px-2.5 py-1 bg-amber-200/60 rounded text-[9.5px] font-black uppercase tracking-wider text-amber-900">Completed Conclave</span>
         </div>
