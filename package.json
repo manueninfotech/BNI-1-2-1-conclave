@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "npm --prefix backend run dev",
+    "dev:backend": "npm --prefix manuen-backend run dev",
     "build": "vite build",
     "preview": "vite preview",
     "emulator": "npx firebase-tools emulators:start"
