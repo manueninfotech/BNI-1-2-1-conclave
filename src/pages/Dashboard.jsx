@@ -15,6 +15,7 @@ import {
 
 import { api } from '../services/api';
 import { colors } from '../config/theme';
+import { formatStatus } from '../utils/statusUtils';
 
 export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin }) {
   const [referrals, setReferrals] = useState(() => {
@@ -195,11 +196,12 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
 
   // Status badge styles
   const getStatusStyle = (status) => {
-    const s = (status || '').toLowerCase();
+    const s = (status || '').toLowerCase().replace(/[\s_-]/g, '');
     switch (s) {
-      case 'running': return 'bg-emerald-600 text-white';
+      case 'running':
+      case 'active': return 'bg-emerald-600 text-white';
       case 'upcoming':
-      case 'registration_open': return 'bg-amber-50 text-amber-800 border border-amber-200';
+      case 'registrationopen': return 'bg-amber-50 text-amber-800 border border-amber-200';
       case 'completed': return 'bg-zinc-100 text-zinc-600 border border-zinc-200';
       case 'draft': return 'bg-zinc-50 text-zinc-400 border border-zinc-200';
       default: return 'bg-zinc-50 text-zinc-500 border border-zinc-200';
@@ -207,9 +209,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
   };
 
   const displayStatus = (status) => {
-    const s = (status || '').toLowerCase();
-    if (s === 'registration_open') return 'Registration Open';
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    return formatStatus(status);
   };
 
   const formattedDate = new Date().toLocaleDateString('en-US', {
@@ -280,7 +280,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
-              {displayStatus(selectedConclave.status)}
+              {formatStatus(selectedConclave.status)}
             </span>
           )}
         </div>

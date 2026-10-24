@@ -661,7 +661,12 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
         (c.status && c.status.toLowerCase().includes(q))
       );
 
-      const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
+      const sLower = (c.status || '').toLowerCase().replace(/[\s_-]/g, '');
+      const filterLower = statusFilter.toLowerCase().replace(/[\s_-]/g, '');
+      const matchesStatus = statusFilter === 'All'
+        || sLower === filterLower
+        || (filterLower === 'upcoming' && sLower === 'registrationopen')
+        || (filterLower === 'registrationopen' && sLower === 'registrationopen');
       const matchesVenue = venueFilter === 'All' || c.venueShort === venueFilter;
       const adminReg = (loggedInAdmin?.region || loggedInAdmin?.scope || '').toLowerCase().trim();
       const concReg = (c.region || '').toLowerCase().trim();
@@ -1054,9 +1059,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
   };
 
   // KPI aggregates
-  const runningCount = conclaves.filter(c => c.status === 'Running').length;
-  const upcomingCount = conclaves.filter(c => c.status === 'Upcoming').length;
-  const completedCount = conclaves.filter(c => c.status === 'Completed').length;
+  const runningCount = conclaves.filter(c => ['running', 'active'].includes((c.status || '').toLowerCase())).length;
+  const upcomingCount = conclaves.filter(c => ['upcoming', 'registrationopen', 'registration open'].includes((c.status || '').toLowerCase().replace(/[\s_-]/g, ''))).length;
+  const completedCount = conclaves.filter(c => (c.status || '').toLowerCase() === 'completed').length;
 
   return (
     <div className="p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6 animate-fade-in">
@@ -1160,7 +1165,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <SearchableDropdown
               label="Status"
-              options={['All', 'Upcoming', 'Running', 'Completed']}
+              options={['All', 'Upcoming', 'Registration Open', 'Running', 'Completed']}
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="Search status..."
@@ -1290,21 +1295,25 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                         {conclave.captainCount}
                       </td>
                       <td className="px-5 py-4">
-                        {conclave.status === 'Running' ? (
+                        {(conclave.status || '').toLowerCase() === 'running' || (conclave.status || '').toLowerCase() === 'active' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Running
                           </span>
-                        ) : conclave.status === 'Upcoming' ? (
+                        ) : (conclave.status || '').toLowerCase().replace(/[\s_-]/g, '') === 'registrationopen' ? (
+                          <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Registration Open
+                          </span>
+                        ) : (conclave.status || '').toLowerCase() === 'upcoming' ? (
                           <span className="inline-flex items-center gap-1 text-brand-red bg-red-50 border border-red-100 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
                             <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span> Upcoming
                           </span>
-                        ) : conclave.status === 'Draft' ? (
+                        ) : (conclave.status || '').toLowerCase() === 'draft' ? (
                           <span className="inline-flex items-center gap-1 text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> Draft
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-zinc-700 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span> Completed
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span> {formatStatus(conclave.status) || 'Completed'}
                           </span>
                         )}
                       </td>

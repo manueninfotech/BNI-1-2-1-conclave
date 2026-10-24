@@ -51,9 +51,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
             const dateRange = c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : (c.dateRange || 'N/A');
 
             let status = c.status;
-            const s = (c.status || '').toLowerCase();
-            if (s === 'registration_open') status = 'Upcoming';
-            else if (s === 'running') status = 'Running';
+            const s = (c.status || '').toLowerCase().replace(/[\s_-]/g, '');
+            if (s === 'registrationopen' || s === 'upcoming') status = 'Upcoming';
+            else if (s === 'running' || s === 'active') status = 'Running';
             else if (s === 'completed') status = 'Completed';
             else if (s === 'draft') status = 'Draft';
             else if (s === 'cancelled') status = 'Cancelled';
@@ -95,9 +95,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
 
   const displayStatus = (status) => {
     if (isLocked) return 'Locked';
-    const s = (status || '').toLowerCase();
-    if (s === 'registration_open') return 'Registration Open';
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    return formatStatus(status);
   };
 
   const [stats, setStats] = useState(() => {

@@ -244,7 +244,9 @@ export default function SuperadminConclaves({ searchQuery }) {
                       ? 'bg-zinc-100 text-zinc-550 border border-zinc-200'
                       : conclave.status?.toLowerCase() === 'active' || conclave.status?.toLowerCase() === 'running'
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-150'
-                        : 'bg-red-50 text-brand-red border border-red-100'
+                        : (conclave.status?.toLowerCase().replace(/[\s_-]/g, '') === 'registrationopen' || conclave.status?.toLowerCase() === 'upcoming')
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-red-50 text-brand-red border border-red-100'
                       }`}>
                       {formatStatus(conclave.status)}
                     </span>
@@ -298,7 +300,7 @@ function ConclaveDetailView({ conclave, setConclaves, onBack }) {
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
               <h1 className="text-2xl font-black text-zinc-955 tracking-tight">{conclave.name || conclave.title || 'Unnamed Conclave'}</h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider whitespace-nowrap ${conclave.status?.toLowerCase() === 'completed' ? 'bg-zinc-150 text-zinc-550 border border-zinc-200' : conclave.status?.toLowerCase() === 'active' || conclave.status?.toLowerCase() === 'running' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-red-50 text-brand-red border border-red-100'}`}>{formatStatus(conclave.status)}</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider whitespace-nowrap ${conclave.status?.toLowerCase() === 'completed' ? 'bg-zinc-150 text-zinc-550 border border-zinc-200' : conclave.status?.toLowerCase() === 'active' || conclave.status?.toLowerCase() === 'running' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : (conclave.status?.toLowerCase().replace(/[\s_-]/g, '') === 'registrationopen' || conclave.status?.toLowerCase() === 'upcoming') ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-red-50 text-brand-red border border-red-100'}`}>{formatStatus(conclave.status)}</span>
             </div>
             <p className="text-xs text-zinc-500 font-semibold flex items-center gap-1.5 flex-wrap">
               <MapPin className="w-3.5 h-3.5 text-zinc-400" />

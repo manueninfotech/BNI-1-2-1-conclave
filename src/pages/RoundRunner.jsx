@@ -18,6 +18,7 @@ import {
 import { ResponsiveContainer, PieChart, Pie, BarChart, Bar, Cell, XAxis } from 'recharts';
 import { api } from '../services/api';
 import { colors } from '../config/theme';
+import { formatStatus } from '../utils/statusUtils';
 
 
 
@@ -747,7 +748,7 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
         <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 text-xs font-bold flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-            <span>This conclave is <strong>{selectedConclave?.status || 'Completed'}</strong>. Live timer controls and round advancement are disabled.</span>
+            <span>This conclave is <strong>{formatStatus(selectedConclave?.status) || 'Completed'}</strong>. Live timer controls and round advancement are disabled.</span>
           </div>
           <span className="px-2.5 py-1 bg-emerald-200/60 rounded text-[9.5px] font-black uppercase tracking-wider text-emerald-950">Conclave Completed</span>
         </div>

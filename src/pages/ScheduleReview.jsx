@@ -14,6 +14,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { formatStatus } from '../utils/statusUtils';
 
 export default function ScheduleReview({ setActiveTab, searchQuery: globalSearchQuery, selectedConclaveId, onNavigateToRunner, isHubMode = false }) {
   const [conclave, setConclave] = useState(() => {
@@ -618,7 +619,7 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
         <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 text-xs font-bold flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-            <span>This conclave is <strong>{conclave?.status || 'Completed'}</strong>. All rounds are locked and seating allocations are archived.</span>
+            <span>This conclave is <strong>{formatStatus(conclave?.status) || 'Completed'}</strong>. All rounds are locked and seating allocations are archived.</span>
           </div>
           <span className="px-2.5 py-1 bg-emerald-200/60 rounded text-[9.5px] font-black uppercase tracking-wider text-emerald-950">Conclave Completed</span>
         </div>

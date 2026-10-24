@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { api } from '../services/api';
+import { formatStatus } from '../utils/statusUtils';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
@@ -27,12 +28,12 @@ const navItems = [
 ];
 
 const getStatusDot = (status) => {
-  switch (status) {
-    case 'Running': return 'bg-emerald-500 animate-pulse';
-    case 'Upcoming': return 'bg-amber-400';
-    case 'Completed': return 'bg-zinc-300';
-    default: return 'bg-zinc-200';
-  }
+  const s = (status || '').toLowerCase().replace(/[\s_-]/g, '');
+  if (s === 'running' || s === 'active') return 'bg-emerald-500 animate-pulse';
+  if (s === 'registrationopen') return 'bg-amber-500';
+  if (s === 'upcoming') return 'bg-amber-400';
+  if (s === 'completed') return 'bg-zinc-300';
+  return 'bg-zinc-200';
 };
 
 export default function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, onClose, selectedConclaveId, setSelectedConclaveId, loggedInAdmin }) {
@@ -122,7 +123,7 @@ export default function Sidebar({ activeTab, setActiveTab, onLogout, isOpen, onC
               {selectedConclave ? (selectedConclave.name || selectedConclave.title || 'Conclave') : "No Active Conclave"}
             </p>
             <p className="text-[9.5px] text-zinc-500 font-semibold uppercase tracking-wider mt-0.5 truncate">
-              {selectedConclave ? `${selectedConclave.status || 'ACTIVE'} • ${selectedConclave.region || selectedConclave.venueLocation || '—'}` : "N/A • NO REGION"}
+              {selectedConclave ? `${formatStatus(selectedConclave.status) || 'ACTIVE'} • ${selectedConclave.region || selectedConclave.venueLocation || '—'}` : "N/A • NO REGION"}
             </p>
           </div>
           <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform duration-200 ${showConclaveDropdown ? 'rotate-180 text-zinc-700' : 'group-hover:text-zinc-600'}`} />

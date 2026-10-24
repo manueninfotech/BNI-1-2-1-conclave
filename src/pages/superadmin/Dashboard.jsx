@@ -282,7 +282,7 @@ export default function SuperadminDashboard({ setActiveTab }) {
             </div>
 
             <div className="divide-y divide-zinc-200 border border-zinc-200 rounded-xl overflow-hidden">
-              {conclaves.filter(c => ['active', 'running', 'registration open'].includes(c.status?.toLowerCase())).map(conclave => (
+              {conclaves.filter(c => ['active', 'running', 'registrationopen', 'registration open'].includes(c.status?.toLowerCase().replace(/[\s_-]/g, ''))).map(conclave => (
                 <div key={conclave.id} className="p-3.5 bg-white hover:bg-zinc-50/50 transition-colors flex justify-between items-center text-body-sm">
                   <div className="space-y-1">
                     <p className="font-black text-zinc-800 leading-none">{conclave.name || conclave.title || 'Unnamed Conclave'}</p>
@@ -294,12 +294,14 @@ export default function SuperadminDashboard({ setActiveTab }) {
                       <span>{conclave.registrationCount || conclave.membersCount || 0} checked in</span>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-150 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider whitespace-nowrap ${
+                    ['active', 'running'].includes(conclave.status?.toLowerCase()) ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                  }`}>
                     {formatStatus(conclave.status)}
                   </span>
                 </div>
               ))}
-              {conclaves.filter(c => ['active', 'running', 'registration open', 'registrationopen'].includes(c.status?.toLowerCase())).length === 0 && (
+              {conclaves.filter(c => ['active', 'running', 'registration open', 'registrationopen'].includes(c.status?.toLowerCase().replace(/[\s_-]/g, ''))).length === 0 && (
                 <p className="text-[11.5px] text-zinc-500 font-semibold p-4 text-center">No active conclaves currently running.</p>
               )}
             </div>
