@@ -921,7 +921,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
       {referTarget && (
         <ReferModal
           recipient={referTarget}
-          loggedInUser={loggedInMember || { name: memberName }}
+          loggedInUser={loggedInMember || { name: 'Member' }}
           activeConclaveId={conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId || conclaveSyncData?.id}
           isReferralOpen={Boolean(timingState?.isReferralOpen)}
           disabledReason="Referrals can only be submitted during the dedicated 30s/person Referral Window (after speaking concludes and before table rotation)."

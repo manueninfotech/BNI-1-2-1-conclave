@@ -473,8 +473,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   useEffect(() => {
     async function loadCategories() {
       try {
-        const res = await api.get('/categories').catch(() => null)
-          || await api.get('/admin/categories').catch(() => null);
+        const res = await api.get('/admin/categories').catch(() => null)
+          || await api.get('/categories').catch(() => null);
         const list = Array.isArray(res?.categories) ? res.categories : (Array.isArray(res) ? res : []);
         if (list.length > 0) {
           setCategories(list);

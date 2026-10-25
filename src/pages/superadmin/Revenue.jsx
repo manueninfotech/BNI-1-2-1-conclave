@@ -46,7 +46,7 @@ export default function Revenue() {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load();   }, []);
 
   const series = useMemo(
     () => (data?.timeSeries || []).map((d) => ({ date: d.date, revenue: d.revenue })),

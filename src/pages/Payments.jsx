@@ -36,7 +36,7 @@ export default function Payments({ selectedConclaveId }) {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [selectedConclaveId]);
+  useEffect(() => { load();   }, [selectedConclaveId]);
 
   if (!selectedConclaveId) {
     return <div className="p-8 text-center text-zinc-400 font-semibold">Select a conclave to see its payments.</div>;
