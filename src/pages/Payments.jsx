@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  RefreshCw, CheckCircle2, Clock, XCircle, CreditCard, Users as UsersIcon,
+  RefreshCw, CheckCircle2, Clock, XCircle, CreditCard, Users as UsersIcon, Gift,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -42,7 +42,9 @@ export default function Payments({ selectedConclaveId }) {
     return <div className="p-8 text-center text-zinc-400 font-semibold">Select a conclave to see its payments.</div>;
   }
 
-  const counts = data?.counts || { paid: 0, pending: 0, failed: 0, total: 0 };
+  const counts = data?.counts || { paid: 0, free: 0, pending: 0, failed: 0, total: 0 };
+  // A free conclave: nobody owes anything, so show Free instead of Paid/Pending.
+  const isFree = data?.registrationFee === 0;
   const members = (data?.members || []).filter((m) => {
     if (!query) return true;
     const q = query.toLowerCase();
@@ -71,7 +73,11 @@ export default function Payments({ selectedConclaveId }) {
 
       {/* Counts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Count icon={<CheckCircle2 className="w-4 h-4" />} label="Paid" value={counts.paid} tone="emerald" />
+        {isFree ? (
+          <Count icon={<Gift className="w-4 h-4" />} label="Free entry" value={counts.free ?? 0} tone="emerald" />
+        ) : (
+          <Count icon={<CheckCircle2 className="w-4 h-4" />} label="Paid" value={counts.paid} tone="emerald" />
+        )}
         <Count icon={<Clock className="w-4 h-4" />} label="Pending" value={counts.pending} tone="amber" />
         <Count icon={<XCircle className="w-4 h-4" />} label="Failed" value={counts.failed} tone="red" />
         <Count icon={<UsersIcon className="w-4 h-4" />} label="Registered" value={counts.total} tone="zinc" />
@@ -160,6 +166,7 @@ function PayPill({ status }) {
     paid: ['bg-emerald-50 border-emerald-200 text-emerald-700', <CheckCircle2 className="w-3 h-3" key="i" />, 'Paid'],
     pending: ['bg-amber-50 border-amber-200 text-amber-700', <Clock className="w-3 h-3" key="i" />, 'Pending'],
     failed: ['bg-red-50 border-red-200 text-red-700', <XCircle className="w-3 h-3" key="i" />, 'Failed'],
+    free: ['bg-zinc-50 border-zinc-200 text-zinc-600', <Gift className="w-3 h-3" key="i" />, 'Free'],
   };
   const [cls, icon, label] = map[status] || ['bg-zinc-50 border-zinc-200 text-zinc-600', null, status || 'Unknown'];
   return (
