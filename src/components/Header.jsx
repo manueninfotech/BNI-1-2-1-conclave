@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown } from 'lucide-react';
-import { getNotifications, markAllRead } from '../utils/notifications';
+import { getNotifications, markAllRead, saveNotifications } from '../utils/notifications';
 
 export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId }) {
 

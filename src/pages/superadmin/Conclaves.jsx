@@ -53,16 +53,6 @@ export default function SuperadminConclaves({ searchQuery }) {
     loadData();
   }, []);
 
-  if (activeConclave) {
-    return (
-      <ConclaveDetailView
-        conclave={activeConclave}
-        setConclaves={setConclaves}
-        onBack={() => setActiveConclave(null)}
-      />
-    );
-  }
-
   // Dynamic Region list from both regions collection and all conclaves
   const allAvailableRegions = React.useMemo(() => {
     const map = new Map();
@@ -78,6 +68,18 @@ export default function SuperadminConclaves({ searchQuery }) {
     });
     return Array.from(map.values()).sort();
   }, [regions, conclaves]);
+
+  // Kept after every hook: an early return above a hook crashes React.
+  if (activeConclave) {
+    return (
+      <ConclaveDetailView
+        conclave={activeConclave}
+        setConclaves={setConclaves}
+        onBack={() => setActiveConclave(null)}
+      />
+    );
+  }
+
 
   // Filter lists
   const conclavesList = Array.isArray(conclaves) ? conclaves : [];

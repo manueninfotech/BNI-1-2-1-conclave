@@ -500,7 +500,7 @@ export default function Reports({ searchQuery: globalSearchQuery, selectedConcla
           <div>
             <p className="text-[10px] text-zinc-400 font-bold uppercase">Repeat Pairings</p>
             <h4 className="text-headline-md font-extrabold text-zinc-955 mt-0.5">
-              {Boolean(selectedConclave?.schedule?.rounds?.length)
+              {selectedConclave?.schedule?.rounds?.length
                 ? repeatPairingDetails.length
                 : (selectedConclave?.scheduleSummary?.repeatPairings !== undefined ? selectedConclave.scheduleSummary.repeatPairings : 0)}
             </h4>

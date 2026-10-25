@@ -18,7 +18,7 @@ import Pagination from '../components/Pagination';
 import { ResponsiveContainer, BarChart, Bar, XAxis } from 'recharts';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
-import { extractTextFromPdfDataUrl } from '../utils/documentUtils';
+import { extractTextFromPdfDataUrl, createFreshAgendaPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
 import { formatStatus } from '../utils/statusUtils';
 
@@ -310,7 +310,10 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
           const venue = c.venueLocation || c.venue || 'N/A';
           const venueShort = venue.split(',')[0] || 'N/A';
           const startDate = formatDateForInput(c.date || c.startDate);
-          const dateRange = (typeof c.dateRange === 'string' && c.dateRange) ? c.dateRange : (c.date ? safeRenderString(c.date, 'TBD') : 'TBD');
+          const rawDate = c.date || c.startDate;
+          const parsedDate = rawDate ? new Date(rawDate) : null;
+          const dateRange = (typeof c.dateRange === 'string' && c.dateRange) ? c.dateRange
+            : (parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD');
           const coordinator = c.coordinator || c.creator || loggedInAdmin?.name || 'Admin';
 
           let status = c.status;

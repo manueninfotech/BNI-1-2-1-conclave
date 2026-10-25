@@ -232,6 +232,8 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     ['running', 'active'].includes(conclaveStatusStr) &&
     Number(conclaveSyncData?.conclaveStatus?.currentRound || 0) > 0;
 
+  const hasActiveConclave = Boolean(conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId);
+
   const hasActiveSession =
     isConclaveRunning &&
     Boolean(conclaveSyncData?.tableNumber || (conclaveSyncData?.tableOccupants && conclaveSyncData.tableOccupants.length > 0));

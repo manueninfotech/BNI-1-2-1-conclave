@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, BarChart, Bar, Cell, XAxis } from 'recharts';
 import { api } from '../services/api';
+import confetti from 'canvas-confetti';
 import { colors } from '../config/theme';
 import { formatStatus } from '../utils/statusUtils';
 

@@ -106,7 +106,7 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
                     if (r.role === 'captain' || r.isTableCaptain === true) {
                       const uid = r.userId || r.uid || r.id;
                       const existing = captainMap.get(uid) || {};
-                      const userRegion = r.region || master.region || existing.region || (typeof r.location === 'string' ? r.location : '') || 'Global';
+                      const userRegion = r.region || existing.region || (typeof r.location === 'string' ? r.location : '') || 'Global';
                       captainMap.set(uid, {
                         ...r,
                         ...existing,
@@ -145,7 +145,7 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
 
           const rawStatus = (r.status || '').toLowerCase();
           const isActiveCaptain = rawStatus === 'active' || rawStatus === 'available' || rawStatus === 'confirmed' || r.isActive === true || !r.status;
-          const tableStr = r.table || r.assignedTable || (r.tableNumber ? `Table ${r.tableNumber}` : 'Table 1');
+          const tableStr = r.table || r.assignedTable || (r.tableNumber ? `Table ${r.tableNumber}` : 'Not assigned');
           const joinDateFormatted = r.joinDate ? (new Date(r.joinDate).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' })) : (r.createdAt ? new Date(r.createdAt).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A');
 
           return {

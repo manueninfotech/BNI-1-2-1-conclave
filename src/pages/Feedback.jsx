@@ -42,7 +42,7 @@ export default function Feedback({ selectedConclaveId }) {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [selectedConclaveId]);
+  useEffect(() => { load();   }, [selectedConclaveId]);
 
   const items = data?.items || [];
 

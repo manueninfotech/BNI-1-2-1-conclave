@@ -14,6 +14,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { api } from '../services/api';
+import confetti from 'canvas-confetti';
 import { formatStatus } from '../utils/statusUtils';
 
 export default function ScheduleReview({ setActiveTab, searchQuery: globalSearchQuery, selectedConclaveId, onNavigateToRunner, isHubMode = false }) {
@@ -467,7 +468,6 @@ export default function ScheduleReview({ setActiveTab, searchQuery: globalSearch
       spread: 60,
       origin: { y: 0.6 }
     });
-    setHasUnsavedChanges(true);
     showToast('Conflict Resolved', 'Swapped Ananya Lal for Esha Wadhwa. Table 01 is now validated.');
   };
 

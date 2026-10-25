@@ -218,6 +218,20 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     year: 'numeric'
   });
 
+  // Hooks must all run before the early "no conclave" return below.
+  const conclaveDate = useMemo(() => {
+    if (!selectedConclave) return '';
+    if (selectedConclave.startDate && selectedConclave.endDate) {
+      const s = new Date(selectedConclave.startDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      const e = new Date(selectedConclave.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      return s === e ? s : `${s} – ${e}`;
+    }
+    if (selectedConclave.date) {
+      return new Date(selectedConclave.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    return selectedConclave.dateRange || 'Date TBD';
+  }, [selectedConclave]);
+
   if (!selectedConclave) {
     return (
       <div className="space-y-6 sm:space-y-8 p-4 sm:p-8 max-w-[1600px] mx-auto w-full">
@@ -245,17 +259,6 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     );
   }
 
-  const conclaveDate = useMemo(() => {
-    if (selectedConclave.startDate && selectedConclave.endDate) {
-      const s = new Date(selectedConclave.startDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-      const e = new Date(selectedConclave.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-      return s === e ? s : `${s} – ${e}`;
-    }
-    if (selectedConclave.date) {
-      return new Date(selectedConclave.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-    return selectedConclave.dateRange || 'Date TBD';
-  }, [selectedConclave]);
 
   const conclaveVenue = selectedConclave.venueLocation || selectedConclave.venue || selectedConclave.location || 'N/A';
   const conclaveProgress = (selectedConclave.status || '').toLowerCase() === 'completed' ? 100 : (selectedConclave.status || '').toLowerCase() === 'running' ? 60 : 0;
