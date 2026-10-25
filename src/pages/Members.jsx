@@ -77,7 +77,7 @@ export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
   return { state, country };
 }
 
-export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin }) {
+export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'] }) {
   const isSuperadmin = useMemo(() => {
     const role = (loggedInAdmin?.role || '').toLowerCase();
     const email = (loggedInAdmin?.email || '').toLowerCase();
@@ -178,7 +178,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [viewScope, setViewScope] = useState('conclave'); // 'conclave', 'region', or 'global'
+  const [viewScope, setViewScope] = useState(allowedScopes[0]); // 'conclave', 'region', or 'global'
 
   useEffect(() => {
     async function loadMembersData() {
@@ -1115,7 +1115,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       </div>
 
       {/* Scope Navigation Tabs */}
+      {allowedScopes.length > 1 && (
       <div className="flex border-b border-zinc-200 -mt-2">
+        {allowedScopes.includes('conclave') && (
         <button
           onClick={() => setViewScope('conclave')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'conclave'
@@ -1125,6 +1127,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         >
           This Conclave
         </button>
+        )}
+        {allowedScopes.includes('region') && (
         <button
           onClick={() => setViewScope('region')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'region'
@@ -1134,6 +1138,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         >
           My Region
         </button>
+        )}
+        {allowedScopes.includes('global') && (
         <button
           onClick={() => setViewScope('global')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'global'
@@ -1143,7 +1149,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         >
           Global Network
         </button>
+        )}
       </div>
+      )}
 
       {/* Statistics KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

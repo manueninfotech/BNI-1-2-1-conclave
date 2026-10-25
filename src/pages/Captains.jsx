@@ -20,7 +20,7 @@ import SearchableDropdown from '../components/SearchableDropdown';
 
 import { api } from '../services/api';
 
-export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmin }) {
+export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'] }) {
   const [captains, setCaptains] = useState(() => {
     const cached = localStorage.getItem('bni_admin_captains_cache');
     if (cached) {
@@ -29,7 +29,7 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [viewScope, setViewScope] = useState('conclave');
+  const [viewScope, setViewScope] = useState(allowedScopes[0]);
 
   useEffect(() => {
     async function loadCaptainsData() {
@@ -561,7 +561,9 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
       </div>
 
       {/* Scope Navigation Tabs */}
+      {allowedScopes.length > 1 && (
       <div className="flex border-b border-zinc-200 -mt-2">
+        {allowedScopes.includes('conclave') && (
         <button
           onClick={() => setViewScope('conclave')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'conclave'
@@ -571,6 +573,8 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
         >
           This Conclave
         </button>
+        )}
+        {allowedScopes.includes('region') && (
         <button
           onClick={() => setViewScope('region')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'region'
@@ -580,6 +584,8 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
         >
           My Region
         </button>
+        )}
+        {allowedScopes.includes('global') && (
         <button
           onClick={() => setViewScope('global')}
           className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'global'
@@ -589,7 +595,9 @@ export default function Captains({ searchQuery, selectedConclaveId, loggedInAdmi
         >
           Global Network
         </button>
+        )}
       </div>
+      )}
 
       {/* Overview KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
