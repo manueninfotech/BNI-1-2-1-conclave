@@ -29,6 +29,18 @@ const defaultBackendUrl = typeof window !== 'undefined' && (window.location.host
 const BASE_URL = import.meta.env.VITE_API_URL || defaultBackendUrl;
 
 /**
+ * A stored file's address for <img src>. The backend saves our own files as
+ * "/api/files/<path>" (it answers with a short-lived signed link); older
+ * photos are full Firebase Storage URLs and are used as they are.
+ */
+export function fileUrl(u) {
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u) || u.startsWith('data:')) return u;
+  const origin = BASE_URL.replace(/\/api\/?$/, '');
+  return `${origin}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+/**
  * Returns a promise that resolves to the current Firebase user (or null)
  * AFTER Firebase has finished restoring the session from its cache.
  *
