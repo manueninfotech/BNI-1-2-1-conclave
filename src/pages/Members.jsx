@@ -337,7 +337,10 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             transactionId,
             isCaptain: r.role === 'captain' || r.isTableCaptain === true,
             tableNumber: r.tableNumber ?? null,
-            status: isActiveMember ? 'Active' : 'Inactive',
+            // Online = the app is open on their phone right now (it checks in
+            // every 2 minutes). Older backends without presence fall back.
+            status: (r.isOnline ?? isActiveMember) ? 'Active' : 'Inactive',
+            lastSeenAt: r.lastSeenAt || null,
             joinDate: joinDateFormatted,
             avatar: displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
             photoUrl: r.photoUrl || null,
@@ -797,7 +800,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         (captainFilter === 'Captain' && member.isCaptain) ||
         (captainFilter === 'Member' && !member.isCaptain);
 
-      const matchesStatus = statusFilter === 'All' || member.status === statusFilter;
+      const matchesStatus = statusFilter === 'All' || (statusFilter === 'Online now') === (member.status === 'Active');
       const adminReg = (loggedInAdmin?.region || loggedInAdmin?.scope || '').toLowerCase().trim();
       const memberReg = (member.region || getMemberRegion(member) || '').toLowerCase().trim();
       const matchesViewScope = viewScope === 'conclave' || viewScope === 'global' || !adminReg || adminReg === 'global' || adminReg.includes('global') || memberReg.includes(adminReg) || adminReg.includes(memberReg);
@@ -1167,7 +1170,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalCount}</span>
         </div>
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Active Members</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold" title="App open on their phone right now">Online now</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{activeCount}</span>
           </div>
@@ -1212,8 +1215,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
             {/* Status */}
             <SearchableDropdown
-              label="Status"
-              options={['All', 'Active', 'Inactive']}
+              label="App"
+              options={['All', 'Online now', 'Not online']}
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="Search status..."
@@ -1266,7 +1269,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 <th className="px-5 py-4">Category</th>
                 <th className="px-5 py-4">Contact Info</th>
                 <th className="px-5 py-4">Role</th>
-                <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4">App</th>
                 {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals given in this conclave">Given</th>}
                 {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals received in this conclave">Received</th>}
                 <th className="px-5 py-4 text-right">Actions</th>
@@ -1339,12 +1342,12 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </td>
                     <td className="px-5 py-4">
                       {member.status === 'Active' ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded text-[10px] font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                        <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Online now
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> Inactive
+                        <span className="inline-flex items-center gap-1 text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap" title={member.lastSeenAt ? new Date(member.lastSeenAt).toLocaleString() : undefined}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> {lastSeenText(member.lastSeenAt)}
                         </span>
                       )}
                     </td>
@@ -1459,11 +1462,11 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         )}
                         {selectedMember.status === 'Active' ? (
                           <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-md text-[9px] font-extrabold uppercase">
-                            Active
+                            Online now
                           </span>
                         ) : (
                           <span className="px-2.5 py-0.5 bg-zinc-100 text-zinc-500 border border-zinc-200 rounded-md text-[9px] font-semibold uppercase">
-                            Inactive
+                            {lastSeenText(selectedMember.lastSeenAt)}
                           </span>
                         )}
                       </div>
@@ -2114,4 +2117,16 @@ function PaymentPill({ status }) {
 function titleCase(v) {
   const s = String(v || '').trim();
   return s ? s.replace(/\b([a-z])/g, (c) => c.toUpperCase()) : '—';
+}
+
+/** "Last seen 5 min ago" / "Last seen 3 h ago" / "Last seen 12 Oct" / "Not seen yet". */
+function lastSeenText(iso) {
+  const t = iso ? new Date(iso).getTime() : NaN;
+  if (!t || isNaN(t)) return 'Not seen yet';
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return 'Last seen just now';
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `Last seen ${hrs} h ago`;
+  return `Last seen ${new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short' })}`;
 }
