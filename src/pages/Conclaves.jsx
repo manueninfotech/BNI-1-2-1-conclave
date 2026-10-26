@@ -21,6 +21,7 @@ import { api } from '../services/api';
 import { extractTextFromPdfDataUrl, createFreshAgendaPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
 import { formatStatus } from '../utils/statusUtils';
+import ConclaveForm, { conclavePayload } from '../admin/ConclaveForm';
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -460,7 +461,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       document.body.style.overflow = '';
     };
   }, [selectedConclave]);
-  const [viewScope, setViewScope] = useState('region'); // Default to 'My Region' on open
+  // The server already returns only this admin's region (all of them for a
+  // superadmin), so there's nothing to switch between.
+  const viewScope = 'global';
 
   // Checked rows
   const [selectedRows, setSelectedRows] = useState(new Set());
@@ -840,7 +843,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       memberLimit: 100,
       captainLimit: 12,
       status: 'Upcoming',
-      region: defaultReg,
+      // A superadmin picks the region; an admin's is fixed.
+      region: isSuperadmin ? '' : defaultReg,
+      multiDay: false,
       coordinator: defaultCoord,
       allowAdminAddMembers: true,
       description: '',
@@ -874,42 +879,19 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
     try {
       // An inverted registration window (start after end) makes the backend
       // report "registration not open" and members can't register — guard it.
-      const timingErr = conclaveTimingError(formData);
+      const timingErr = conclaveTimingError({
+        ...formData,
+        endDate: formData.multiDay ? formData.endDate : '',
+        regStartDate: '',
+        regStartTime: '',
+        regEndDate: formData.isRegistrationOpen ? formData.regEndDate : '',
+        regEndTime: formData.isRegistrationOpen ? formData.regEndTime : '',
+      });
       if (timingErr) {
         showToast('Check the dates & times', timingErr);
         return;
       }
-      const payload = {
-        name: formData.name,
-        venueLocation: formData.venue,
-        date: formData.startDate || new Date().toISOString(),
-        endDate: formData.endDate || undefined,
-        startTime: formData.startTime || undefined,
-        endTime: formData.endTime || undefined,
-        regStartDate: formData.regStartDate || undefined,
-        regEndDate: formData.regEndDate || undefined,
-        regStartTime: formData.regStartTime || undefined,
-        regEndTime: formData.regEndTime || undefined,
-        isRegistrationOpen: Boolean(formData.isRegistrationOpen),
-        registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
-        allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
-        dateRange: formData.dateRange || 'TBD',
-        region: isSuperadmin ? (formData.region || assignedAdminRegion) : (assignedAdminRegion || formData.region || ''),
-        coordinator: formData.coordinator || loggedInAdmin?.name || 'Administrator',
-        personsPerTable: Number(formData.personsPerTable) || 7,
-        roundCount: Number(formData.roundCount) || 4,
-        memberLimit: Number(formData.memberLimit) || 100,
-        captainLimit: Number(formData.captainLimit) || 12,
-        paymentDetails: {
-          registrationFee: Number(formData.registrationFee) || 0,
-          bankName: (formData.bankName || '').trim(),
-          accountNumber: (formData.accountNumber || '').trim(),
-          ifscCode: (formData.ifscCode || '').trim(),
-          accountHolderName: (formData.accountHolderName || '').trim(),
-          upiId: (formData.upiId || '').trim(),
-          upiQrImageUrl: (formData.upiQrImageUrl || '').trim(),
-        }
-      };
+      const payload = conclavePayload(formData, { isSuperadmin, assignedAdminRegion, loggedInAdmin });
 
       await api.post('/admin/conclaves', payload);
       showToast('Conclave Created', `"${formData.name}" has been successfully added.`);
@@ -978,14 +960,17 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       dateRange: c.dateRange || '',
       startDate: formatDateForInput(c.startDate || c.date),
       endDate: formatDateForInput(c.endDate),
+      multiDay: Boolean(c.endDate && formatDateForInput(c.endDate) !== formatDateForInput(c.startDate || c.date)),
       startTime: formatTimeForInput(c.startTime) || '09:00',
       endTime: formatTimeForInput(c.endTime) || '17:00',
       regStartDate: formatDateForInput(c.regStartDate),
-      regEndDate: formatDateForInput(c.regEndDate),
+      // Only an automatic close is a real close time (an "open"/"closed"
+      // switch ignores the stored window).
+      regEndDate: c.registrationOverride === 'auto' ? formatDateForInput(c.regEndDate) : '',
       regStartTime: formatTimeForInput(c.regStartTime) || '',
-      regEndTime: formatTimeForInput(c.regEndTime) || '',
+      regEndTime: c.registrationOverride === 'auto' ? formatTimeForInput(c.regEndTime) || '' : '',
       isScheduleLocked: Boolean(c.isScheduleLocked),
-      isRegistrationOpen: c.isScheduleLocked ? false : (c.registrationOverride ? c.registrationOverride === 'open' : (c.isRegistrationOpen ?? true)),
+      isRegistrationOpen: c.isScheduleLocked ? false : (c.registrationOverride ? c.registrationOverride !== 'closed' : (c.isRegistrationOpen ?? true)),
       allowAdminAddMembers: Boolean(c.allowAdminAddMembers),
       memberCount: c.memberCount || 0,
       memberLimit: c.memberLimit ?? 100,
@@ -1009,42 +994,20 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const timingErr = conclaveTimingError(formData);
+      const timingErr = conclaveTimingError({
+        ...formData,
+        endDate: formData.multiDay ? formData.endDate : '',
+        regStartDate: '',
+        regStartTime: '',
+        regEndDate: formData.isRegistrationOpen ? formData.regEndDate : '',
+        regEndTime: formData.isRegistrationOpen ? formData.regEndTime : '',
+      });
       if (timingErr) {
         showToast('Check the dates & times', timingErr);
         return;
       }
-      const payload = {
-        name: formData.name,
-        venueLocation: formData.venue,
-        region: formData.region || loggedInAdmin?.region || loggedInAdmin?.scope || '',
-        coordinator: formData.coordinator || loggedInAdmin?.name || 'Administrator',
-        status: formData.status,
-        dateRange: formData.dateRange,
-        date: formData.startDate || undefined,
-        endDate: formData.endDate || undefined,
-        startTime: formData.startTime || undefined,
-        endTime: formData.endTime || undefined,
-        regStartDate: formData.regStartDate || undefined,
-        regEndDate: formData.regEndDate || undefined,
-        regStartTime: formData.regStartTime || undefined,
-        regEndTime: formData.regEndTime || undefined,
-        isRegistrationOpen: Boolean(formData.isRegistrationOpen),
-        registrationOverride: formData.isRegistrationOpen ? 'open' : 'closed',
-        allowAdminAddMembers: Boolean(formData.allowAdminAddMembers),
-        memberLimit: Number(formData.memberLimit) || 100,
-        captainLimit: Number(formData.captainLimit) || 12,
-        description: formData.description,
-        paymentDetails: {
-          registrationFee: Number(formData.registrationFee) || 0,
-          bankName: (formData.bankName || '').trim(),
-          accountNumber: (formData.accountNumber || '').trim(),
-          ifscCode: (formData.ifscCode || '').trim(),
-          accountHolderName: (formData.accountHolderName || '').trim(),
-          upiId: (formData.upiId || '').trim(),
-          upiQrImageUrl: (formData.upiQrImageUrl || '').trim(),
-        }
-      };
+      const payload = conclavePayload(formData, { isSuperadmin, assignedAdminRegion, loggedInAdmin });
+
       await api.put(`/admin/conclaves/${formData.id}`, payload);
       showToast('Conclave Updated', `Successfully updated conclave profile data.`);
       setIsEditModalOpen(false);
@@ -1081,9 +1044,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       {/* Breadcrumbs & Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-dashboard-title text-zinc-955 font-extrabold tracking-tight">Conclave Management</h2>
+          <h2 className="text-dashboard-title text-zinc-955 font-extrabold tracking-tight">Conclaves</h2>
           <p className="text-body-text text-zinc-500 mt-2">
-            Create and manage BNI conclave schedules and lifecycle events.
+            {isSuperadmin ? 'Every conclave, in all regions.' : `Conclaves in ${assignedAdminRegion || 'your region'}.`} Open one to manage its members, tables and rounds.
           </p>
         </div>
         <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto">
@@ -1104,27 +1067,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
         </div>
       </div>
 
-      {/* Scope Navigation Tabs */}
-      <div className="flex border-b border-zinc-200 -mt-2">
-        <button
-          onClick={() => setViewScope('region')}
-          className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'region'
-            ? 'border-brand-red text-brand-red font-extrabold'
-            : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-        >
-          My Region
-        </button>
-        <button
-          onClick={() => setViewScope('global')}
-          className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'global'
-            ? 'border-brand-red text-brand-red font-extrabold'
-            : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-        >
-          Global Network
-        </button>
-      </div>
 
       {/* KPI Overview Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -1225,16 +1167,13 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                     type="checkbox"
                   />
                 </th>
-                <th className="px-5 py-4">Conclave Name</th>
-                <th className="px-5 py-4">Region</th>
-                <th className="px-5 py-4">Coordinator</th>
-                <th className="px-5 py-4">Date Schedule</th>
-                <th className="px-5 py-4">Venue Location</th>
+                <th className="px-5 py-4">Conclave</th>
+                {isSuperadmin && <th className="px-5 py-4">Region</th>}
+                <th className="px-5 py-4">Date</th>
+                <th className="px-5 py-4">Venue</th>
                 <th className="px-5 py-4 text-center">Members</th>
-                <th className="px-5 py-4 text-center">Captains</th>
-                <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4">Stage</th>
                 <th className="px-5 py-4 text-center">Registration</th>
-                <th className="px-5 py-4">Progress</th>
                 <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -1273,19 +1212,13 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                           <span className="text-body-sm font-bold text-zinc-900 transition-smooth leading-tight">{safeRenderString(conclave.name)}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
-                        <span className="px-2 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-555 text-[10px] font-bold rounded-full whitespace-nowrap">
-                          {safeRenderString(conclave.region, 'Global')}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-brand-red/10 text-brand-red font-bold text-[10px] flex items-center justify-center shrink-0">
-                            {safeRenderString(conclave.coordinatorAvatar, 'A')}
-                          </div>
-                          <span className="font-semibold text-zinc-700">{safeRenderString(conclave.coordinator)}</span>
-                        </div>
-                      </td>
+                      {isSuperadmin && (
+                        <td className="px-5 py-4">
+                          <span className="px-2 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-600 text-[10px] font-bold rounded-full whitespace-nowrap">
+                            {safeRenderString(conclave.region, '—')}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-5 py-4">
                         <div className="font-semibold text-zinc-650">{safeRenderString(conclave.dateRange, 'TBD')}</div>
                         {(conclave.startTime || conclave.endTime) && (
@@ -1302,9 +1235,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                       <td className="px-5 py-4 text-zinc-650">{safeRenderString(conclave.venueShort, 'N/A')}</td>
                       <td className="px-5 py-4 text-center font-bold text-zinc-800">
                         {conclave.memberCount}
-                      </td>
-                      <td className="px-5 py-4 text-center font-bold text-zinc-800">
-                        {conclave.captainCount}
                       </td>
                       <td className="px-5 py-4">
                         {(conclave.status || '').toLowerCase() === 'running' || (conclave.status || '').toLowerCase() === 'active' ? (
@@ -1362,19 +1292,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                             </span>
                           </div>
                         )}
-                      </td>
-                      <td className="px-5 py-4 w-32">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden border border-zinc-200/10">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart layout="vertical" data={[{ value: conclave.progress }]} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                                <XAxis type="number" domain={[0, 100]} hide />
-                                <Bar dataKey="value" fill={conclave.status === 'Completed' ? '#3f3f46' : conclave.status === 'Draft' ? '#a1a1aa' : '#af101a'} radius={[2, 2, 2, 2]} background={{ fill: '#f4f4f5' }} barSize={6} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <span className="text-[10px] font-bold text-zinc-600">{conclave.progress}%</span>
-                        </div>
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
@@ -1667,579 +1584,31 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       )}
 
       {/* CREATE MODAL */}
-      {isAddModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
-          <form onSubmit={handleAddSubmit} className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white rounded-2xl border border-zinc-100 shadow-2xl overflow-hidden animate-scale-up">
-            <div className="p-4 sm:p-5 border-b border-zinc-100 bg-zinc-50 flex justify-between items-center shrink-0">
-              <h3 className="font-extrabold text-zinc-950 text-body-sm">Create New Conclave</h3>
-              <button type="button" onClick={() => setIsAddModalOpen(false)} className="p-1 hover:bg-zinc-200 rounded text-zinc-400 transition-smooth cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto max-h-[60vh] md:max-h-[65vh]">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Conclave Name *</label>
-                  <input
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    placeholder="Annual Global Summit"
-                    type="text"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Coordinator Name *</label>
-                  <input
-                    value={formData.coordinator}
-                    onChange={(e) => setFormData(prev => ({ ...prev, coordinator: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    placeholder="Vikram Malhotra"
-                    type="text"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Venue Location *</label>
-                  <input
-                    value={formData.venue}
-                    onChange={(e) => setFormData(prev => ({ ...prev, venue: e.target.value, venueShort: e.target.value.split(',')[0] }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    placeholder="V Convention, Guntur"
-                    type="text"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">
-                    Region Group * {(!isSuperadmin && assignedAdminRegion) && <span className="text-zinc-400 font-semibold lowercase">(locked)</span>}
-                  </label>
-                  {isSuperadmin ? (
-                    <input
-                      value={formData.region}
-                      onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                      placeholder="Guntur Central"
-                      type="text"
-                      required
-                    />
-                  ) : (
-                    <div>
-                      <input
-                        value={assignedAdminRegion || formData.region || 'Assigned Region'}
-                        readOnly
-                        disabled
-                        className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-zinc-100 text-zinc-600 font-bold cursor-not-allowed select-none"
-                        type="text"
-                      />
-                      <span className="text-[9.5px] text-zinc-400 font-semibold block mt-1">
-                        Locked to your assigned administrator region.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Date Schedule Text</label>
-                  <input
-                    value={formData.dateRange}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateRange: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    placeholder="Nov 12 - Nov 14, 2024"
-                    type="text"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Date</label>
-                  <input
-                    value={formData.startDate}
-                    onChange={(e) => handleDateChange('startDate', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Date</label>
-                  <input
-                    value={formData.endDate}
-                    onChange={(e) => handleDateChange('endDate', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Time</label>
-                  <input
-                    value={formData.startTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Time</label>
-                  <input
-                    value={formData.endTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Date</label>
-                  <input
-                    value={formData.regStartDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regStartDate: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Date</label>
-                  <input
-                    value={formData.regEndDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regEndDate: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Time</label>
-                  <input
-                    value={formData.regStartTime || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regStartTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Time</label>
-                  <input
-                    value={formData.regEndTime || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regEndTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                  <p className="text-[9.5px] text-zinc-400 font-semibold mt-1">Must be on/before the conclave start.</p>
-                </div>
-              </div>
-
-              {/* Registration Override Toggle */}
-              <div className="bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-zinc-900 uppercase">Registration Status</span>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                      formData.isRegistrationOpen ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
-                    }`}>
-                      {formData.isRegistrationOpen ? 'OPEN (ON)' : 'CLOSED (OFF)'}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">
-                    Manually open or close registration within the window. Turning it back ON after the close time has passed won't reopen it — extend the close time instead.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(formData.isRegistrationOpen)}
-                    onChange={(e) => setFormData(prev => ({ ...prev, isRegistrationOpen: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Members Limit</label>
-                  <input
-                    value={formData.memberLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, memberLimit: Number(e.target.value) }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="number"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Captains Limit</label>
-                  <input
-                    value={formData.captainLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, captainLimit: Number(e.target.value) }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="number"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Lifecycle Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-semibold text-zinc-700 cursor-pointer"
-                  >
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Running">Running</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20 min-h-[60px]"
-                  placeholder="Details about matching sessions, sectors, coordinator notes..."
-                />
-              </div>
-
-              {/* Registration fee + optional offline payment details */}
-              <FeeAndPaymentSection formData={formData} setFormData={setFormData} />
-            </div>
-
-            <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                className="px-4 py-2 border border-zinc-100 bg-white text-zinc-700 text-button rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-brand-red hover:bg-red-700 text-white text-button rounded-lg transition-smooth cursor-pointer"
-              >
-                Create Conclave
-              </button>
-            </div>
-          </form>
-        </div>,
-        document.body
+      {isAddModalOpen && (
+        <ConclaveForm
+          mode="create"
+          formData={formData}
+          setFormData={setFormData}
+          onSubmit={handleAddSubmit}
+          onCancel={() => setIsAddModalOpen(false)}
+          isSuperadmin={isSuperadmin}
+          assignedAdminRegion={assignedAdminRegion}
+          FeeSection={FeeAndPaymentSection}
+        />
       )}
 
       {/* EDIT MODAL */}
-      {isEditModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-xs animate-fade-in">
-          <form onSubmit={handleEditSubmit} className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white rounded-2xl border border-zinc-100 shadow-2xl overflow-hidden animate-scale-up">
-            <div className="p-4 sm:p-5 border-b border-zinc-100 bg-zinc-50 flex justify-between items-center shrink-0">
-              <h3 className="font-extrabold text-zinc-950 text-body-sm">Edit Conclave Profile</h3>
-              <button type="button" onClick={() => setIsEditModalOpen(false)} className="p-1 hover:bg-zinc-200 rounded text-zinc-400 transition-smooth cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto max-h-[60vh] md:max-h-[65vh]">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Conclave Name</label>
-                  <input
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="text"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Coordinator Name</label>
-                  <input
-                    value={formData.coordinator}
-                    onChange={(e) => setFormData(prev => ({ ...prev, coordinator: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="text"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Venue Location</label>
-                  <input
-                    value={formData.venue}
-                    onChange={(e) => setFormData(prev => ({ ...prev, venue: e.target.value, venueShort: e.target.value.split(',')[0] }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="text"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">
-                    Region Group * {(!isSuperadmin && assignedAdminRegion) && <span className="text-zinc-400 font-semibold lowercase">(locked)</span>}
-                  </label>
-                  {isSuperadmin ? (
-                    <input
-                      value={formData.region}
-                      onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                      className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                      type="text"
-                      required
-                    />
-                  ) : (
-                    <div>
-                      <input
-                        value={assignedAdminRegion || formData.region || 'Assigned Region'}
-                        readOnly
-                        disabled
-                        className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm bg-zinc-100 text-zinc-600 font-bold cursor-not-allowed select-none"
-                        type="text"
-                      />
-                      <span className="text-[9.5px] text-zinc-400 font-semibold block mt-1">
-                        Locked to your assigned administrator region.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Date Schedule Text</label>
-                  <input
-                    value={formData.dateRange}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateRange: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="text"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Date</label>
-                  <input
-                    value={formData.startDate}
-                    onChange={(e) => handleDateChange('startDate', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Date</label>
-                  <input
-                    value={formData.endDate}
-                    onChange={(e) => handleDateChange('endDate', e.target.value)}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Start Time</label>
-                  <input
-                    value={formData.startTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">End Time</label>
-                  <input
-                    value={formData.endTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Date</label>
-                  <input
-                    value={formData.regStartDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regStartDate: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Date</label>
-                  <input
-                    value={formData.regEndDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regEndDate: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="date"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Open Time</label>
-                  <input
-                    value={formData.regStartTime || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regStartTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-455 block mb-1">Registration Close Time</label>
-                  <input
-                    value={formData.regEndTime || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, regEndTime: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="time"
-                  />
-                  <p className="text-[9.5px] text-zinc-400 font-semibold mt-1">Must be on/before the conclave start.</p>
-                </div>
-              </div>
-
-              {/* Registration Override Toggle */}
-              <div className={`bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between ${formData.isScheduleLocked ? 'opacity-70' : ''}`}>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-zinc-900 uppercase">Registration Status</span>
-                    {formData.isScheduleLocked ? (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
-                        <Lock className="w-2.5 h-2.5" />
-                        LOCKED (CLOSED)
-                      </span>
-                    ) : (
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                        formData.isRegistrationOpen ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
-                      }`}>
-                        {formData.isRegistrationOpen ? 'OPEN (ON)' : 'CLOSED (OFF)'}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">
-                    {formData.isScheduleLocked
-                      ? 'Schedule is generated and locked. Registration is permanently closed.'
-                      : 'When ON, registrations remain active even if the close date has passed, until switched OFF.'}
-                  </p>
-                </div>
-                <label className={`relative inline-flex items-center select-none ${formData.isScheduleLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                  <input
-                    type="checkbox"
-                    disabled={Boolean(formData.isScheduleLocked)}
-                    checked={!formData.isScheduleLocked && Boolean(formData.isRegistrationOpen)}
-                    onChange={(e) => setFormData(prev => ({ ...prev, isRegistrationOpen: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className={`w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 ${formData.isScheduleLocked ? 'opacity-40' : ''}`}></div>
-                </label>
-              </div>
-
-              {/* Admin Member Access Toggle (Superadmin only) */}
-              {isSuperadmin && (
-                <div className={`bg-zinc-50 border border-zinc-200/80 rounded-lg p-3 flex items-center justify-between ${formData.isScheduleLocked ? 'opacity-70' : ''}`}>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold text-zinc-900 uppercase">Admin Member Access</span>
-                      {formData.isScheduleLocked ? (
-                        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
-                          <Lock className="w-2.5 h-2.5" />
-                          LOCKED (OFF)
-                        </span>
-                      ) : (
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                          formData.allowAdminAddMembers ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-700'
-                        }`}>
-                          {formData.allowAdminAddMembers ? 'ALLOWED (ON)' : 'RESTRICTED (OFF)'}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-zinc-500 mt-0.5">
-                      {formData.isScheduleLocked
-                        ? 'Schedule is generated and locked. Member additions are closed for all administrators.'
-                        : 'When ON, regular admins can add, import, export, edit, and delete members for this conclave.'}
-                    </p>
-                  </div>
-                  <label className={`relative inline-flex items-center select-none ${formData.isScheduleLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      disabled={Boolean(formData.isScheduleLocked)}
-                      checked={!formData.isScheduleLocked && Boolean(formData.allowAdminAddMembers)}
-                      onChange={(e) => setFormData(prev => ({ ...prev, allowAdminAddMembers: e.target.checked }))}
-                      className="sr-only peer"
-                    />
-                    <div className={`w-10 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 ${formData.isScheduleLocked ? 'opacity-40' : ''}`}></div>
-                  </label>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Members Limit</label>
-                  <input
-                    value={formData.memberLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, memberLimit: Number(e.target.value) }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="number"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Captains Limit</label>
-                  <input
-                    value={formData.captainLimit}
-                    onChange={(e) => setFormData(prev => ({ ...prev, captainLimit: Number(e.target.value) }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20"
-                    type="number"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Lifecycle Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-white font-semibold text-zinc-700 cursor-pointer"
-                  >
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Running">Running</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold uppercase text-zinc-450 block mb-1">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none bg-zinc-50/20 min-h-[60px]"
-                />
-              </div>
-
-              {/* Registration fee + optional offline payment details */}
-              <FeeAndPaymentSection formData={formData} setFormData={setFormData} />
-            </div>
-
-            <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2 border border-zinc-100 bg-white text-zinc-700 text-button rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-brand-red hover:bg-red-700 text-white text-button rounded-lg transition-smooth cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </div>,
-        document.body
+      {isEditModalOpen && (
+        <ConclaveForm
+          mode="edit"
+          formData={formData}
+          setFormData={setFormData}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setIsEditModalOpen(false)}
+          isSuperadmin={isSuperadmin}
+          assignedAdminRegion={assignedAdminRegion}
+          FeeSection={FeeAndPaymentSection}
+        />
       )}
 
       {/* REMOVE SINGLE CONCLAVE CONFIRMATION */}

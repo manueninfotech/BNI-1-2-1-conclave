@@ -1261,9 +1261,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 <th className="px-5 py-4">Member Name</th>
                 {viewScope === 'conclave' && <th className="px-5 py-4">Payment</th>}
                 <th className="px-5 py-4">Region</th>
-                <th className="px-5 py-4">Classification</th>
+                <th className="px-5 py-4">Category</th>
                 <th className="px-5 py-4">Contact Info</th>
-                <th className="px-5 py-4">Chapter Role</th>
+                <th className="px-5 py-4">Role</th>
                 <th className="px-5 py-4">Status</th>
                 {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals given in this conclave">Given</th>}
                 {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals received in this conclave">Received</th>}
@@ -1299,7 +1299,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         </div>
                         <div className="flex flex-col">
                           <span className="text-body-sm font-bold text-zinc-900 transition-smooth leading-tight">{member.name}</span>
-                          <span className="text-[10px] text-zinc-455 font-semibold uppercase mt-0.5">Member since {member.joinDate.split(' ')[1] || member.joinDate}</span>
+                          {member.joinDate && member.joinDate !== 'N/A' && (
+                            <span className="text-[10px] text-zinc-455 font-semibold uppercase mt-0.5">Joined {member.joinDate}</span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1310,7 +1312,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     )}
                     <td className="px-5 py-4">
                       <span className="px-2 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-550 text-[10px] font-bold rounded-full whitespace-nowrap">
-                        {getMemberRegion(member)}
+                        {titleCase(getMemberRegion(member))}
                       </span>
                     </td>
                     <td className="px-5 py-4">
@@ -1469,14 +1471,16 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-2.5 mt-3 justify-center border-t border-zinc-100 pt-2.5 w-full">
-                        <span className="px-2 py-1 bg-zinc-50 border border-zinc-150 rounded-lg text-[9.5px] font-bold text-zinc-600">
-                          Sent: {referrals.filter(r => r.fromMemberId === selectedMember.id).length}
-                        </span>
-                        <span className="px-2 py-1 bg-zinc-50 border border-zinc-150 rounded-lg text-[9.5px] font-bold text-zinc-600">
-                          Received: {referrals.filter(r => r.toMemberId === selectedMember.id).length}
-                        </span>
-                      </div>
+                      {viewScope === 'conclave' && (
+                        <div className="flex gap-2.5 mt-3 justify-center border-t border-zinc-100 pt-2.5 w-full">
+                          <span className="px-2 py-1 bg-zinc-50 border border-zinc-150 rounded-lg text-[9.5px] font-bold text-zinc-600">
+                            Referrals given: {referrals.filter(r => r.fromMemberId === selectedMember.id).length}
+                          </span>
+                          <span className="px-2 py-1 bg-zinc-50 border border-zinc-150 rounded-lg text-[9.5px] font-bold text-zinc-600">
+                            Received: {referrals.filter(r => r.toMemberId === selectedMember.id).length}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1484,21 +1488,21 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   <section className="space-y-3">
                     <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Member Information</h5>
                     <div className="grid grid-cols-2 gap-3.5">
-                      <div>
-                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">Member ID</span>
-                        <span className="text-body-sm font-bold text-zinc-800">{selectedMember.id}</span>
-                      </div>
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-[10px] text-zinc-400 font-bold uppercase block">BNI Chapter</span>
-                        <span className="text-body-sm font-bold text-zinc-800">{selectedMember.chapter}</span>
+                        <span className="text-body-sm font-bold text-zinc-800 break-words">{selectedMember.chapter || '—'}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">Region</span>
+                        <span className="text-body-sm font-bold text-zinc-800 break-words">{titleCase(getMemberRegion(selectedMember))}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-zinc-400 font-bold uppercase block">Classification</span>
                         <span className="text-body-sm font-bold text-zinc-800">{selectedMember.category}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">Join Date</span>
-                        <span className="text-body-sm font-bold text-zinc-800">{selectedMember.joinDate}</span>
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">Joined</span>
+                        <span className="text-body-sm font-bold text-zinc-800">{selectedMember.joinDate === 'N/A' ? '—' : selectedMember.joinDate}</span>
                       </div>
                     </div>
                   </section>
@@ -1631,33 +1635,32 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                 {/* Drawer Footer */}
                 <div className="p-4 border-t border-zinc-100 bg-white flex flex-col gap-2 shrink-0 shadow-lg">
-                  <button
-                    onClick={async () => {
-                      const newIsCaptain = !selectedMember.isCaptain;
-                      const newRole = newIsCaptain ? 'captain' : 'member';
-
-                      try {
-                        await api.post(`/admin/users/${selectedMember.id}/role`, { role: newRole });
-                        if (selectedConclaveId) {
-                          await api.post(`/admin/conclaves/${selectedConclaveId}/registrations/${selectedMember.id}/role`, { role: newRole }).catch(() => { });
+                  {viewScope === 'conclave' && selectedConclaveId && (
+                    <button
+                      onClick={async () => {
+                        const newIsCaptain = !selectedMember.isCaptain;
+                        const newRole = newIsCaptain ? 'captain' : 'member';
+                        try {
+                          // Captain is a role in THIS conclave, not on the person.
+                          await api.post(`/admin/conclaves/${selectedConclaveId}/registrations/${selectedMember.id}/role`, { role: newRole });
+                        } catch (err) {
+                          showToast(err.message || 'Could not change the role.', 'error');
+                          return;
                         }
-                      } catch (err) {
-                        console.error("Failed to update user role:", err);
-                      }
-
-                      setMembers(prev => prev.map(m => m.id === selectedMember.id ? { ...m, isCaptain: newIsCaptain, role: newRole } : m));
-                      setSelectedMember(prev => prev ? { ...prev, isCaptain: newIsCaptain, role: newRole } : null);
-                      showToast(`${selectedMember.name}'s role updated to ${newIsCaptain ? 'Table Captain' : 'Member'}.`);
-                    }}
-                    className={`w-full py-2 ${selectedMember.isCaptain ? 'bg-amber-600 hover:bg-amber-700' : 'bg-brand-red hover:bg-red-700'} text-white rounded-lg text-button font-bold transition-smooth shadow-sm cursor-pointer`}
-                  >
-                    {selectedMember.isCaptain ? 'Demote to Member' : 'Promote to Table Captain'}
-                  </button>
+                        setMembers(prev => prev.map(m => m.id === selectedMember.id ? { ...m, isCaptain: newIsCaptain, role: newRole } : m));
+                        setSelectedMember(prev => prev ? { ...prev, isCaptain: newIsCaptain, role: newRole } : null);
+                        showToast(`${selectedMember.name} is now ${newIsCaptain ? 'a captain' : 'a member'} in this conclave.`);
+                      }}
+                      className={`w-full py-2 ${selectedMember.isCaptain ? 'bg-amber-600 hover:bg-amber-700' : 'bg-brand-red hover:bg-red-700'} text-white rounded-lg text-button font-bold transition-smooth shadow-sm cursor-pointer`}
+                    >
+                      {selectedMember.isCaptain ? 'Make a member (not captain)' : 'Make captain in this conclave'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setSelectedMember(null)}
                     className="w-full py-2 bg-white border border-zinc-100 text-zinc-650 hover:bg-zinc-50 rounded-lg text-button font-bold transition-smooth shadow-sm cursor-pointer"
                   >
-                    Close Drawer
+                    Close
                   </button>
                 </div>
               </>
@@ -2118,4 +2121,9 @@ function PaymentPill({ status }) {
   if (!status) return <span className="text-zinc-300">—</span>;
   const [cls, label] = map[status] || ['bg-zinc-50 border-zinc-200 text-zinc-600', status];
   return <span className={`px-2 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${cls}`}>{label}</span>;
+}
+
+function titleCase(v) {
+  const s = String(v || '').trim();
+  return s ? s.replace(/\b([a-z])/g, (c) => c.toUpperCase()) : '—';
 }
