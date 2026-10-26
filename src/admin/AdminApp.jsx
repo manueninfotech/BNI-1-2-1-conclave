@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import AdminSidebar from './AdminSidebar';
 import Home from './Home';
 import ConclaveWorkspace from './ConclaveWorkspace';
+import Activity from './Activity';
 import { useConclaves } from './useConclaves';
 import { pickCurrentConclave } from './conclaveStage';
 import Conclaves from '../pages/Conclaves';
@@ -63,6 +64,7 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
           loggedInAdmin={loggedInAdmin}
           selectedConclaveId={conclaveIdInUrl}
           onLogout={onLogout}
+          onBellClick={() => navigate(`${base}/activity`)}
         />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 pb-20 md:pb-24">
           <Routes>
@@ -82,8 +84,9 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
               <Route path="conclaves/:id/:tab" element={<ConclaveWorkspace base={base} loggedInAdmin={loggedInAdmin} searchQuery={searchQuery} />} />
               <Route
                 path="people"
-                element={<Members searchQuery={searchQuery} loggedInAdmin={loggedInAdmin} allowedScopes={['region', 'global']} />}
+                element={<Members searchQuery={searchQuery} loggedInAdmin={loggedInAdmin} allowedScopes={role === 'superadmin' ? ['global'] : ['region', 'global']} />}
               />
+              <Route path="activity" element={<Activity />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<AdminProfile loggedInAdmin={loggedInAdmin} role={role} onLogout={onLogout} />} />
               {role === 'superadmin' && <Route path="revenue" element={<Revenue />} />}

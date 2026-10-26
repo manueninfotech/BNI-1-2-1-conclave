@@ -77,7 +77,7 @@ export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
   return { state, country };
 }
 
-export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'] }) {
+export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'], initialRoleFilter = 'All' }) {
   const isSuperadmin = useMemo(() => {
     const role = (loggedInAdmin?.role || '').toLowerCase();
     const email = (loggedInAdmin?.email || '').toLowerCase();
@@ -335,6 +335,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             paymentAmount,
             transactionId,
             isCaptain: r.role === 'captain' || r.isTableCaptain === true,
+            tableNumber: r.tableNumber ?? null,
             status: isActiveMember ? 'Active' : 'Inactive',
             joinDate: joinDateFormatted,
             avatar: displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
@@ -352,26 +353,29 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     }
     loadMembersData();
   }, [selectedConclaveId, viewScope]);
-  const [referrals, setReferrals] = useState(() => {
-    const stored = localStorage.getItem('bni_referrals');
-    return stored ? JSON.parse(stored) : [];
-  });
-
+  // Referrals given/received and payment status, for this conclave only.
+  const [referrals, setReferrals] = useState([]);
+  const [paymentByUid, setPaymentByUid] = useState({});
   useEffect(() => {
-    const handleStorageChange = () => {
-      const stored = localStorage.getItem('bni_referrals');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          setReferrals(prev => (JSON.stringify(prev) !== JSON.stringify(parsed) ? parsed : prev));
-        } catch { }
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+    if (viewScope !== 'conclave' || !selectedConclaveId) {
+      setReferrals([]);
+      setPaymentByUid({});
+      return;
+    }
+    let alive = true;
+    api.get(`/admin/conclaves/${selectedConclaveId}/referrals`)
+      .then((list) => alive && setReferrals(Array.isArray(list) ? list : []))
+      .catch(() => alive && setReferrals([]));
+    api.get(`/admin/conclaves/${selectedConclaveId}/payments`)
+      .then((p) => {
+        if (!alive) return;
+        const map = {};
+        for (const m of p?.members || []) map[m.uid] = m.paymentStatus;
+        setPaymentByUid(map);
+      })
+      .catch(() => alive && setPaymentByUid({}));
+    return () => { alive = false; };
+  }, [selectedConclaveId, viewScope]);
 
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -384,7 +388,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
   const searchVal = searchTerm;
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [captainFilter, setCaptainFilter] = useState('All');
+  const [captainFilter, setCaptainFilter] = useState(initialRoleFilter);
   const [statusFilter, setStatusFilter] = useState('All');
   const [stateFilter, setStateFilter] = useState('All');
   const [countryFilter, setCountryFilter] = useState('All');
@@ -713,7 +717,6 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   const activeCount = conclaveMembers.filter(m => m.status === 'Active').length;
   const activePercentage = totalCount > 0 ? ((activeCount / totalCount) * 100).toFixed(1) : '0';
   const captainCount = conclaveMembers.filter(m => m.isCaptain).length;
-  const businessClassCount = new Set(conclaveMembers.map(m => m.category)).size;
 
   // Get distinct filter options dynamically from member data
   const categoriesList = useMemo(() => {
@@ -1015,14 +1018,16 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       {/* Page Header & Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h2 className="text-dashboard-title text-zinc-955 font-extrabold tracking-tight">Members Management</h2>
+          <h2 className="text-dashboard-title text-zinc-955 font-extrabold tracking-tight">{viewScope === 'conclave' ? 'Members' : 'People'}</h2>
           <p className="text-body-text text-zinc-500 mt-2">
-            Manage registered BNI members and chapter seating details.
+            {viewScope === 'conclave'
+              ? 'Everyone registered for this conclave: role, table, payment and referrals.'
+              : 'Every member who has signed up, across conclaves.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
           {/* Schedule Locked Notice */}
-          {isScheduleLocked && (
+          {viewScope === 'conclave' && isScheduleLocked && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg shadow-3xs">
               <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <div className="flex flex-col">
@@ -1037,7 +1042,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           )}
 
           {/* Superadmin toggle for allowing regular admins to add/manage members */}
-          {isSuperadmin && (
+          {viewScope === 'conclave' && isSuperadmin && (
             <div className={`flex items-center gap-2.5 px-3 py-1.5 bg-white border border-zinc-250 rounded-lg shadow-3xs ${isScheduleLocked ? 'opacity-60' : ''}`}>
               <div className="flex flex-col">
                 <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400">
@@ -1078,7 +1083,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           </button>
 
           {/* Member action buttons: conditionally visible only if not schedule locked AND has permission */}
-          {!isScheduleLocked && canPerformMemberActions && (
+          {viewScope === 'conclave' && !isScheduleLocked && canPerformMemberActions && (
             <>
               <input
                 type="file"
@@ -1154,7 +1159,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       )}
 
       {/* Statistics KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <span className="text-label-md text-zinc-500 uppercase font-semibold">Total Members</span>
           <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalCount}</span>
@@ -1166,12 +1171,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           </div>
         </div>
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Chapter Captains</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">Captains</span>
           <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{captainCount}</span>
-        </div>
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Business Classifications</span>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{businessClassCount}</span>
         </div>
       </div>
 
@@ -1258,14 +1259,14 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   />
                 </th>
                 <th className="px-5 py-4">Member Name</th>
-                <th className="px-5 py-4">Member ID</th>
+                {viewScope === 'conclave' && <th className="px-5 py-4">Payment</th>}
                 <th className="px-5 py-4">Region</th>
                 <th className="px-5 py-4">Classification</th>
                 <th className="px-5 py-4">Contact Info</th>
                 <th className="px-5 py-4">Chapter Role</th>
                 <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4 text-center">Given</th>
-                <th className="px-5 py-4 text-center">Taken</th>
+                {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals given in this conclave">Given</th>}
+                {viewScope === 'conclave' && <th className="px-5 py-4 text-center" title="Referrals received in this conclave">Received</th>}
                 <th className="px-5 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -1302,7 +1303,11 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 font-semibold text-zinc-700">{member.id}</td>
+                    {viewScope === 'conclave' && (
+                      <td className="px-5 py-4">
+                        <PaymentPill status={paymentByUid[member.id]} />
+                      </td>
+                    )}
                     <td className="px-5 py-4">
                       <span className="px-2 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-550 text-[10px] font-bold rounded-full whitespace-nowrap">
                         {getMemberRegion(member)}
@@ -1321,8 +1326,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </td>
                     <td className="px-5 py-4">
                       {member.isCaptain ? (
-                        <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide">
-                          Captain
+                        <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide whitespace-nowrap">
+                          Captain{viewScope === 'conclave' && member.tableNumber ? ` · Table ${member.tableNumber}` : ''}
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 border border-zinc-200 text-zinc-500 bg-zinc-50 font-semibold rounded-md text-[9px] uppercase tracking-wide">
@@ -1341,12 +1346,16 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-4 text-center font-bold text-zinc-805">
-                      {referrals.filter(r => r.fromMemberId === member.id).length}
-                    </td>
-                    <td className="px-5 py-4 text-center font-bold text-zinc-805">
-                      {referrals.filter(r => r.toMemberId === member.id).length}
-                    </td>
+                    {viewScope === 'conclave' && (
+                      <td className="px-5 py-4 text-center font-bold text-zinc-800">
+                        {referrals.filter(r => r.fromMemberId === member.id).length}
+                      </td>
+                    )}
+                    {viewScope === 'conclave' && (
+                      <td className="px-5 py-4 text-center font-bold text-zinc-800">
+                        {referrals.filter(r => r.toMemberId === member.id).length}
+                      </td>
+                    )}
                     <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -1389,7 +1398,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           itemsPerPage={itemsPerPage}
           currentPage={currentPage}
           onPageChange={setCurrentPage}
-          label="localized Indian members"
+          label="members"
         />
       </div>
 
@@ -2096,4 +2105,17 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
     </div>
   );
+}
+
+function PaymentPill({ status }) {
+  const map = {
+    paid: ['bg-emerald-50 border-emerald-200 text-emerald-700', 'Paid'],
+    free: ['bg-zinc-50 border-zinc-200 text-zinc-600', 'Free'],
+    pending: ['bg-amber-50 border-amber-200 text-amber-700', 'Pending'],
+    failed: ['bg-red-50 border-red-200 text-red-700', 'Failed'],
+    refunded: ['bg-zinc-50 border-zinc-200 text-zinc-600', 'Refunded'],
+  };
+  if (!status) return <span className="text-zinc-300">—</span>;
+  const [cls, label] = map[status] || ['bg-zinc-50 border-zinc-200 text-zinc-600', status];
+  return <span className={`px-2 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${cls}`}>{label}</span>;
 }

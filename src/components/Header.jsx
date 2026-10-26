@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown } from 'lucide-react';
 import { getNotifications, markAllRead, saveNotifications } from '../utils/notifications';
 
-export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId }) {
+export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId, onBellClick }) {
 
   const adminUid = loggedInAdmin?.uid || loggedInAdmin?.id || loggedInAdmin?.email;
   const adminRegion = loggedInAdmin?.region || 'Global';
@@ -90,11 +90,13 @@ export default function Header({ searchQuery, setSearchQuery, activeTab, setActi
         {/* Notifications Button */}
         <div className="relative" ref={dropdownRef}>
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => (onBellClick ? onBellClick() : setShowNotifications(!showNotifications))}
+            title={onBellClick ? 'Activity' : 'Notifications'}
+            aria-label={onBellClick ? 'Activity' : 'Notifications'}
             className="p-2 text-zinc-500 hover:text-brand-red transition-colors cursor-pointer rounded-lg hover:bg-zinc-50 relative flex items-center justify-center"
           >
             <Bell className="w-[18px] h-[18px]" />
-            {unreadCount > 0 && (
+            {!onBellClick && unreadCount > 0 && (
               <span className="absolute top-0.5 right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-red text-[7.5px] font-extrabold text-white leading-none">
                 {unreadCount}
               </span>
