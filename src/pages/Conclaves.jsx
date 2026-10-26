@@ -1130,7 +1130,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Card 1 */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Total Portfolios</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">All conclaves</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{conclaves.length}</span>
           </div>
@@ -1138,7 +1138,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
 
         {/* Card 2 */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Running Now</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">Live now</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-brand-red leading-none">{runningCount}</span>
           </div>
@@ -1146,7 +1146,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
 
         {/* Card 3 */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Upcoming Seminars</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">Coming up</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{upcomingCount}</span>
           </div>
@@ -1154,7 +1154,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
 
         {/* Card 4 */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Completed Runs</span>
+          <span className="text-label-md text-zinc-500 uppercase font-semibold">Finished</span>
           <div className="flex items-baseline justify-between mt-3">
             <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{completedCount}</span>
           </div>

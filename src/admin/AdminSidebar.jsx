@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, CalendarRange, Users, Settings as SettingsIcon, Wallet, ShieldCheck, LogOut, X } from 'lucide-react';
+import { Home, CalendarRange, Users, Settings as SettingsIcon, Wallet, ShieldCheck, LogOut, X, History } from 'lucide-react';
 
 /**
  * The admin menu. Four places for an admin; a superadmin also gets Revenue
@@ -18,6 +18,7 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout }) 
           { to: `${base}/admins`, label: 'Admins & Regions', Icon: ShieldCheck },
         ]
       : []),
+    { to: `${base}/activity`, label: 'Activity', Icon: History },
     { to: `${base}/settings`, label: 'Settings', Icon: SettingsIcon },
   ];
 

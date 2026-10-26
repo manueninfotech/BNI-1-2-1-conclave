@@ -9,6 +9,10 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import RecentActivity from '../../admin/RecentActivity';
+
+// "Guntur Region" and "Guntur" are the same region.
+const normRegion = (r) => String(r || '').toLowerCase().replace(/\s+region$/, '').trim();
 import { formatStatus } from '../../utils/statusUtils';
 
 export default function SuperadminDashboard({ setActiveTab }) {
@@ -101,12 +105,12 @@ export default function SuperadminDashboard({ setActiveTab }) {
 
   // Distribution helpers
   const conclavesPerRegion = regions.map(reg => {
-    const count = conclaves.filter(c => (c.region || '').toLowerCase() === reg.name.toLowerCase()).length;
+    const count = conclaves.filter(c => normRegion(c.region) === normRegion(reg.name)).length;
     return { name: reg.name, count };
   });
 
   const adminsPerRegion = regions.map(reg => {
-    const count = admins.filter(a => (a.region || '').toLowerCase() === reg.name.toLowerCase()).length;
+    const count = admins.filter(a => normRegion(a.region) === normRegion(reg.name)).length;
     return { name: reg.name, count };
   });
 
@@ -122,37 +126,6 @@ export default function SuperadminDashboard({ setActiveTab }) {
     return isNaN(d.getTime()) ? 'Recently' : d.toLocaleDateString();
   };
 
-  const recentActivities = useMemo(() => {
-    const list = [];
-    admins.slice(0, 2).forEach(a => {
-      list.push({
-        msg: `Regional Admin '${a.name || a.email}' profile synced`,
-        time: parseDate(a.grantedAt),
-        info: a.region || 'BNI Network',
-        bg: "bg-emerald-50 border-emerald-200 text-emerald-600",
-        Icon: Award
-      });
-    });
-    conclaves.slice(0, 2).forEach(c => {
-      list.push({
-        msg: `Conclave '${c.name || c.title || 'Unnamed Conclave'}' is registered under ${c.region || 'Guntur'}`,
-        time: parseDate(c.createdAt || c.date),
-        info: c.status || 'Scheduled',
-        bg: "bg-red-50 border-red-200 text-brand-red",
-        Icon: CalendarRange
-      });
-    });
-    if (list.length === 0) {
-      list.push({
-        msg: "Global BNI networks and regions initialized.",
-        time: "Now",
-        info: "System",
-        bg: "bg-amber-50 border-amber-200 text-amber-600",
-        Icon: ShieldAlert
-      });
-    }
-    return list;
-  }, [admins, conclaves]);
 
   return (
     <div className="space-y-8 animate-fade-in font-sans pb-16">
@@ -321,43 +294,10 @@ export default function SuperadminDashboard({ setActiveTab }) {
           <div>
             <div className="mb-5">
               <h2 className="text-body-md font-black text-zinc-900 leading-tight">Recent Activity</h2>
-              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">Real-time status changes and log.</p>
+              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">The latest changes across all regions.</p>
             </div>
 
-            <div className="relative pl-4 border-l border-zinc-155 space-y-3.5 ml-2 my-1">
-              {recentActivities.map((activity, idx) => {
-                const Icon = activity.Icon;
-                return (
-                  <div key={idx} className="relative flex gap-2 items-start text-body-sm group hover:bg-zinc-50/50 p-1 -mx-1 rounded-lg transition-all duration-200">
-                    {/* Timeline bullet icon */}
-                    <div className="absolute -left-[25px] top-0.5 flex items-center justify-center">
-                      <div className={`w-5.5 h-5.5 rounded-full ${activity.bg} border flex items-center justify-center shadow-3xs bg-white`}>
-                        <Icon className="w-3 h-3" />
-                      </div>
-                    </div>
-
-                    <div className="flex-1 min-w-0 pl-2">
-                      <p className="font-bold text-zinc-800 leading-tight group-hover:text-zinc-955 transition-colors">{activity.msg}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[9.5px] text-zinc-400 font-semibold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-zinc-350" />
-                          {activity.time}
-                        </span>
-                        <span className="text-zinc-300">•</span>
-                        <span className={`px-1.5 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider ${activity.bg.includes("amber")
-                          ? "bg-amber-50 text-amber-700 border border-amber-100"
-                          : activity.bg.includes("emerald")
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : "bg-red-50 text-brand-red border border-red-100"
-                          }`}>
-                          {activity.info}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <RecentActivity onSeeAll={() => setActiveTab && setActiveTab('activity')} />
           </div>
         </section>
 

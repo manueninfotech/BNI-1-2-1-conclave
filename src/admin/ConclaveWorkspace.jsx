@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Navigate, useParams } from 'react-router-dom';
+import { Link, NavLink, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, CalendarRange, MapPin, Users } from 'lucide-react';
 import { api } from '../services/api';
 import { nextStep, formatConclaveDate } from './conclaveStage';
@@ -7,19 +7,22 @@ import StageSteps from './StageSteps';
 import GenWarningBanner from './GenWarningBanner';
 import Dashboard from '../pages/Dashboard';
 import Members from '../pages/Members';
-import Captains from '../pages/Captains';
 import ScheduleHub from '../pages/ScheduleHub';
 import Payments from '../pages/Payments';
 import Feedback from '../pages/Feedback';
+import Activity from './Activity';
 
 export const CONCLAVE_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'members', label: 'Members' },
-  { id: 'captains', label: 'Captains' },
   { id: 'schedule', label: 'Tables & rounds' },
-  { id: 'payments', label: 'Payments' },
+  // Only for conclaves that charge a fee: totals and failed payment attempts.
+  { id: 'payments', label: 'Payments', paidOnly: true },
   { id: 'feedback', label: 'Feedback' },
+  { id: 'activity', label: 'Activity' },
 ];
+
+const isPaid = (c) => Number(c?.registrationFee ?? c?.paymentDetails?.registrationFee) > 0;
 
 /**
  * Everything about one conclave, in one place: who is coming, the tables,
@@ -28,6 +31,7 @@ export const CONCLAVE_TABS = [
  */
 export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) {
   const { id, tab = 'overview' } = useParams();
+  const [params] = useSearchParams();
   const [conclave, setConclave] = useState(null);
   const [error, setError] = useState(null);
 
@@ -61,7 +65,10 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
     };
   }, [id]);
 
+  // Captains are members with a role now: old links open the filtered list.
+  if (tab === 'captains') return <Navigate to={`${base}/conclaves/${id}/members?role=captain`} replace />;
   if (!CONCLAVE_TABS.some((t) => t.id === tab)) return <Navigate to={`${base}/conclaves/${id}`} replace />;
+  const tabs = CONCLAVE_TABS.filter((t) => !t.paidOnly || !conclave || isPaid(conclave) || tab === t.id);
 
   const step = conclave ? nextStep(conclave) : null;
   const tabPath = (t) => `${base}/conclaves/${id}${t === 'overview' ? '' : `/${t}`}`;
@@ -104,7 +111,7 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
         )}
 
         <nav className="flex gap-1 overflow-x-auto border-b border-zinc-200 -mx-1 px-1" aria-label="Conclave sections">
-          {CONCLAVE_TABS.map((t) => (
+          {tabs.map((t) => (
             <NavLink
               key={t.id}
               to={tabPath(t.id)}
@@ -124,13 +131,21 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
       {/* Each tab is an existing page, pointed at this conclave. */}
       <div key={`${id}:${tab}`}>
         {tab === 'overview' && <Dashboard selectedConclaveId={id} loggedInAdmin={loggedInAdmin} embedded />}
-        {tab === 'members' && <Members selectedConclaveId={id} loggedInAdmin={loggedInAdmin} searchQuery={searchQuery} allowedScopes={["conclave"]} />}
-        {tab === 'captains' && <Captains selectedConclaveId={id} loggedInAdmin={loggedInAdmin} searchQuery={searchQuery} allowedScopes={["conclave"]} />}
+        {tab === 'members' && (
+          <Members
+            selectedConclaveId={id}
+            loggedInAdmin={loggedInAdmin}
+            searchQuery={searchQuery}
+            allowedScopes={['conclave']}
+            initialRoleFilter={params.get('role') === 'captain' ? 'Captain' : 'All'}
+          />
+        )}
         {tab === 'schedule' && (
           <ScheduleHub selectedConclaveId={id} showGenWarning={showGenWarning} clearGenWarning={clearGenWarning} searchQuery={searchQuery} initialStage="auto" />
         )}
         {tab === 'payments' && <Payments selectedConclaveId={id} />}
         {tab === 'feedback' && <Feedback selectedConclaveId={id} />}
+        {tab === 'activity' && <Activity conclaveId={id} embedded />}
       </div>
 
       {tab === 'schedule' && <GenWarningBanner genWarning={genWarning} onClose={clearGenWarning} />}

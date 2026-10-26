@@ -261,7 +261,12 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
 
 
   const conclaveVenue = selectedConclave.venueLocation || selectedConclave.venue || selectedConclave.location || 'N/A';
-  const conclaveProgress = (selectedConclave.status || '').toLowerCase() === 'completed' ? 100 : (selectedConclave.status || '').toLowerCase() === 'running' ? 60 : 0;
+  // Progress = rounds run out of rounds planned (finished = 100%).
+  const totalRounds = Number(selectedConclave.roundCount) || 0;
+  const roundsRun = Number(selectedConclave.currentRound) || 0;
+  const conclaveProgress = (selectedConclave.status || '').toLowerCase() === 'completed'
+    ? 100
+    : totalRounds > 0 ? Math.round((Math.min(roundsRun, totalRounds) / totalRounds) * 100) : 0;
 
   return (
     <div className={`space-y-6 sm:space-y-8 max-w-[1600px] mx-auto w-full ${embedded ? '' : 'p-4 sm:p-8'}`}>
@@ -382,7 +387,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
         {/* Card 4: Conclave Progress */}
         <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
           <div className="flex items-center justify-between">
-            <span className="text-label-md text-zinc-500 uppercase font-semibold">Conclave Progress</span>
+            <span className="text-label-md text-zinc-500 uppercase font-semibold">Rounds</span>
             <span className="p-2 rounded-lg bg-zinc-100 text-zinc-600">
               <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
             </span>
@@ -391,7 +396,9 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
             <div className="flex items-baseline justify-between">
               <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{conclaveProgress}%</span>
               <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">
-                {(selectedConclave.status || '').toLowerCase() === 'completed' ? 'Finished' : (selectedConclave.status || '').toLowerCase() === 'running' ? 'Active' : 'Scheduled'}
+                {(selectedConclave.status || '').toLowerCase() === 'completed'
+                  ? 'Finished'
+                  : totalRounds > 0 ? `Round ${roundsRun} of ${totalRounds}` : 'Not started'}
               </span>
             </div>
             <div className="w-full h-2 rounded-full overflow-hidden bg-zinc-100 mt-2 border border-zinc-200/70">
