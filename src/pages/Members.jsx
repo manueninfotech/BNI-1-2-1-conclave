@@ -20,6 +20,7 @@ import {
 import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
+import Avatar from '../components/Avatar';
 
 export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
   let state = (memberOrReg?.state || '').trim();
@@ -339,6 +340,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             status: isActiveMember ? 'Active' : 'Inactive',
             joinDate: joinDateFormatted,
             avatar: displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
+            photoUrl: r.photoUrl || null,
             conclaveIds: [selectedConclaveId],
             history: [{ event: 'Registered', date: historyDateFormatted, role: r.role === 'captain' ? 'Captain' : 'Member' }]
           };
@@ -1294,9 +1296,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-red/10 text-brand-red font-bold text-xs flex items-center justify-center shrink-0 border border-brand-red/10">
-                          {member.avatar}
-                        </div>
+                        <Avatar name={member.name} photoUrl={member.photoUrl} size={32} />
                         <div className="flex flex-col">
                           <span className="text-body-sm font-bold text-zinc-900 transition-smooth leading-tight">{member.name}</span>
                           {member.joinDate && member.joinDate !== 'N/A' && (
@@ -1443,11 +1443,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
                   {/* Profile Card Summary */}
                   <div className="flex flex-col items-center gap-3 text-center bg-white p-4 rounded-xl border border-zinc-200/60 shadow-2xs">
-                    <div className="w-20 h-20 rounded-full border-2 border-brand-red/20 p-1 bg-white">
-                      <div className="w-full h-full rounded-full bg-brand-red/10 text-brand-red font-bold text-xl flex items-center justify-center shadow-inner">
-                        {selectedMember.avatar}
-                      </div>
-                    </div>
+                    <Avatar name={selectedMember.name} photoUrl={selectedMember.photoUrl} size={80} className="border-2 border-brand-red/20" />
                     <div>
                       <h4 className="text-headline-md font-bold text-zinc-950 leading-tight">{selectedMember.name}</h4>
                       <p className="text-body-text text-zinc-500 font-semibold">{selectedMember.company}</p>
@@ -1541,6 +1537,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </div>
                   </section>
 
+                  {viewScope === 'conclave' && paymentByUid[selectedMember.id] && paymentByUid[selectedMember.id] !== 'free' && (
+                  <>
                   {/* Payment Details */}
                   <section className="space-y-3 bg-zinc-50/80 p-3.5 rounded-xl border border-zinc-200/80">
                     <div className="flex items-center justify-between border-b border-zinc-200/70 pb-2">
@@ -1549,13 +1547,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                         Registration Payment
                       </span>
                       <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${
-                        (selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
+                        (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : (selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
+                          : (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
                             ? 'bg-purple-50 text-purple-700 border-purple-200'
                             : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
-                        {selectedMember.payment?.status || selectedMember.paymentStatus || 'Paid'}
+                        {paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus || 'Pending'}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-body-sm">
@@ -1581,24 +1579,12 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       )}
                     </div>
                   </section>
+                  </>
+                  )}
 
-                  {/* Conclave History */}
-                  <section className="space-y-3.5">
-                    <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Conclave Activity</h5>
-                    <div className="relative pl-3 space-y-5 border-l border-zinc-100 ml-1.5">
-                      {selectedMember.history.map((hist, idx) => (
-                        <div key={idx} className="relative">
-                          <div className={`absolute -left-[17.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${idx === 0 ? 'bg-brand-red' : 'bg-zinc-300'
-                            }`} />
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-caption font-bold text-zinc-800 leading-tight">{hist.event}</span>
-                            <span className="text-[10px] text-zinc-500 font-medium">{hist.date} • {hist.role}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
 
+                  {viewScope === 'conclave' && (
+                  <>
                   {/* Referral History */}
                   <section className="space-y-3.5">
                     <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Referral History</h5>
@@ -1631,6 +1617,8 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       )}
                     </div>
                   </section>
+                  </>
+                  )}
                 </div>
 
                 {/* Drawer Footer */}

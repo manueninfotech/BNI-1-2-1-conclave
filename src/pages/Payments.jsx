@@ -3,6 +3,7 @@ import {
   RefreshCw, CheckCircle2, Clock, XCircle, CreditCard, Users as UsersIcon, Gift,
 } from 'lucide-react';
 import { api } from '../services/api';
+import Avatar from '../components/Avatar';
 
 /**
  * Per-conclave member payment status (any conclave admin).
@@ -102,9 +103,7 @@ export default function Payments({ selectedConclaveId }) {
             {members.map((m) => (
               <div key={m.uid} className="px-5 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 flex items-center justify-center font-black text-[10px] shrink-0">
-                    {(m.name || '?').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </div>
+                  <Avatar name={m.name} photoUrl={m.photoUrl} size={28} />
                   <div className="min-w-0">
                     <p className="text-[12.5px] font-bold text-zinc-800 truncate">{m.name || 'Member'}</p>
                     <p className="text-[10.5px] text-zinc-400 truncate">{m.email || m.phone || '—'}</p>
