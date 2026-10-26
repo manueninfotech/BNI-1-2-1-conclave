@@ -1,11 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Sidebar from './components/Sidebar';
-import Header from './components/Header';
-import Dashboard from './pages/Dashboard';
-import Members from './pages/Members';
-import Captains from './pages/Captains';
-import Conclaves from './pages/Conclaves';
-import ScheduleHub from './pages/ScheduleHub';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ResetPassword from './pages/ResetPassword';
@@ -22,14 +15,10 @@ import MemberCurrentRound from './pages/member/CurrentRound';
 import MemberConclaveHistory from './pages/member/ConclaveHistory';
 import MemberProfile from './pages/member/Profile';
 import MemberRegistrations from './pages/member/Registrations';
-import AdminProfile from './pages/admin/Profile';
 import Referrals from './pages/Referrals';
-import Settings from './pages/Settings';
-import Feedback from './pages/Feedback';
-import Payments from './pages/Payments';
 
-import { Sparkles, ShieldAlert, X } from 'lucide-react';
-import SuperadminLayout from './components/SuperadminLayout';
+import { Sparkles } from 'lucide-react';
+import AdminApp from './admin/AdminApp';
 import { api } from './services/api';
 import { getPortalContext, isMemberRegistrationAllowed } from './utils/portalDetection';
 
@@ -119,44 +108,7 @@ export default function App() {
     return validTabs.includes(lastPart) ? lastPart : 'dashboard';
   });
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Global conclave selector for admin panel - default to current admin's active conclave
-  const [selectedConclaveId, setSelectedConclaveId] = useState('');
-
-  // Generation warning — lives at App level so it survives ScheduleGen remounts
-  const [genWarning, setGenWarning] = useState(null);
-  const genWarningTimerRef = useRef(null);
-  const showGenWarning = (warning) => {
-    if (genWarningTimerRef.current) clearTimeout(genWarningTimerRef.current);
-    setGenWarning(warning);
-    genWarningTimerRef.current = setTimeout(() => setGenWarning(null), 30000);
-  };
-  const clearGenWarning = () => {
-    if (genWarningTimerRef.current) clearTimeout(genWarningTimerRef.current);
-    setGenWarning(null);
-  };
-
-  useEffect(() => {
-    if (!isLoggedIn || userRole !== 'admin') return;
-    async function initActiveConclave() {
-      try {
-        const list = await api.get('/admin/conclaves');
-        if (list && list.length > 0) {
-          const exists = list.some(c => c.id === selectedConclaveId);
-          if (!exists) {
-            // Prefer the active/running conclave — same one members see
-            const active = list.find(c => c.status === 'active' || c.status === 'running') || list[0];
-            setSelectedConclaveId(active.id);
-          }
-        }
-      } catch (err) {
-        console.warn("Could not sync active conclave ID with backend:", err.message);
-      }
-    }
-    initActiveConclave();
-  }, [isLoggedIn, userRole]);
 
   const mainRef = useRef(null);
 
@@ -207,7 +159,6 @@ export default function App() {
         setUserRole(storedRole);
         setActiveTab(cleanTab);
       }
-      setIsSidebarOpen(false); // Close sidebar on nav
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -295,10 +246,10 @@ export default function App() {
     } else if (role === 'superadmin') {
       localStorage.removeItem('bni_logged_captain');
       localStorage.removeItem('bni_logged_member');
-      localStorage.removeItem('bni_logged_admin');
+      localStorage.setItem('bni_logged_admin', JSON.stringify({ ...(payload || {}), role: 'superadmin' }));
       setLoggedInCaptain(null);
       setLoggedInMember(null);
-      setLoggedInAdmin(null);
+      setLoggedInAdmin({ ...(payload || {}), role: 'superadmin' });
       setIsLoggedIn(true);
       const defaultTab = 'dashboard';
       setActiveTab(defaultTab);
@@ -314,21 +265,6 @@ export default function App() {
         setLoggedInAdmin({ name: "Sanjay Wagle", email: "admin@bni.com", region: "All Regions" });
       }
 
-      // Fetch live conclaves to set active ID
-      api.get('/admin/conclaves').then(list => {
-        if (list && list.length > 0) {
-          const adminName = payload?.name || "Sanjay Wagle";
-          // Prefer active/running conclave (same as member portal), then admin's own, then first
-          const active = list.find(c => c.status === 'active' || c.status === 'running');
-          const myConclave = active || list.find(c => c.coordinator === adminName) || list[0];
-          setSelectedConclaveId(myConclave.id);
-        } else {
-          setSelectedConclaveId('');
-        }
-      }).catch(err => {
-        console.warn("Failed to fetch live conclaves during login:", err.message);
-        setSelectedConclaveId('');
-      });
       setLoggedInCaptain(null);
       setLoggedInMember(null);
       setIsLoggedIn(true);
@@ -353,7 +289,6 @@ export default function App() {
     setLoggedInAdmin(null);
     setConclaveSyncData(null);
     setIsLoggedIn(false);
-    setIsSidebarOpen(false);
   };
 
   const [conclaveSyncData, setConclaveSyncData] = useState(null);
@@ -493,7 +428,7 @@ export default function App() {
 
   // Fetch real admin profile from backend /api/me
   useEffect(() => {
-    if (!isLoggedIn || userRole !== 'admin') return;
+    if (!isLoggedIn || (userRole !== 'admin' && userRole !== 'superadmin')) return;
     async function loadAdminProfile() {
       try {
         const profile = await api.get('/me');
@@ -502,7 +437,7 @@ export default function App() {
             ? profile.role
             : ((profile.isCaptain || profile.role === 'captain') ? 'captain' : 'member');
 
-          if (resolvedRole !== 'admin' && resolvedRole !== userRole) {
+          if (resolvedRole !== userRole && !(userRole === 'admin' && resolvedRole === 'superadmin')) {
             console.info(`[Role Sync] Admin role changed from ${userRole} to ${resolvedRole}. Logging out to re-authenticate.`);
             const roleLabels = {
               captain: 'Table Captain',
@@ -549,12 +484,6 @@ export default function App() {
     }
   }, [isLoggedIn]);
 
-  // Wrap tab change to also close sidebar on mobile
-  const handleTabChangeResponsive = (tabId) => {
-    handleTabChange(tabId);
-    setIsSidebarOpen(false);
-  };
-
   const [authView, setAuthView] = useState(() => {
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
     const searchParams = new URLSearchParams(window.location.search);
@@ -594,19 +523,9 @@ export default function App() {
     );
   }
 
-  // If logged in as a Superadmin, render the Superadmin portal layout directly
-  if (userRole === 'superadmin') {
-    return (
-      <SuperadminLayout
-        activeTab={activeTab}
-        setActiveTab={handleTabChangeResponsive}
-        onLogout={handleLogout}
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
-    );
+  // Admins and superadmins: the routed admin panel (src/admin).
+  if (userRole === 'superadmin' || userRole === 'admin') {
+    return <AdminApp role={userRole} loggedInAdmin={loggedInAdmin} onLogout={handleLogout} />;
   }
 
   // If logged in as a Captain, render the Captain portal layout
@@ -775,143 +694,5 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="flex h-screen w-screen bg-zinc-50 text-zinc-955 font-sans antialiased overflow-hidden relative">
-      {/* Mobile drawer backdrop overlay */}
-      {isSidebarOpen && (
-        <div
-          onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-black/50 z-45 lg:hidden transition-opacity duration-300 animate-fade-in"
-        />
-      )}
-
-      {/* Reusable Sidebar navigation component */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={handleTabChangeResponsive}
-        onLogout={handleLogout}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        selectedConclaveId={selectedConclaveId}
-        setSelectedConclaveId={setSelectedConclaveId}
-        loggedInAdmin={loggedInAdmin}
-      />
-
-      {/* Main content wrapper */}
-      <div className="flex-1 flex flex-col min-w-0 bg-zinc-50 overflow-hidden">
-        {/* Reusable top navigation header component */}
-        <Header
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          activeTab={activeTab}
-          setActiveTab={handleTabChange}
-          onMenuClick={() => setIsSidebarOpen(true)}
-          loggedInAdmin={loggedInAdmin}
-          selectedConclaveId={selectedConclaveId}
-          onLogout={handleLogout}
-        />
-
-
-        {/* Generation warning banner — fixed overlay, doesn't affect layout */}
-        {genWarning && activeTab === 'schedule-gen' && (
-          <div
-            role="alert"
-            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-[90vw] max-w-xl flex items-start gap-3 rounded-xl border px-4 py-3.5 shadow-lg ${genWarning.type === 'captain'
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-red-50 border-red-300 text-red-900'
-              }`}
-          >
-            <ShieldAlert className={`w-5 h-5 mt-0.5 shrink-0 ${genWarning.type === 'captain' ? 'text-amber-500' : 'text-red-500'}`} />
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-[13px] leading-snug">{genWarning.title}</p>
-              <p className="text-[12px] mt-0.5 leading-relaxed opacity-90">{genWarning.message}</p>
-
-              {/* Blocking issues — the reasons the engine refused to generate. */}
-              {Array.isArray(genWarning.issues) && genWarning.issues.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {genWarning.issues.map((it, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-[11.5px] leading-snug">
-                      <span className="mt-1 w-1 h-1 rounded-full bg-red-500 shrink-0" />
-                      <span>{it.message || it.code || String(it)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* Soft warnings — generation could still proceed, but flag these. */}
-              {Array.isArray(genWarning.warnings) && genWarning.warnings.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {genWarning.warnings.map((w, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-[11.5px] leading-snug opacity-80">
-                      <span className="mt-1 w-1 h-1 rounded-full bg-amber-500 shrink-0" />
-                      <span>{w.message || w.code || String(w)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* The roster math the engine derived, so the admin sees the shape. */}
-              {genWarning.derived && (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] font-semibold opacity-75">
-                  {genWarning.derived.activeCount != null && <span>{genWarning.derived.activeCount} members</span>}
-                  {genWarning.derived.tableCount != null && <span>· {genWarning.derived.tableCount} tables</span>}
-                  {genWarning.derived.captainsDesignated != null && genWarning.derived.captainsRequired != null && (
-                    <span>· {genWarning.derived.captainsDesignated}/{genWarning.derived.captainsRequired} captains</span>
-                  )}
-                  {genWarning.derived.distinctCategories != null && <span>· {genWarning.derived.distinctCategories} categories</span>}
-                </div>
-              )}
-
-              {genWarning.hint && (
-                <p className="mt-2 text-[11.5px] font-semibold leading-snug">💡 {genWarning.hint}</p>
-              )}
-            </div>
-            <button onClick={clearGenWarning} aria-label="Dismiss warning" className="shrink-0 rounded-md p-1 hover:bg-black/10 transition-colors cursor-pointer">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Workspace views router */}
-        <main ref={mainRef} className="flex-1 overflow-y-auto bg-zinc-50 relative min-h-full p-6 md:p-8 pb-20 md:pb-24">
-
-          {activeTab === 'dashboard' ? (
-            <Dashboard setActiveTab={handleTabChange} selectedConclaveId={selectedConclaveId} setSelectedConclaveId={setSelectedConclaveId} loggedInAdmin={loggedInAdmin} />
-          ) : activeTab === 'members' ? (
-            <Members searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
-          ) : activeTab === 'captains' ? (
-            <Captains searchQuery={searchQuery} selectedConclaveId={selectedConclaveId} loggedInAdmin={loggedInAdmin} />
-          ) : activeTab === 'conclaves' ? (
-            <Conclaves loggedInAdmin={loggedInAdmin} setActiveTab={handleTabChange} />
-          ) : (activeTab === 'schedule-hub' || activeTab === 'schedule-gen' || activeTab === 'schedule-review' || activeTab === 'round-runner') ? (
-            <ScheduleHub
-              selectedConclaveId={selectedConclaveId}
-              showGenWarning={showGenWarning}
-              clearGenWarning={clearGenWarning}
-              searchQuery={searchQuery}
-              initialStage={
-                activeTab === 'round-runner'
-                  ? 'runner'
-                  : activeTab === 'schedule-review'
-                  ? 'review'
-                  : activeTab === 'schedule-gen'
-                  ? 'generate'
-                  : 'auto'
-              }
-            />
-          ) : activeTab === 'settings' ? (
-            <Settings />
-          ) : activeTab === 'feedback' ? (
-            <Feedback selectedConclaveId={selectedConclaveId} />
-          ) : activeTab === 'payments' ? (
-            <Payments selectedConclaveId={selectedConclaveId} />
-          ) : activeTab === 'profile' ? (
-            <AdminProfile loggedInAdmin={loggedInAdmin} role="admin" onLogout={handleLogout} />
-          ) : (
-            <div className="p-8 text-center text-zinc-400">View not found</div>
-          )}
-        </main>
-      </div>
-    </div>
-  );
+  return null;
 }

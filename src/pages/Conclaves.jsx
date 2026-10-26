@@ -252,7 +252,7 @@ function conclaveTimingError(fd) {
   return null;
 }
 
-export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) {
+export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, onOpenConclave, autoOpenCreate = false }) {
   // Component-scoped so the render (e.g. the Superadmin-only toggles in the form)
   // can read it — the inner callbacks re-derive their own copies in their scopes.
   const isSuperadmin = loggedInAdmin?.role === 'superadmin' || loggedInAdmin?.region === 'Global';
@@ -855,6 +855,15 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
     setIsAddModalOpen(true);
   };
 
+  // Arriving from Home's "New conclave" opens the form straight away.
+  const autoOpened = React.useRef(false);
+  useEffect(() => {
+    if (autoOpenCreate && !autoOpened.current) {
+      autoOpened.current = true;
+      openAddModal();
+    }
+  }, [autoOpenCreate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.venue) {
@@ -1246,7 +1255,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   return (
                     <tr
                       key={conclave.id}
-                      onClick={() => setSelectedConclave(conclave)}
+                      onClick={() => (onOpenConclave ? onOpenConclave(conclave.id) : setSelectedConclave(conclave))}
                       className="group cursor-pointer"
                     >
                       <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1638,7 +1647,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin }) 
                   })()}
                   <button
                     onClick={() => {
-                      if (setActiveTab) {
+                      if (onOpenConclave) {
+                        onOpenConclave(selectedConclave.id, 'schedule');
+                      } else if (setActiveTab) {
                         setActiveTab('schedule-review');
                       }
                       setSelectedConclave(null);

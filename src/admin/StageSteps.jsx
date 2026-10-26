@@ -10,7 +10,7 @@ export default function StageSteps({ conclave }) {
   }
   const idx = STAGES.findIndex((s) => s.id === current);
   return (
-    <ol className="flex items-center gap-2 sm:gap-3" aria-label="Conclave stage">
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3" aria-label="Conclave stage">
       {STAGES.map((s, i) => {
         const done = i < idx || current === 'done';
         const active = i === idx && current !== 'done';

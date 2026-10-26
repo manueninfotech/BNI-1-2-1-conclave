@@ -17,7 +17,7 @@ import { api } from '../services/api';
 import { colors } from '../config/theme';
 import { formatStatus } from '../utils/statusUtils';
 
-export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin }) {
+export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin, embedded = false }) {
   const [referrals, setReferrals] = useState(() => {
     const stored = localStorage.getItem('bni_referrals');
     return stored ? JSON.parse(stored) : [];
@@ -264,8 +264,9 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
   const conclaveProgress = (selectedConclave.status || '').toLowerCase() === 'completed' ? 100 : (selectedConclave.status || '').toLowerCase() === 'running' ? 60 : 0;
 
   return (
-    <div className="space-y-6 sm:space-y-8 p-4 sm:p-8 max-w-[1600px] mx-auto w-full">
-      {/* Dashboard Top Header */}
+    <div className={`space-y-6 sm:space-y-8 max-w-[1600px] mx-auto w-full ${embedded ? '' : 'p-4 sm:p-8'}`}>
+      {/* Dashboard Top Header (the conclave page shows its own) */}
+      {!embedded && (
       <div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
@@ -318,6 +319,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
           )}
         </div>
       </div>
+      )}
 
       {/* Live session active banner if running */}
       {(selectedConclave.status || '').toLowerCase() === 'running' && (
