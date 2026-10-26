@@ -382,6 +382,43 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     return () => { alive = false; };
   }, [selectedConclaveId, viewScope]);
 
+  // Live "Online now / Last seen": refresh just the presence every 15 seconds
+  // while this page is visible, without reloading the list or closing the
+  // details panel. (The app checks in every 2 minutes and reports closing at
+  // once, so a member closing the app shows here within ~15 seconds.)
+  useEffect(() => {
+    let alive = true;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const list = viewScope === 'conclave'
+          ? (selectedConclaveId ? (await api.get(`/admin/conclaves/${selectedConclaveId}/registrations`))?.registrations : null)
+          : await api.get('/admin/users');
+        const rows = Array.isArray(list) ? list : Array.isArray(list?.users) ? list.users : null;
+        if (!alive || !rows) return;
+        const byId = new Map(rows.map((r) => [r.uid || r.userId || r.id, r]));
+        const patch = (m) => {
+          const r = byId.get(m.id);
+          if (!r || r.isOnline === undefined) return m;
+          const status = r.isOnline ? 'Active' : 'Inactive';
+          return status === m.status && r.lastSeenAt === m.lastSeenAt ? m : { ...m, status, lastSeenAt: r.lastSeenAt || null };
+        };
+        setMembers((prev) => prev.map(patch));
+        setSelectedMember((prev) => (prev ? patch(prev) : prev));
+      } catch {
+        // A missed refresh is fine; the next one catches up.
+      }
+    };
+    const t = setInterval(refresh, 15000);
+    const onVisible = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [selectedConclaveId, viewScope]);
+
 
   const [searchTerm, setSearchTerm] = useState('');
 
