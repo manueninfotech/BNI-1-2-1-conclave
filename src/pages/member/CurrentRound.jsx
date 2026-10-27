@@ -4,6 +4,7 @@ import {
   TrendingUp,
   Award,
   Check,
+  PauseCircle,
   FileText,
   Footprints,
   Mic,
@@ -48,7 +49,8 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     });
   }, [conclaveSyncData?.tableOccupants, searchQuery]);
 
-  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
+  const conclaveDurationMinutes = Number(conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes) || 15;
+  const initialTime = conclaveDurationMinutes * 60;
   const [timeLeft, setTimeLeft] = useState(initialTime);
 
   const personsPerTable = useMemo(() => {
@@ -60,10 +62,23 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
       6;
   }, [conclaveSyncData]);
 
+  const isRoundPaused = Boolean(
+    conclaveSyncData?.isRoundPaused ||
+    conclaveSyncData?.conclaveStatus?.isRoundPaused
+  );
+  const pausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+  const elapsedMsBeforePause = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
     personsPerTable,
-    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+    roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+    roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+    extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()),
+    isPaused: isRoundPaused,
+    pausedAt,
+    elapsedMsBeforePause,
   }));
 
   // Identify current speaker from table occupants
@@ -76,6 +91,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
   const loggedInUid = loggedInMember?.uid || loggedInMember?.id || conclaveSyncData?.userUid;
   const isMyTurnToSpeak = Boolean(
+    !timingState?.isPaused &&
     timingState?.isTalking &&
     currentSpeaker &&
     (
@@ -139,12 +155,24 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
+    const currentPaused = Boolean(
+      conclaveSyncData?.isRoundPaused ||
+      conclaveSyncData?.conclaveStatus?.isRoundPaused
+    );
+    const currentPausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+    const currentElapsedMs = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
         startedAt,
         personsPerTable,
+        roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+        roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+        extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
         isRunning,
+        isPaused: currentPaused,
+        pausedAt: currentPausedAt,
+        elapsedMsBeforePause: currentElapsedMs,
       });
       setTimingState(timing);
       setTimeLeft(timing.totalRemaining);
@@ -235,7 +263,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
   if (isConclaveCompleted || !conclaveSyncData || !conclaveSyncData?.tableOccupants || conclaveSyncData?.tableOccupants.length === 0) {
     return (
-      <div className="space-y-8 animate-fade-in font-sans pb-16">
+      <div className="space-y-8 animate-fade-in font-sans pb-3">
         <div>
           <h1 className="text-[20px] font-black text-zinc-955 leading-tight">Live Conclave Session</h1>
           <p className="text-[11.5px] text-zinc-500 font-semibold mt-0.5">Real-time table assignment &amp; 1-on-1 networking round overview.</p>
@@ -261,7 +289,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
   }
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans pb-16">
+    <div className="space-y-8 animate-fade-in font-sans pb-3">
 
       {/* Live Round Hero Section */}
       <section>
@@ -271,10 +299,17 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
           <div className="p-6 md:p-8 lg:w-2/3 flex flex-col justify-between space-y-6">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="px-3 py-1 bg-red-50 border border-red-100 text-brand-red font-black text-[9.5px] rounded-full flex items-center gap-1.5 animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span>
-                  LIVE NOW
-                </span>
+                {timingState.isPaused ? (
+                  <span className="px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 font-black text-[9.5px] rounded-full flex items-center gap-1.5 shadow-2xs">
+                    <PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    ROUND PAUSED
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 bg-red-50 border border-red-100 text-brand-red font-black text-[9.5px] rounded-full flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span>
+                    LIVE NOW
+                  </span>
+                )}
                 <span className="text-zinc-450 font-extrabold text-[9px] uppercase tracking-widest">
                   {conclaveSyncData?.conclaveStatus?.name || conclaveSyncData?.conclaveStatus?.title || conclaveSyncData?.conclaveStatus?.region || 'BNI Conclave'}
                 </span>
@@ -341,7 +376,12 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
           <div className="p-8 lg:w-1/3 bg-zinc-50 flex flex-col items-center justify-center text-center select-none">
             {/* Phase Pill Header */}
             <div className="mb-3">
-              {timingState.phase === 'active' ? (
+              {timingState.isPaused ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                  <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
+                  Round Paused ({formatTime(timingState.phaseRemaining)} left)
+                </span>
+              ) : timingState.phase === 'active' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                   Talking Time ({formatTime(timingState.phaseRemaining)} left)
@@ -358,7 +398,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-zinc-100 text-zinc-500 border border-zinc-200">
-                  15-Min Round
+                  {Math.round((timingState?.totalBlockSecs || initialTime) / 60)}-Min Round
                 </span>
               )}
             </div>
@@ -375,7 +415,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                   strokeWidth="8"
                 ></circle>
                 <circle
-                  className={`progress-ring__circle transition-all duration-700 ${timingState.phase === 'active'
+                  className={`progress-ring__circle transition-all duration-700 ${
+                    timingState.isPaused
+                      ? 'text-amber-500'
+                      : timingState.phase === 'active'
                       ? 'text-emerald-500'
                       : timingState.phase === 'referral'
                         ? 'text-blue-600'
@@ -396,7 +439,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={`text-4xl font-black tracking-tighter leading-none ${timingState.phase === 'active'
+                <span className={`text-4xl font-black tracking-tighter leading-none ${
+                  timingState.isPaused
+                    ? 'text-amber-600'
+                    : timingState.phase === 'active'
                     ? 'text-emerald-600'
                     : timingState.phase === 'referral'
                       ? 'text-blue-600'
@@ -410,8 +456,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                       : timeLeft
                   )}
                 </span>
-                <span className="text-[9px] text-zinc-450 font-black uppercase tracking-widest mt-1.5">
-                  {timingState.phase === 'active'
+                <span className={`text-[9px] font-black uppercase tracking-widest mt-1.5 ${timingState.isPaused ? 'text-amber-600' : 'text-zinc-450'}`}>
+                  {timingState.isPaused
+                    ? 'Round Paused'
+                    : timingState.phase === 'active'
                     ? 'Talking Time Left'
                     : timingState.phase === 'referral'
                       ? 'Referral Window Left'
@@ -435,7 +483,10 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </div>
               <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden border border-zinc-200/40">
                 <div
-                  className={`h-full rounded-full transition-all duration-1000 ${timingState.phase === 'active'
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    timingState.isPaused
+                      ? 'bg-amber-500'
+                      : timingState.phase === 'active'
                       ? 'bg-emerald-500'
                       : timingState.phase === 'referral'
                         ? 'bg-blue-600'
@@ -448,7 +499,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
               </div>
 
               {/* Dynamic Turn & Transition Subtitle */}
-              {timingState.phase === 'active' && (
+              {timingState.isPaused && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 text-[9.5px] font-black text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md shadow-2xs">
+                  <PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Round Paused by Admin · Discussions on hold</span>
+                </div>
+              )}
+
+              {!timingState.isPaused && timingState.phase === 'active' && (
                 <div className="mt-3 flex items-center justify-center gap-1 text-[9.5px] font-black text-emerald-800 bg-white border border-emerald-150 px-2.5 py-1 rounded-md shadow-2xs">
                   <span>Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
                   <span className="text-emerald-300">•</span>
@@ -456,14 +514,14 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                 </div>
               )}
 
-              {timingState.phase === 'referral' && (
+              {!timingState.isPaused && timingState.phase === 'referral' && (
                 <div className="mt-3 flex items-center justify-center gap-1.5 text-[9.5px] font-black text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-md shadow-2xs animate-pulse">
                   <Send className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   <span>Referrals Open · 30s per member</span>
                 </div>
               )}
 
-              {timingState.phase === 'transition' && (
+              {!timingState.isPaused && timingState.phase === 'transition' && (
                 <div className="mt-3 flex items-center justify-center gap-1.5 text-[9.5px] font-black text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md shadow-2xs animate-pulse">
                   <Footprints className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>Talking time over · Please move tables</span>

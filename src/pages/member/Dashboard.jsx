@@ -6,6 +6,7 @@ import {
   Info,
   Calendar,
   CheckCircle,
+  PauseCircle,
   ArrowRight,
   Activity,
   Building2
@@ -132,7 +133,8 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     });
   }, [conclaveSyncData?.tableOccupants, searchQuery]);
   
-  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
+  const conclaveDurationMinutes = Number(conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes) || 15;
+  const initialTime = conclaveDurationMinutes * 60;
   const [timeLeft, setTimeLeft] = useState(initialTime);
 
   const personsPerTable = useMemo(() => {
@@ -144,10 +146,23 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
       6;
   }, [conclaveSyncData]);
 
+  const isRoundPaused = Boolean(
+    conclaveSyncData?.isRoundPaused ||
+    conclaveSyncData?.conclaveStatus?.isRoundPaused
+  );
+  const pausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+  const elapsedMsBeforePause = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
     personsPerTable,
-    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+    roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+    roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+    extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()),
+    isPaused: isRoundPaused,
+    pausedAt,
+    elapsedMsBeforePause,
   }));
 
   const [referrals, setReferrals] = useState(() => {
@@ -204,12 +219,24 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
+    const currentPaused = Boolean(
+      conclaveSyncData?.isRoundPaused ||
+      conclaveSyncData?.conclaveStatus?.isRoundPaused
+    );
+    const currentPausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+    const currentElapsedMs = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
         startedAt,
         personsPerTable,
+        roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+        roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+        extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
         isRunning,
+        isPaused: currentPaused,
+        pausedAt: currentPausedAt,
+        elapsedMsBeforePause: currentElapsedMs,
       });
       setTimingState(timing);
       setTimeLeft(timing.totalRemaining);
@@ -297,7 +324,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     const isRegisteredForUpcoming = registeredEventsCount > 0;
 
     return (
-      <div className="space-y-8 animate-fade-in font-sans pb-16">
+      <div className="space-y-8 animate-fade-in font-sans pb-3">
         {/* Top Hero Banner */}
         <div className="bg-white p-6 md:p-8 pb-8 md:pb-10 rounded-xl shadow-2xs border border-zinc-200 relative overflow-hidden flex flex-col justify-between">
           <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#af101a_1px,transparent_1px)] [background-size:16px_16px]"></div>
@@ -481,7 +508,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
   }
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans pb-16">
+    <div className="space-y-8 animate-fade-in font-sans pb-3">
 
       {/* Hero Section */}
       <div className="grid grid-cols-12 gap-6">
@@ -494,6 +521,11 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-100 text-zinc-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-zinc-200 shadow-2xs">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     CONCLAVE COMPLETED
+                  </span>
+                ) : timingState.isPaused ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-[10px] font-black uppercase tracking-wider rounded-full border border-amber-200 shadow-2xs">
+                    <PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    ROUND {conclaveSyncData?.conclaveStatus?.currentRound || 0} PAUSED
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-150 shadow-2xs">
@@ -603,6 +635,8 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                         <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">
                           {isConclaveCompleted
                             ? 'Conclave Status'
+                            : timingState.isPaused
+                            ? 'Round Paused'
                             : timingState.phase === 'active'
                             ? 'Talking Time'
                             : timingState.phase === 'transition'
@@ -610,7 +644,11 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                             : 'Time Remaining'}
                         </span>
                         {!isConclaveCompleted && (
-                          timingState.phase === 'active' ? (
+                          timingState.isPaused ? (
+                            <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                              Round Paused
+                            </span>
+                          ) : timingState.phase === 'active' ? (
                             <span className="px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
                               Talking Phase
                             </span>
@@ -624,6 +662,8 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       <span className={`text-2xl font-black mt-0.5 tracking-tighter leading-none ${
                         isConclaveCompleted
                           ? 'text-emerald-600'
+                          : timingState.isPaused
+                          ? 'text-amber-600'
                           : timingState.phase === 'active'
                           ? 'text-emerald-600'
                           : timingState.phase === 'transition'
@@ -640,14 +680,14 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       </span>
                       {!isConclaveCompleted && (
                         <span className="text-[10px] text-zinc-400 font-semibold mt-1">
-                          Total Round Time: <strong className="text-zinc-700 font-mono font-bold">{formatTime(timeLeft)}</strong>
+                          {timingState.isPaused ? 'Paused at:' : 'Total Round Time:'} <strong className="text-zinc-700 font-mono font-bold">{formatTime(timeLeft)}</strong>
                         </span>
                       )}
                     </div>
                     <span className="text-[9.5px] font-bold text-zinc-455">
                       {isConclaveCompleted
                         ? '100% Completed'
-                        : `${Math.round(((ROUND_BLOCK_DURATION_SECS - timeLeft) / ROUND_BLOCK_DURATION_SECS) * 100)}% Completed`}
+                        : `${Math.round((((timingState?.totalBlockSecs || initialTime) - timeLeft) / (timingState?.totalBlockSecs || initialTime)) * 100)}% Completed`}
                     </span>
                   </div>
                   <div className="w-full bg-zinc-100 rounded-full h-2 overflow-hidden border border-zinc-200/50">
@@ -664,7 +704,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       style={{
                         width: isConclaveCompleted
                           ? '100%'
-                          : `${((ROUND_BLOCK_DURATION_SECS - timeLeft) / ROUND_BLOCK_DURATION_SECS) * 100}%`
+                          : `${(((timingState?.totalBlockSecs || initialTime) - timeLeft) / (timingState?.totalBlockSecs || initialTime)) * 100}%`
                       }}
                     ></div>
                   </div>

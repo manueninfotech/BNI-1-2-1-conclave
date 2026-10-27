@@ -4,15 +4,15 @@ import { ArrowRight, Shield, X, Award, Clock, Footprints } from 'lucide-react';
 
 import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
-import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
-import { formatTimeRangeNice, formatUpcomingRoundRange } from '../../utils/timeFormat';
+import { calculateRoundTiming, formatTime } from '../../utils/roundTiming';
+import { formatUpcomingRoundRange } from '../../utils/timeFormat';
 
 export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
     if (propConclaveSyncData) return propConclaveSyncData;
     const cached = localStorage.getItem('bni_conclave_sync_data_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return null;
   });
@@ -45,22 +45,47 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
       6;
   }, [currentMembersList, conclaveSyncData]);
 
+  const isRoundPaused = Boolean(
+    conclaveSyncData?.isRoundPaused ||
+    conclaveSyncData?.conclaveStatus?.isRoundPaused
+  );
+  const pausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+  const elapsedMsBeforePause = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
     personsPerTable,
-    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+    roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+    roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+    extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()),
+    isPaused: isRoundPaused,
+    pausedAt,
+    elapsedMsBeforePause,
   }));
 
   useEffect(() => {
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
+    const currentPaused = Boolean(
+      conclaveSyncData?.isRoundPaused ||
+      conclaveSyncData?.conclaveStatus?.isRoundPaused
+    );
+    const currentPausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+    const currentElapsedMs = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
         startedAt,
         personsPerTable,
+        roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+        roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+        extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
         isRunning,
+        isPaused: currentPaused,
+        pausedAt: currentPausedAt,
+        elapsedMsBeforePause: currentElapsedMs,
       });
       setTimingState(timing);
     };
@@ -83,7 +108,10 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
   const getRoundStatus = (roundNum) => {
     const activeRoundNum = conclaveSyncData?.conclaveStatus?.currentRound || 1;
     if (roundNum < activeRoundNum) return { text: 'Completed', bg: 'bg-emerald-50 border-emerald-100 text-emerald-700' };
-    if (roundNum === activeRoundNum) return { text: 'Running', bg: 'bg-red-50 border-red-100 text-brand-red animate-pulse' };
+    if (roundNum === activeRoundNum) {
+      if (timingState.isPaused) return { text: 'Paused', bg: 'bg-amber-50 border-amber-200 text-amber-800' };
+      return { text: 'Running', bg: 'bg-red-50 border-red-100 text-brand-red animate-pulse' };
+    }
     return { text: 'Upcoming', bg: 'bg-zinc-50 border-zinc-200 text-zinc-555' };
   };
 
@@ -152,8 +180,8 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
               key={r.number}
               onClick={() => setSelectedRound(r.number)}
               className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-[10.5px] font-black uppercase tracking-wider transition-smooth cursor-pointer ${isSelected
-                  ? 'bg-brand-red text-white shadow-md shadow-brand-red/10'
-                  : 'text-zinc-555 hover:bg-zinc-200 hover:text-zinc-850 bg-white/50 border border-zinc-200/40'
+                ? 'bg-brand-red text-white shadow-md shadow-brand-red/10'
+                : 'text-zinc-555 hover:bg-zinc-200 hover:text-zinc-850 bg-white/50 border border-zinc-200/40'
                 }`}
             >
               {isCompleted && (
@@ -220,8 +248,8 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
             ) : (
               filteredMembers.map((member) => {
                 const initials = member.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
-                const bgClass = member.isCaptain 
-                  ? 'bg-red-50/90 border-red-100/90 text-brand-red' 
+                const bgClass = member.isCaptain
+                  ? 'bg-red-50/90 border-red-100/90 text-brand-red'
                   : 'bg-zinc-100/90 border-zinc-200/80 text-zinc-700';
                 const bniTag = 'BNI';
                 return (
@@ -325,20 +353,19 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                 {timingState.phase === 'active'
                   ? 'Talking Time Left'
                   : timingState.phase === 'referral'
-                  ? 'Referral Window Left'
-                  : timingState.phase === 'transition'
-                  ? 'Move to Next Table'
-                  : 'Round Session'}
+                    ? 'Referral Window Left'
+                    : timingState.phase === 'transition'
+                      ? 'Move to Next Table'
+                      : 'Round Session'}
               </div>
-              <div className={`text-4xl font-black font-mono tracking-tight ${
-                timingState.phase === 'active'
-                  ? 'text-emerald-600'
-                  : timingState.phase === 'referral'
+              <div className={`text-4xl font-black font-mono tracking-tight ${timingState.phase === 'active'
+                ? 'text-emerald-600'
+                : timingState.phase === 'referral'
                   ? 'text-blue-600'
                   : timingState.phase === 'transition'
-                  ? 'text-amber-600'
-                  : 'text-zinc-800'
-              }`}>
+                    ? 'text-amber-600'
+                    : 'text-zinc-800'
+                }`}>
                 {formatTime(
                   timingState.phase === 'active' || timingState.phase === 'referral' || timingState.phase === 'transition'
                     ? timingState.phaseRemaining

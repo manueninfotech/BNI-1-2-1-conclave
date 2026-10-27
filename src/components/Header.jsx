@@ -1,8 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown } from 'lucide-react';
+import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { getNotifications, markAllRead, saveNotifications } from '../utils/notifications';
 
-export default function Header({ searchQuery, setSearchQuery, activeTab, setActiveTab, onMenuClick, loggedInAdmin, onLogout, selectedConclaveId, onBellClick }) {
+export default function Header({
+  setActiveTab,
+  onMenuClick,
+  onToggleSidebar,
+  isSidebarCollapsed = false,
+  loggedInAdmin,
+  onLogout,
+  selectedConclaveId,
+  onBellClick
+}) {
 
   const adminUid = loggedInAdmin?.uid || loggedInAdmin?.id || loggedInAdmin?.email;
   const adminRegion = loggedInAdmin?.region || 'Global';
@@ -73,14 +82,18 @@ export default function Header({ searchQuery, setSearchQuery, activeTab, setActi
   return (
     <header className="w-full sticky top-0 z-40 bg-white border-b border-red-100 flex justify-between items-center px-4 sm:px-8 h-14 shrink-0 font-sans">
 
-      {/* Left side: Mobile Menu Button */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      {/* Left side: Sidebar Toggle Button */}
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
-          onClick={onMenuClick}
-          className="lg:hidden p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-555 hover:text-zinc-800 transition-smooth cursor-pointer flex items-center justify-center"
-          title="Open Menu"
+          onClick={onToggleSidebar || onMenuClick}
+          className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900 transition-smooth cursor-pointer flex items-center justify-center"
+          title={isSidebarCollapsed ? "Expand Sidebar (Full Menu)" : "Collapse Sidebar (Icon Rail)"}
         >
-          <Menu className="w-5.5 h-5.5" />
+          {isSidebarCollapsed ? (
+            <PanelLeftOpen className="w-5 h-5 text-brand-red" />
+          ) : (
+            <Menu className="w-5 h-5" />
+          )}
         </button>
       </div>
 

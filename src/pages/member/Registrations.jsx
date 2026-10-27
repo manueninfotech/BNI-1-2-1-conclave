@@ -11,7 +11,8 @@ import {
   Sparkles,
   Info,
   CalendarRange,
-  CreditCard
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import SearchableDropdown from '../../components/SearchableDropdown';
 import { api } from '../../services/api';
@@ -210,6 +211,10 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
 
   // Handle registration action
   const handleRegister = (conclave) => {
+    if (conclave?.isScheduleLocked || (conclave?.status || '').toLowerCase() === 'locked') {
+      showToastMessage('Registration is closed because the conclave schedule is locked.', 'error');
+      return;
+    }
     setSelectedConclaveForReg(conclave);
     setRegForm({
       name: member?.name || '',
@@ -232,6 +237,12 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     if (!selectedConclaveForReg) return;
+
+    if (selectedConclaveForReg.isScheduleLocked || (selectedConclaveForReg.status || '').toLowerCase() === 'locked') {
+      showToastMessage('Registration is closed because the conclave schedule is locked.', 'error');
+      setIsRegModalOpen(false);
+      return;
+    }
 
     const conclaveId = selectedConclaveForReg.id;
     const conclaveName = selectedConclaveForReg.name;
@@ -513,10 +524,12 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
             };
             const regStartStr = normaliseDate(c.regStartDate);
             const regEndStr = normaliseDate(c.regEndDate);
-            const isRegistrationForcedOpen = c.registrationOverride === 'open' || c.isRegistrationOpen === true;
-            const isRegistrationForcedClosed = c.registrationOverride === 'closed' || c.isRegistrationOpen === false;
-            const isBeforeReg = !isRegistrationForcedOpen && (isRegistrationForcedClosed || (regStartStr && todayStr < regStartStr));
-            const isAfterReg = !isRegistrationForcedOpen && (isRegistrationForcedClosed || (regEndStr && todayStr > regEndStr));
+            const isLocked = Boolean(c.isScheduleLocked || (c.status || '').toLowerCase() === 'locked');
+            // Registrations can happen up to the conclave being marked as locked!
+            const isRegistrationForcedOpen = !isLocked && !isCompleted && (c.registrationOverride === 'open' || c.isRegistrationOpen === true);
+            const isRegistrationForcedClosed = isLocked || (!isRegistrationForcedOpen && c.registrationOverride === 'closed');
+            const isBeforeReg = !isRegistrationForcedOpen && !isLocked && !isCompleted && (regStartStr && todayStr < regStartStr);
+            const isAfterReg = !isRegistrationForcedOpen && !isLocked && !isCompleted && isRegistrationForcedClosed;
 
             return (
               <div
@@ -603,6 +616,11 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
                         <Check className="w-3 h-3 text-emerald-600" />
                         You are registered
                       </span>
+                    ) : isLocked ? (
+                      <span className="text-[10px] font-extrabold text-amber-600 flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-amber-500" />
+                        Schedule Locked (Registrations Closed)
+                      </span>
                     ) : isBeforeReg ? (
                       <span className="text-[10px] font-extrabold text-amber-600 flex items-center gap-1">
                         <Info className="w-3.5 h-3.5 text-amber-500" />
@@ -633,7 +651,15 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
                       >
                         {isRegistered ? 'Attended' : 'Completed'}
                       </button>
-                    ) : isRegistered ? null : isBeforeReg ? (
+                    ) : isRegistered ? null : isLocked ? (
+                      <button
+                        disabled
+                        className="py-1.5 px-3 bg-zinc-100 text-zinc-400 border border-zinc-200 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-not-allowed opacity-60 flex items-center gap-1"
+                      >
+                        <Lock className="w-3 h-3 text-zinc-400" />
+                        Locked
+                      </button>
+                    ) : isBeforeReg ? (
                       <button
                         disabled
                         className="py-1.5 px-3 bg-zinc-100 text-zinc-400 border border-zinc-200 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-not-allowed opacity-60"

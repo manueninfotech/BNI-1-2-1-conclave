@@ -15,7 +15,8 @@ export default function ScheduleHub({
   showGenWarning,
   clearGenWarning,
   searchQuery,
-  initialStage = 'auto'
+  initialStage = 'auto',
+  onStageChange,
 }) {
   const [conclave, setConclave] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,8 +100,17 @@ export default function ScheduleHub({
     }
   ];
 
+  useEffect(() => {
+    if (typeof onStageChange === 'function') {
+      onStageChange(stage);
+    }
+  }, [stage, onStageChange]);
+
   const handleStageSelect = (stageId) => {
     setStage(stageId);
+    if (typeof onStageChange === 'function') {
+      onStageChange(stageId);
+    }
     // Update browser URL gently without full page reload
     const role = localStorage.getItem('bni_user_role') || 'admin';
     const tabUrlMap = {
@@ -111,29 +121,74 @@ export default function ScheduleHub({
     window.history.replaceState({}, '', `/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
   };
 
+  const isRunnerStage = stage === 'runner';
+
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto w-full">
+    <div className="w-full mx-auto max-w-[1700px] space-y-4 sm:space-y-5 pb-10">
       {/* Sleek Borderless Header & Modern Segmented Pill Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1">
         <div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
               Schedule & Rounds
             </h1>
             {isLive && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 Live Round Active
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            {conclave?.name || conclave?.title || 'Selected Conclave'} · {conclave?.region || 'All Regions'} · Create schedules, inspect tables, and run rounds.
+          <p className="text-xs text-zinc-500 font-semibold mt-0.5">
+            {conclave?.name || conclave?.title || 'Selected Conclave'} · {conclave?.region || 'All Regions'} · {isRunnerStage ? 'Live round execution and real-time seating analytics.' : 'Create schedules, inspect tables, and run rounds.'}
           </p>
         </div>
 
-        {/* Modern Pill Switcher */}
-        <div className="inline-flex items-center p-1 bg-zinc-200/70 rounded-xl border border-zinc-200/80 shadow-2xs self-start md:self-auto">
+        <div className="flex items-center gap-2 self-start md:self-auto shrink-0 flex-wrap">
+          {/* Progression Mode Switcher */}
+          <div className="inline-flex items-center p-0.5 bg-zinc-200/80 rounded-xl border border-zinc-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!conclave?.id) return;
+                setConclave(prev => ({ ...prev, roundProgressionMode: 'manual' }));
+                try {
+                  await api.post(`/admin/conclaves/${conclave.id}/progression-mode`, { mode: 'manual' });
+                } catch (e) { console.error(e); }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                (conclave?.roundProgressionMode || 'manual') === 'manual'
+                  ? 'bg-white text-zinc-950 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title="Manual: Admin starts every round"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>Manual</span>
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!conclave?.id) return;
+                setConclave(prev => ({ ...prev, roundProgressionMode: 'automatic' }));
+                try {
+                  await api.post(`/admin/conclaves/${conclave.id}/progression-mode`, { mode: 'automatic' });
+                } catch (e) { console.error(e); }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                conclave?.roundProgressionMode === 'automatic'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title="Automatic: Rounds progress automatically when timer ends"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${conclave?.roundProgressionMode === 'automatic' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
+              <span>Automatic</span>
+            </button>
+          </div>
+
+          {/* Modern Pill Switcher */}
+          <div className="inline-flex items-center p-1 bg-zinc-200/70 rounded-xl border border-zinc-200/80 shadow-2xs shrink-0">
           {stages.map((st) => {
             const isActive = stage === st.id;
             const IconComponent = st.Icon;
@@ -143,7 +198,7 @@ export default function ScheduleHub({
                 key={st.id}
                 type="button"
                 onClick={() => handleStageSelect(st.id)}
-                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer ${isActive
+                className={`inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer ${isActive
                     ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
                   }`}
@@ -158,11 +213,12 @@ export default function ScheduleHub({
               </button>
             );
           })}
+          </div>
         </div>
       </div>
 
       {/* Render Active Stage Component */}
-      <div className="transition-all duration-200">
+      <div className="w-full transition-all duration-200">
         {stage === 'generate' && (
           <ScheduleGen
             selectedConclaveId={selectedConclaveId}

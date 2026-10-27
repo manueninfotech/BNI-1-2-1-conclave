@@ -32,6 +32,40 @@ import SuperadminAdmins from '../pages/superadmin/Admins';
 export default function AdminApp({ role, loggedInAdmin, onLogout }) {
   const base = role === 'superadmin' ? '/superadmin' : '/admin';
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('bni_admin_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    if (window.innerWidth < 1024) {
+      setIsSidebarOpen(prev => !prev);
+    } else {
+      setIsSidebarCollapsed(prev => {
+        const next = !prev;
+        try {
+          localStorage.setItem('bni_admin_sidebar_collapsed', String(next));
+        } catch {}
+        return next;
+      });
+    }
+  };
+
+  // Keyboard shortcut Ctrl+[ to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === '[' || e.key === 'b')) {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,7 +87,15 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
   return (
     <div className="flex h-screen w-screen bg-zinc-50 text-zinc-950 font-sans antialiased overflow-hidden relative">
       {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-45 lg:hidden" />}
-      <AdminSidebar base={base} role={role} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onLogout={onLogout} />
+      <AdminSidebar
+        base={base}
+        role={role}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onLogout={onLogout}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
+      />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
@@ -61,12 +103,14 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
           setSearchQuery={setSearchQuery}
           setActiveTab={(tab) => tab === 'profile' && navigate(`${base}/profile`)}
           onMenuClick={() => setIsSidebarOpen(true)}
+          onToggleSidebar={toggleSidebar}
+          isSidebarCollapsed={isSidebarCollapsed}
           loggedInAdmin={loggedInAdmin}
           selectedConclaveId={conclaveIdInUrl}
           onLogout={onLogout}
           onBellClick={() => navigate(`${base}/activity`)}
         />
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 pb-20 md:pb-24">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 pb-20 md:pb-24 min-w-0">
           <Routes>
             <Route path={base}>
               <Route

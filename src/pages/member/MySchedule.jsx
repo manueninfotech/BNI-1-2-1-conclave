@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Check,
+  PauseCircle,
   ArrowRight,
   User,
   Users,
@@ -12,6 +13,7 @@ import {
 import { downloadOrViewAgendaDocument } from '../../utils/documentUtils';
 import { api } from '../../services/api';
 import { formatUpcomingRoundStartTime, formatUpcomingRoundRange } from '../../utils/timeFormat';
+import { calculateRoundTiming } from '../../utils/roundTiming';
 
 export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(() => {
@@ -122,25 +124,59 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
     }
   }, [agendaDoc]);
 
-  const initialTime = 15 * 60; // 900 seconds (15:00)
-  const [timeLeft, setTimeLeft] = useState(initialTime);
+  const isRoundPaused = Boolean(
+    conclaveSyncData?.isRoundPaused ||
+    conclaveSyncData?.conclaveStatus?.isRoundPaused
+  );
+  const pausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+  const elapsedMsBeforePause = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+  const personsPerTable = conclaveSyncData?.tableOccupants?.length || conclaveSyncData?.personsPerTable || 6;
+
+  const [timingState, setTimingState] = useState(() => calculateRoundTiming({
+    startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
+    personsPerTable,
+    roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+    roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+    extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()),
+    isPaused: isRoundPaused,
+    pausedAt,
+    elapsedMsBeforePause,
+  }));
+
+  const [timeLeft, setTimeLeft] = useState(timingState.totalRemaining);
 
   useEffect(() => {
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
+    const currentPaused = Boolean(
+      conclaveSyncData?.isRoundPaused ||
+      conclaveSyncData?.conclaveStatus?.isRoundPaused
+    );
+    const currentPausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+    const currentElapsedMs = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+    const pCount = conclaveSyncData?.tableOccupants?.length || conclaveSyncData?.personsPerTable || 6;
 
-    if (startedAt && isRunning) {
-      const updateTimer = () => {
-        const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-        setTimeLeft(Math.max(0, initialTime - elapsed));
-      };
-      updateTimer();
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setTimeLeft(initialTime);
-    }
+    const updateTimer = () => {
+      const timing = calculateRoundTiming({
+        startedAt,
+        personsPerTable: pCount,
+        roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+        roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+        extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+        isRunning,
+        isPaused: currentPaused,
+        pausedAt: currentPausedAt,
+        elapsedMsBeforePause: currentElapsedMs,
+      });
+      setTimingState(timing);
+      setTimeLeft(timing.totalRemaining);
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
   }, [conclaveSyncData]);
 
   const formatTime = (seconds) => {
@@ -218,7 +254,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
       : startTimeStr ? formatTimeStr(startTimeStr) : '';
 
     return (
-      <div className="animate-fade-in font-sans pb-16">
+      <div className="animate-fade-in font-sans pb-3">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
           {/* Left column: Conclave Header + Venue + Your Place */}
@@ -416,7 +452,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
   }
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans pb-16">
+    <div className="space-y-8 animate-fade-in font-sans pb-3">
 
       {/* Page Header */}
       <div>
@@ -468,9 +504,16 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
           <div className="bg-white rounded-xl border border-zinc-200 shadow-2xs p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 bg-red-50 border border-red-100 text-brand-red text-[9px] font-black rounded uppercase tracking-wider animate-pulse">
-                  LIVE NOW
-                </span>
+                {timingState.isPaused ? (
+                  <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-black rounded uppercase tracking-wider flex items-center gap-1 shadow-2xs">
+                    <PauseCircle className="w-3 h-3 text-amber-600" />
+                    ROUND PAUSED
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-red-50 border border-red-100 text-brand-red text-[9px] font-black rounded uppercase tracking-wider animate-pulse">
+                    LIVE NOW
+                  </span>
+                )}
                 <span className="text-body-sm font-black text-zinc-800">Round {currentRoundNum} of {rounds.length || 6}</span>
               </div>
 
@@ -488,8 +531,10 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
 
             <div className="flex flex-col items-end gap-3 w-full md:w-auto">
               <div className="bg-zinc-50 px-4 py-2.5 rounded-lg border border-zinc-200 text-center w-full md:w-44 shrink-0">
-                <span className="text-[8.5px] font-extrabold text-zinc-400 uppercase tracking-widest block">TIME REMAINING</span>
-                <span className="text-xl font-black text-brand-red mt-1 block tracking-tighter tabular-nums leading-none">
+                <span className={`text-[8.5px] font-extrabold uppercase tracking-widest block ${timingState.isPaused ? 'text-amber-600' : 'text-zinc-400'}`}>
+                  {timingState.isPaused ? 'ROUND PAUSED' : 'TIME REMAINING'}
+                </span>
+                <span className={`text-xl font-black mt-1 block tracking-tighter tabular-nums leading-none ${timingState.isPaused ? 'text-amber-600' : 'text-brand-red'}`}>
                   {formatTime(timeLeft)}
                 </span>
               </div>

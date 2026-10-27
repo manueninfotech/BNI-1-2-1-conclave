@@ -21,6 +21,7 @@ import { Sparkles } from 'lucide-react';
 import AdminApp from './admin/AdminApp';
 import { api } from './services/api';
 import { getPortalContext, isMemberRegistrationAllowed } from './utils/portalDetection';
+import { setTimingConfig } from './utils/roundTiming';
 
 export default function App() {
   // Read logged in status from localStorage - default to FALSE so visitors see Login screen
@@ -77,21 +78,42 @@ export default function App() {
       try {
         const adminData = localStorage.getItem('bni_logged_admin');
         if (adminData && adminData !== 'undefined') setLoggedInAdmin(JSON.parse(adminData));
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const captainData = localStorage.getItem('bni_logged_captain');
         if (captainData && captainData !== 'undefined') setLoggedInCaptain(JSON.parse(captainData));
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const memberData = localStorage.getItem('bni_logged_member');
         if (memberData && memberData !== 'undefined') setLoggedInMember(JSON.parse(memberData));
-      } catch (e) {}
+      } catch (e) { }
     };
 
     window.addEventListener('storage', syncLoggedUser);
     return () => window.removeEventListener('storage', syncLoggedUser);
+  }, []);
+
+  // Fetch backend round timing and conclave defaults on mount
+  useEffect(() => {
+    async function initSettings() {
+      try {
+        const config = await api.get('/app-config').catch(() => null);
+        if (config?.roundTiming) {
+          setTimingConfig(config.roundTiming);
+        }
+        if (config?.conclaveDefaults) {
+          localStorage.setItem('bni_conclave_defaults', JSON.stringify(config.conclaveDefaults));
+          if (config.conclaveDefaults.roundDurationMinutes) {
+            setTimingConfig({ roundDurationMinutes: config.conclaveDefaults.roundDurationMinutes });
+          }
+        }
+      } catch (e) {
+        // Fallback to cached timing & defaults
+      }
+    }
+    initSettings();
   }, []);
 
   // Read active tab path directly from window URL pathname
@@ -182,7 +204,13 @@ export default function App() {
       } else if (userRole === 'captain') {
         setActiveTab('dashboard');
         window.history.replaceState({}, '', `/captain/dashboard`);
+      } else if (userRole === 'member') {
+        setActiveTab('dashboard');
+        window.history.replaceState({}, '', `/member/dashboard`);
       }
+    } else if (userRole === 'member' && (path.startsWith('captain/') || path === 'captain')) {
+      setActiveTab('dashboard');
+      window.history.replaceState({}, '', `/member/dashboard`);
     }
   }, [isLoggedIn, userRole, activeTab]);
 
@@ -296,7 +324,7 @@ export default function App() {
   const [memberConclaves, setMemberConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_member_conclaves_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
     return [];
   });
@@ -315,50 +343,6 @@ export default function App() {
         if (Array.isArray(list)) {
           setMemberConclaves(list);
           localStorage.setItem('bni_member_conclaves_cache', JSON.stringify(list));
-        }
-
-        if (profile) {
-          // If role is changed, directly log out so the user will log in again
-          const resolvedRole = (profile.isCaptain || profile.role === 'captain')
-            ? 'captain'
-            : ((profile.role === 'superadmin' || profile.role === 'admin') ? profile.role : 'member');
-
-          if (resolvedRole !== userRole) {
-            console.info(`[Role Sync] User role changed from ${userRole} to ${resolvedRole}. Logging out to re-authenticate.`);
-            const roleLabels = {
-              captain: 'Table Captain',
-              member: 'Member',
-              admin: 'Admin',
-              superadmin: 'Superadmin'
-            };
-            const toLabel = roleLabels[resolvedRole] || resolvedRole;
-            localStorage.setItem(
-              'bni_auth_notice',
-              `Your role has been updated to ${toLabel}. Please log in again to continue.`
-            );
-            handleLogout();
-            return;
-          }
-
-          const mergedProfile = {
-            ...(userRole === 'captain' ? (loggedInCaptain || {}) : (loggedInMember || {})),
-            ...profile,
-            uid: profile.uid || profile.id,
-            id: profile.id || profile.uid,
-          };
-          const jsonStr = JSON.stringify(mergedProfile);
-          if (userRole === 'captain') {
-            if (localStorage.getItem('bni_logged_captain') !== jsonStr) {
-              localStorage.setItem('bni_logged_captain', jsonStr);
-              setLoggedInCaptain(mergedProfile);
-            }
-          } else {
-            if (localStorage.getItem('bni_logged_member') !== jsonStr) {
-              setMemberProfile(mergedProfile);
-              localStorage.setItem('bni_logged_member', jsonStr);
-              setLoggedInMember(mergedProfile);
-            }
-          }
         }
 
         const registered = Array.isArray(list) ? list.filter(c => c.isRegistered || c.registered) : [];
@@ -400,11 +384,10 @@ export default function App() {
         }
 
         const myRegisteredConclave = chosenConclave;
+        let syncResult = null;
 
         if (myRegisteredConclave) {
-          const syncResult = await api.post(`/conclaves/${myRegisteredConclave.id}/sync`, {}).catch(() => null);
-          // For captains: mySchedule may be empty (they anchor their table), but conclaveStatus is still valid.
-          // Set syncData if we have a valid conclaveStatus, regardless of mySchedule length.
+          syncResult = await api.post(`/conclaves/${myRegisteredConclave.id}/sync`, {}).catch(() => null);
           if (syncResult && syncResult.conclaveStatus) {
             localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(syncResult));
             setConclaveSyncData(prev => (JSON.stringify(prev) !== JSON.stringify(syncResult) ? syncResult : prev));
@@ -415,6 +398,74 @@ export default function App() {
         } else {
           setConclaveSyncData(null);
           localStorage.removeItem('bni_conclave_sync_data_cache');
+        }
+
+        // Check if conclave is completed
+        const conclaveStatusStr = (syncResult?.conclaveStatus?.status || myRegisteredConclave?.status || '').toLowerCase();
+        const isConclaveDone = conclaveStatusStr === 'completed' || conclaveStatusStr === 'finished' || conclaveStatusStr === 'ended';
+
+        // Evaluate resolved role:
+        // A completed conclave strictly sets the role to member and never allows captain promotion!
+        let resolvedRole = userRole;
+        if (profile?.role === 'superadmin' || profile?.role === 'admin') {
+          resolvedRole = profile.role;
+        } else if (isConclaveDone) {
+          resolvedRole = 'member';
+        } else if (profile?.isCaptain || profile?.role === 'captain' || syncResult?.isCaptain) {
+          resolvedRole = 'captain';
+        } else {
+          resolvedRole = 'member';
+        }
+
+        if (resolvedRole !== userRole) {
+          console.info(`[Role Sync] User role transition: ${userRole} -> ${resolvedRole} (isConclaveDone: ${isConclaveDone}).`);
+          localStorage.setItem('bni_user_role', resolvedRole);
+          setUserRole(resolvedRole);
+          if (resolvedRole === 'captain') {
+            const capPayload = { ...(profile || {}), ...(loggedInMember || {}), isCaptain: true, role: 'captain' };
+            localStorage.setItem('bni_logged_captain', JSON.stringify(capPayload));
+            setLoggedInCaptain(capPayload);
+            localStorage.removeItem('bni_logged_member');
+            setLoggedInMember(null);
+            window.history.replaceState({}, '', `/captain/dashboard`);
+          } else {
+            const fallbackMem = loggedInMember || loggedInCaptain || {
+              id: syncResult?.userUid || profile?.uid,
+              name: loggedInCaptain?.name || profile?.name || 'Member',
+              role: 'member'
+            };
+            const memPayload = { ...(profile || {}), ...fallbackMem, isCaptain: false, role: 'member' };
+            localStorage.setItem('bni_logged_member', JSON.stringify(memPayload));
+            setLoggedInMember(memPayload);
+            localStorage.removeItem('bni_logged_captain');
+            setLoggedInCaptain(null);
+            setActiveTab('dashboard');
+            window.history.replaceState({}, '', `/member/dashboard`);
+          }
+          return;
+        }
+
+        // Profile updates for active role
+        if (profile) {
+          const mergedProfile = {
+            ...(userRole === 'captain' ? (loggedInCaptain || {}) : (loggedInMember || {})),
+            ...profile,
+            uid: profile.uid || profile.id,
+            id: profile.id || profile.uid,
+          };
+          const jsonStr = JSON.stringify(mergedProfile);
+          if (userRole === 'captain') {
+            if (localStorage.getItem('bni_logged_captain') !== jsonStr) {
+              localStorage.setItem('bni_logged_captain', jsonStr);
+              setLoggedInCaptain(mergedProfile);
+            }
+          } else {
+            if (localStorage.getItem('bni_logged_member') !== jsonStr) {
+              setMemberProfile(mergedProfile);
+              localStorage.setItem('bni_logged_member', jsonStr);
+              setLoggedInMember(mergedProfile);
+            }
+          }
         }
       } catch (err) {
         console.warn("Failed to sync member conclave data:", err.message);
@@ -433,9 +484,13 @@ export default function App() {
       try {
         const profile = await api.get('/me');
         if (profile && profile.uid) {
-          const resolvedRole = (profile.role === 'superadmin' || profile.role === 'admin')
-            ? profile.role
-            : ((profile.isCaptain || profile.role === 'captain') ? 'captain' : 'member');
+          const rawRole = (profile.role || '').toLowerCase();
+          const isRoleAdmin = rawRole === 'superadmin' || rawRole === 'admin' || rawRole === 'coordinator' || rawRole === 'regional_admin';
+          const resolvedRole = rawRole === 'superadmin'
+            ? 'superadmin'
+            : (isRoleAdmin
+              ? 'admin'
+              : ((profile.isCaptain || profile.role === 'captain') ? 'captain' : 'member'));
 
           if (resolvedRole !== userRole && !(userRole === 'admin' && resolvedRole === 'superadmin')) {
             console.info(`[Role Sync] Admin role changed from ${userRole} to ${resolvedRole}. Logging out to re-authenticate.`);
@@ -443,6 +498,7 @@ export default function App() {
               captain: 'Table Captain',
               member: 'Member',
               admin: 'Admin',
+              coordinator: 'Admin',
               superadmin: 'Superadmin'
             };
             const toLabel = roleLabels[resolvedRole] || resolvedRole;
@@ -541,7 +597,7 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-20 md:pb-24 max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 lg:px-10 pt-7 sm:pt-9 md:pt-10 pb-16 sm:pb-20 md:pb-24 max-w-7xl mx-auto w-full">
           {activeTab === 'dashboard' ? (
             <CaptainDashboard
               loggedInCaptain={loggedInCaptain}
@@ -622,7 +678,7 @@ export default function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
         />
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 pb-20 md:pb-24 max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 pt-5 sm:pt-6 pb-10 sm:pb-14 max-w-7xl mx-auto w-full">
           {activeTab === 'dashboard' ? (
             <MemberDashboard
               loggedInMember={memberProfile || loggedInMember}

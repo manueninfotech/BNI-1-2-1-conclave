@@ -6,6 +6,8 @@ import {
   Award,
   Info,
   Check,
+  CheckCircle,
+  PauseCircle,
   Play,
   X,
   ArrowRight
@@ -33,7 +35,8 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
   const conclaveSyncData = syncData || propConclaveSyncData;
 
-  const initialTime = ROUND_BLOCK_DURATION_SECS; // 900 seconds (15:00)
+  const conclaveDurationMinutes = Number(conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes) || 15;
+  const initialTime = conclaveDurationMinutes * 60;
   const [timeLeft, setTimeLeft] = useState(initialTime);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedProfileMember, setSelectedProfileMember] = useState(null);
@@ -47,22 +50,47 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
       6;
   }, [conclaveSyncData]);
 
+  const isRoundPaused = Boolean(
+    conclaveSyncData?.isRoundPaused ||
+    conclaveSyncData?.conclaveStatus?.isRoundPaused
+  );
+  const pausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+  const elapsedMsBeforePause = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
+
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
     startedAt: conclaveSyncData?.conclaveStatus?.currentRoundStartedAt,
     personsPerTable,
-    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase())
+    roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+    roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+    extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
+    isRunning: ['running', 'active'].includes((conclaveSyncData?.conclaveStatus?.status || '').toLowerCase()),
+    isPaused: isRoundPaused,
+    pausedAt,
+    elapsedMsBeforePause,
   }));
 
   useEffect(() => {
     const startedAt = conclaveSyncData?.conclaveStatus?.currentRoundStartedAt;
     const status = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
     const isRunning = status === 'running' || status === 'active';
+    const currentPaused = Boolean(
+      conclaveSyncData?.isRoundPaused ||
+      conclaveSyncData?.conclaveStatus?.isRoundPaused
+    );
+    const currentPausedAt = conclaveSyncData?.roundPausedAt || conclaveSyncData?.conclaveStatus?.roundPausedAt;
+    const currentElapsedMs = conclaveSyncData?.roundElapsedMsBeforePause ?? conclaveSyncData?.conclaveStatus?.roundElapsedMsBeforePause;
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
         startedAt,
         personsPerTable,
+        roundTiming: conclaveSyncData?.roundTiming || conclaveSyncData?.conclaveStatus?.roundTiming,
+        roundDurationMinutes: conclaveSyncData?.roundDurationMinutes || conclaveSyncData?.conclaveStatus?.roundDurationMinutes,
+        extensionSeconds: conclaveSyncData?.roundExtensionSeconds || conclaveSyncData?.conclaveStatus?.roundExtensionSeconds,
         isRunning,
+        isPaused: currentPaused,
+        pausedAt: currentPausedAt,
+        elapsedMsBeforePause: currentElapsedMs,
       });
       setTimingState(timing);
       setTimeLeft(timing.totalRemaining);
@@ -129,25 +157,26 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
   const conclaveStatusStr = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
   const isConclaveCompleted = conclaveStatusStr === 'completed' || conclaveStatusStr === 'finished' || conclaveStatusStr === 'ended';
 
+  // If conclave is completed, directly switch captain to member portal
+  useEffect(() => {
+    if (isConclaveCompleted) {
+      localStorage.setItem('bni_user_role', 'member');
+      const storedMember = localStorage.getItem('bni_logged_member');
+      if (!storedMember && loggedInCaptain) {
+        localStorage.setItem('bni_logged_member', JSON.stringify({ ...loggedInCaptain, isCaptain: false, role: 'member' }));
+      }
+      localStorage.removeItem('bni_logged_captain');
+      window.dispatchEvent(new Event('storage'));
+      window.history.replaceState({}, '', '/member/dashboard');
+    }
+  }, [isConclaveCompleted]);
+
   if (isConclaveCompleted) {
     return (
-      <div className="space-y-8 animate-fade-in font-sans pb-20">
-        <div className="bg-white p-8 md:p-12 pb-12 md:pb-16 rounded-xl border border-zinc-200 text-center shadow-2xs space-y-6 mb-10">
-          <Award className="w-14 h-14 text-emerald-500 mx-auto" />
-          <div className="space-y-2">
-            <h2 className="text-xl font-black text-zinc-900">Conclave Session Completed</h2>
-            <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
-              The previous conclave session has officially concluded. Live captain round tracking is active only during running conclaves.
-            </p>
-          </div>
-          <div className="pt-2 pb-4">
-            <button
-              onClick={() => window.location.href = '/'}
-              className="px-6 py-2.5 bg-brand-red hover:bg-red-700 text-white font-extrabold text-xs rounded-lg transition-smooth shadow-sm inline-flex items-center gap-2 cursor-pointer"
-            >
-              Go to Member Dashboard
-            </button>
-          </div>
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-brand-red border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-zinc-500">Conclave session completed. Switching to Member Portal...</p>
         </div>
       </div>
     );
@@ -173,6 +202,11 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
               <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               Completed
             </span>
+          ) : timingState.isPaused ? (
+            <span className="px-3 py-1 bg-amber-50 text-amber-800 font-black text-[10px] uppercase tracking-wider rounded-full border border-amber-200 flex items-center gap-1.5 shadow-2xs">
+              <PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              Round Paused
+            </span>
           ) : (
             <span className="px-3 py-1 bg-emerald-50 text-emerald-800 font-black text-[10px] uppercase tracking-wider rounded-full border border-emerald-150 flex items-center gap-1.5 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -193,6 +227,8 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
             <span className="text-[11px] font-extrabold text-zinc-550 uppercase tracking-wider flex items-center gap-1.5">
               {isConclaveCompleted ? (
                 <><CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> CONCLAVE COMPLETED</>
+              ) : timingState.isPaused ? (
+                <><PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" /> ROUND {conclaveSyncData?.conclaveStatus?.currentRound || 0} PAUSED</>
               ) : (
                 <><span className="w-2 h-2 bg-brand-red rounded-full animate-pulse"></span> LIVE ROUND {conclaveSyncData?.conclaveStatus?.currentRound || 0}</>
               )}
@@ -203,7 +239,12 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
           <div className="flex flex-col items-center shrink-0 pt-6 md:pt-4">
             {/* Phase pill above the circle */}
             <div className="mb-2">
-              {timingState.phase === 'active' ? (
+              {timingState.isPaused ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                  <PauseCircle className="w-3 h-3 text-amber-600" />
+                  Round Paused
+                </span>
+              ) : timingState.phase === 'active' ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                   Talking Time
@@ -243,7 +284,9 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                       strokeWidth="7"
                     />
                     <circle
-                      className={`transition-all duration-1000 ${timingState.phase === 'active'
+                      className={`transition-all duration-1000 ${timingState.isPaused
+                          ? 'text-amber-500'
+                          : timingState.phase === 'active'
                           ? 'text-emerald-500'
                           : timingState.phase === 'transition'
                             ? 'text-amber-500'
@@ -262,7 +305,9 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                   </svg>
 
                   <div className="text-center z-10 flex flex-col items-center">
-                    <span className={`text-4xl font-black tracking-tighter leading-none ${timingState.phase === 'active'
+                    <span className={`text-4xl font-black tracking-tighter leading-none ${timingState.isPaused
+                        ? 'text-amber-600'
+                        : timingState.phase === 'active'
                         ? 'text-emerald-600'
                         : timingState.phase === 'transition'
                           ? 'text-amber-600'
@@ -274,8 +319,10 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                           : timeLeft
                       )}
                     </span>
-                    <p className="text-[8.5px] text-zinc-450 font-black uppercase tracking-widest mt-1.5">
-                      {timingState.phase === 'active'
+                    <p className={`text-[8.5px] font-black uppercase tracking-widest mt-1.5 ${timingState.isPaused ? 'text-amber-600' : 'text-zinc-450'}`}>
+                      {timingState.isPaused
+                        ? 'Paused'
+                        : timingState.phase === 'active'
                         ? 'Talking Time Left'
                         : timingState.phase === 'transition'
                           ? 'Move Table Left'
@@ -716,7 +763,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                     <div className="space-y-2 text-[11.5px] font-semibold text-zinc-650">
                       <div className="flex justify-between items-center py-1.5 border-b border-zinc-100">
                         <span>Total Round Duration</span>
-                        <span className="font-extrabold text-zinc-800">15 Minutes</span>
+                        <span className="font-extrabold text-zinc-800">{Math.round((timingState?.totalBlockSecs || initialTime) / 60)} Minutes</span>
                       </div>
                       <div className="flex justify-between items-center py-1.5 border-b border-zinc-100">
                         <span>Pitch Window</span>

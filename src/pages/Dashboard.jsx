@@ -234,7 +234,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
 
   if (!selectedConclave) {
     return (
-      <div className="space-y-6 sm:space-y-8 p-4 sm:p-8 max-w-[1600px] mx-auto w-full">
+      <div className="space-y-6 sm:space-y-8 max-w-[1600px] mx-auto w-full pb-10 sm:pb-14">
         {/* Page Header */}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-100 pb-6">
           <div>

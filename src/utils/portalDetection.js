@@ -37,6 +37,9 @@ export function getPortalContext() {
   if (path === 'admin' || path.startsWith('admin/')) {
     return 'admin';
   }
+  if (path === 'captain' || path.startsWith('captain/')) {
+    return 'captain';
+  }
   if (path === 'member' || path.startsWith('member/')) {
     return 'member';
   }
