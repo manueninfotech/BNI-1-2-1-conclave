@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, X, Save, Loader2, Check, AlertTriangle, Tag, Timer, Sliders, MapPin, Bell } from 'lucide-react';
 import { api } from '../services/api';
+import { setTimingConfig } from '../utils/roundTiming';
 
 // ---------------------------------------------------------------------------
 // Small shared bits
@@ -132,7 +133,13 @@ export default function Settings() {
       try { const c = await api.get('/admin/categories'); setCategories(c.categories || []); } catch { setCatErr(true); }
       try { const r = await api.get('/admin/settings/regions'); setRegions(r.regions || []); } catch {}
       try { const t = await api.get('/admin/settings/round-timing'); setTiming(t); } catch {}
-      try { const d = await api.get('/admin/settings/conclave-defaults'); setDefaults(d); } catch {}
+      try {
+        const d = await api.get('/admin/settings/conclave-defaults');
+        if (d) {
+          setDefaults(d);
+          localStorage.setItem('bni_conclave_defaults', JSON.stringify(d));
+        }
+      } catch {}
       try { const n = await api.get('/admin/settings/notifications'); setNotif(n); } catch {}
     })();
   }, []);
@@ -156,21 +163,17 @@ export default function Settings() {
   };
 
   // --- Save helpers ---
-  const saveTiming = async () => {
-    setTimingState('saving');
-    try {
-      const body = {
-        bioSeconds: Number(timing.bioSeconds), referralSeconds: Number(timing.referralSeconds), bufferSeconds: Number(timing.bufferSeconds),
-      };
-      const r = await api.put('/admin/settings/round-timing', body); setTiming(r); setTimingState('saved');
-    } catch { setTimingState('error'); }
-    setTimeout(() => setTimingState(''), 2000);
-  };
   const saveDefaults = async () => {
     setDefState('saving');
     try {
-      const body = { personsPerTable: Number(defaults.personsPerTable), roundCount: Number(defaults.roundCount) };
-      const r = await api.put('/admin/settings/conclave-defaults', body); setDefaults(r); setDefState('saved');
+      const body = {
+        personsPerTable: Math.min(8, Number(defaults.personsPerTable)),
+        roundCount: Number(defaults.roundCount),
+      };
+      const r = await api.put('/admin/settings/conclave-defaults', body);
+      setDefaults(r);
+      localStorage.setItem('bni_conclave_defaults', JSON.stringify(r));
+      setDefState('saved');
     } catch { setDefState('error'); }
     setTimeout(() => setDefState(''), 2000);
   };
@@ -200,18 +203,18 @@ export default function Settings() {
         <p className="text-[10px] text-zinc-400 mt-2">{categories.length} categories</p>
       </Card>
 
-      <Card icon={Timer} title="Round Timing" desc="Talking cadence per person. A round runs as (bio + referral) × people, plus the move buffer.">
-        <div className="flex flex-wrap gap-5">
-          <NumberField label="Bio" value={timing.bioSeconds} onChange={(v) => setTiming({ ...timing, bioSeconds: v })} suffix="seconds" />
-          <NumberField label="Referral" value={timing.referralSeconds} onChange={(v) => setTiming({ ...timing, referralSeconds: v })} suffix="seconds" />
-          <NumberField label="Move buffer" value={timing.bufferSeconds} onChange={(v) => setTiming({ ...timing, bufferSeconds: v })} suffix="seconds" />
-        </div>
-        <SaveBtn onClick={saveTiming} state={timingState} />
+      <Card icon={Timer} title="Round Timing" desc="Fixed for every conclave.">
+        <ul className="text-[12.5px] text-zinc-700 space-y-1">
+          <li><strong>Bios:</strong> 1 minute per person.</li>
+          <li><strong>Referrals:</strong> 30 seconds per person, in one slot after everyone's bio.</li>
+          <li><strong>A round</strong> with 8 per table takes 12 minutes. Admins can add +1, +2 or +5 minutes to a live round.</li>
+          <li><strong>Between rounds:</strong> the admin starts each round (manual), or the next one starts after a 1, 2 or 5 minute move break (automatic, chosen per conclave).</li>
+        </ul>
       </Card>
 
       <Card icon={Sliders} title="Default Conclave Config" desc="Pre-filled when creating a new conclave.">
         <div className="flex flex-wrap gap-5">
-          <NumberField label="Persons / table" value={defaults.personsPerTable} onChange={(v) => setDefaults({ ...defaults, personsPerTable: v })} />
+          <NumberField label="Persons / table (max 8)" value={defaults.personsPerTable} onChange={(v) => setDefaults({ ...defaults, personsPerTable: Math.min(8, Number(v) || 0) })} />
           <NumberField label="Rounds" value={defaults.roundCount} onChange={(v) => setDefaults({ ...defaults, roundCount: v })} />
         </div>
         <SaveBtn onClick={saveDefaults} state={defState} />

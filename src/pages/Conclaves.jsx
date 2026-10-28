@@ -1007,7 +1007,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
         return;
       }
       const payload = conclavePayload(formData, { isSuperadmin, assignedAdminRegion, loggedInAdmin });
-
       await api.put(`/admin/conclaves/${formData.id}`, payload);
       showToast('Conclave Updated', `Successfully updated conclave profile data.`);
       setIsEditModalOpen(false);
@@ -1039,7 +1038,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
   const completedCount = conclaves.filter(c => (c.status || '').toLowerCase() === 'completed').length;
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6 animate-fade-in">
+    <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-6 sm:gap-7 animate-fade-in pb-10 sm:pb-14">
 
       {/* Breadcrumbs & Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">

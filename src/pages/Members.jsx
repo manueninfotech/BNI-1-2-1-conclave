@@ -1055,7 +1055,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1600px] mx-auto w-full flex flex-col gap-6 animate-fade-in">
+    <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-6 sm:gap-7 animate-fade-in pb-10 sm:pb-14">
 
       {/* Page Header & Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
@@ -1068,21 +1068,6 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
-          {/* Schedule Locked Notice */}
-          {viewScope === 'conclave' && isScheduleLocked && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg shadow-3xs">
-              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">
-                  Schedule Locked
-                </span>
-                <span className="text-[11px] font-extrabold text-amber-800">
-                  Member additions closed
-                </span>
-              </div>
-            </div>
-          )}
-
           {/* Superadmin toggle for allowing regular admins to add/manage members */}
           {viewScope === 'conclave' && isSuperadmin && (
             <div className={`flex items-center gap-2.5 px-3 py-1.5 bg-white border border-zinc-250 rounded-lg shadow-3xs ${isScheduleLocked ? 'opacity-60' : ''}`}>
@@ -1103,7 +1088,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                   !isScheduleLocked && allowAdminAddMembers ? 'bg-emerald-600' : 'bg-zinc-300'
                 } ${isPermissionsLoading || isScheduleLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={isScheduleLocked ? 'Schedule is locked - Member additions closed' : allowAdminAddMembers ? 'Click to revoke Admin permission to add/manage members' : 'Click to grant Admin permission to add/manage members'}
+                title={isScheduleLocked ? 'Schedule is locked' : allowAdminAddMembers ? 'Click to revoke Admin permission to add/manage members' : 'Click to grant Admin permission to add/manage members'}
               >
                 <span
                   aria-hidden="true"

@@ -91,22 +91,13 @@ main>div {
   display: flex !important;
   flex-direction: column !important;
   gap: 1.5rem !important;
-  /* Exact 24px vertical gap on all pages */
-  padding-top: 1.5rem !important;
-  /* Uniform top padding */
-  padding-bottom: 2rem !important;
+  padding-top: 0.75rem !important;
+  padding-bottom: 1.5rem !important;
 }
 
-/* Remove default margins/padding on the header element (always the first child of the page container) */
+/* Page header element spacing */
 main>div>*:first-child {
-  padding-bottom: 0.25rem !important;
-  margin-bottom: 0px !important;
-}
-
-/* Reset space-y margin overrides on direct children to avoid layout collisions */
-main>div>* {
-  margin-top: 0px !important;
-  margin-bottom: 0px !important;
+  padding-bottom: 0.5rem !important;
 }
 
 /* Remove default black focus outline borders on all Recharts wrapper divs and SVG graphics */
@@ -288,8 +279,11 @@ main>div>* {
 *[class*="rounded-xl"].border,
 *[class*="rounded-lg"].border,
 *[class*="rounded-2xl"].border,
+*[class*="rounded-3xl"].border,
 *[class*="rounded-xl"][class*="border-zinc-"],
 *[class*="rounded-lg"][class*="border-zinc-"],
+*[class*="rounded-2xl"][class*="border-zinc-"],
+*[class*="rounded-3xl"][class*="border-zinc-"],
 select[class*="border-zinc-"],
 input[class*="border-zinc-"],
 button[class*="border-zinc-"] {

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X, Check, Award, Clock, Users } from 'lucide-react';
-import { getNotifications, markAllRead } from '../utils/notifications';
+import { Bell } from 'lucide-react';
+import { getNotifications, markAllRead, addNotification } from '../utils/notifications';
+import { api } from '../services/api';
 
 export default function MemberHeader({
   loggedInMember,
@@ -8,8 +9,6 @@ export default function MemberHeader({
   activeTab,
   onTabChange,
   onLogout,
-  searchQuery,
-  setSearchQuery
 }) {
   const userUid = loggedInMember?.uid || loggedInMember?.id || loggedInMember?.email;
   const conclaveId = conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId;
@@ -30,13 +29,35 @@ export default function MemberHeader({
   }, []);
 
   useEffect(() => {
-    const syncNotifs = () => {
+    let active = true;
+    const syncNotifs = async () => {
       const fresh = getNotifications({ userUid, conclaveId });
-      setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
+      if (active) setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
+
+      try {
+        const res = await api.get('/me/notifications');
+        if (res && Array.isArray(res.notifications)) {
+          res.notifications.forEach(n => {
+            addNotification(n.title, n.body, n.type || 'info', {
+              id: n.id,
+              conclaveId: n.data?.conclaveId,
+              timestamp: n.createdAt,
+              read: n.read
+            });
+          });
+          const updated = getNotifications({ userUid, conclaveId });
+          if (active) setNotifications(updated);
+        }
+      } catch (e) {
+        // Fallback silently to local cache
+      }
     };
     syncNotifs();
     window.addEventListener('storage', syncNotifs);
-    return () => window.removeEventListener('storage', syncNotifs);
+    return () => {
+      active = false;
+      window.removeEventListener('storage', syncNotifs);
+    };
   }, [userUid, conclaveId]);
 
   const unreadCount = notifications.filter(n => n.unread).length;
@@ -44,6 +65,7 @@ export default function MemberHeader({
   const markAllAsRead = () => {
     markAllRead({ userUid });
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    api.post('/me/notifications/read').catch(() => { });
   };
 
 

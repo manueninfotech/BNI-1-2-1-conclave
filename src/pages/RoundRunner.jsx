@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   CheckCircle2,
-  Grid,
-  Users,
-  Shield,
   X,
   RefreshCw,
   Send,
@@ -13,26 +10,42 @@ import {
   Sparkles,
   Play,
   Pause,
-  Square
+  Square,
+  Clock,
+  Award,
+  BarChart2,
+  ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, BarChart, Bar, Cell, XAxis } from 'recharts';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
 import { api } from '../services/api';
 import confetti from 'canvas-confetti';
 import { colors } from '../config/theme';
 import { formatStatus } from '../utils/statusUtils';
 
-
-
 import runnerData from '../data/tables_runner.json';
 import {
   calculateRoundTiming,
-  formatTime,
   ROUND_BLOCK_DURATION_SECS,
-  TALKING_SECS_PER_PERSON
 } from '../utils/roundTiming';
-const { initialTables, mockRosters } = runnerData;
+import { liveClock } from '../utils/roundClock';
+const { initialTables } = runnerData;
 
-export default function RoundRunner({ selectedConclaveId, onNavigateToReview, isHubMode = false }) {
+export default function RoundRunner({
+  selectedConclaveId,
+  onNavigateToReview,
+  isHubMode = false,
+}) {
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
@@ -87,10 +100,23 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
     return selectedConclave?.scheduleSummary?.roundCount || selectedConclave?.roundCount || 4;
   }, [selectedConclave]);
 
+  // The server's round clock, ticking every second: in automatic mode the
+  // round moves on without a stored update, so the round shown comes from it.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const clock = useMemo(() => liveClock(selectedConclave, nowTick), [selectedConclave, nowTick]);
+
   const isUpcoming = !isCompleted && (statusLower === 'upcoming' || statusLower === 'draft' || !selectedConclave?.currentRound);
   const activeRound = isCompleted
     ? (selectedConclave?.currentRound || totalRounds)
-    : (isUpcoming ? 0 : (selectedConclave?.currentRound || 0));
+    : (isUpcoming ? 0 : (clock.round || selectedConclave?.currentRound || 0));
+  // Automatic mode's move break: seconds until the next round starts by itself.
+  const moveCountdown = clock.phase === 'move' && clock.phaseEndsMs
+    ? Math.max(0, Math.ceil((clock.phaseEndsMs - nowTick) / 1000))
+    : null;
 
   const progressPercent = useMemo(() => {
     if (isCompleted) return 100;
@@ -178,6 +204,129 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
     return !isConnected && !isClosed;
   }).length;
 
+  // View mode for Referrals bar chart: 'table' (by table T1..Tn) or 'status' (Connected/Pending/Closed)
+  const [referralChartMode, setReferralChartMode] = useState('table');
+
+  // Calculate referrals per table for the Bar Chart model
+  const tableReferralsChartData = useMemo(() => {
+    const tableCount = selectedConclave?.scheduleSummary?.tableCount ||
+      tables.length ||
+      (selectedConclave?.schedule?.rounds?.[0]?.tables?.length) ||
+      8;
+    const countToUse = Math.max(1, Math.min(tableCount, 14));
+
+    const tableStats = {};
+    for (let i = 1; i <= countToUse; i++) {
+      tableStats[i] = {
+        name: `T${i}`,
+        fullName: `Table ${i}`,
+        tableNumber: i,
+        referrals: 0,
+        connected: 0,
+        pending: 0,
+        closed: 0,
+        captainName: null,
+      };
+    }
+
+    // Set captain names from current active round tables
+    tables.forEach(t => {
+      if (t.tableNumber && tableStats[t.tableNumber]) {
+        tableStats[t.tableNumber].captainName = t.captain?.name || null;
+      }
+    });
+
+    const scheduleRounds = selectedConclave?.schedule?.rounds || [];
+
+    const findTableForParticipant = (pId, pName, roundNum) => {
+      if (!pId && !pName) return null;
+      const cleanPName = pName ? pName.toLowerCase().trim() : null;
+
+      const targetRounds = roundNum ? scheduleRounds.filter(r => r.roundNumber === roundNum) : scheduleRounds;
+      const roundsToSearch = targetRounds.length > 0 ? targetRounds : scheduleRounds;
+
+      for (const rnd of roundsToSearch) {
+        if (!rnd.tables) continue;
+        for (const tbl of rnd.tables) {
+          const tNum = tbl.tableNumber;
+          if (tbl.captainId && (tbl.captainId === pId || String(tbl.captainId) === String(pId))) return tNum;
+          if (Array.isArray(tbl.memberIds)) {
+            if (tbl.memberIds.some(mId => mId === pId || String(mId) === String(pId))) return tNum;
+          }
+        }
+      }
+
+      for (const t of tables) {
+        const tNum = t.tableNumber;
+        if (cleanPName && t.captain?.name?.toLowerCase()?.trim() === cleanPName) return tNum;
+        if (t.members?.some(m => (pId && m.id === pId) || (cleanPName && m.name?.toLowerCase()?.trim() === cleanPName))) {
+          return tNum;
+        }
+      }
+
+      return null;
+    };
+
+    filteredReferrals.forEach((r, idx) => {
+      const st = (r.status || '').toLowerCase();
+      const out = (r.outcome || '').toLowerCase();
+      const isConnected = st === 'connected' || st === 'completed' || out === 'accepted';
+      const isClosed = st === 'closed' || out === 'closed' || (r.closedAmount && r.closedAmount > 0);
+
+      let tNum = r.tableNumber || r.table_number;
+
+      if (!tNum) {
+        const giverId = r.fromMemberId || r.fromUserId || r.giverId;
+        const giverName = r.fromName || r.giverName;
+        tNum = findTableForParticipant(giverId, giverName, r.roundNumber);
+      }
+
+      if (!tNum) {
+        const receiverId = r.toMemberId || r.toUserId || r.receiverId;
+        const receiverName = r.toName || r.receiverName;
+        tNum = findTableForParticipant(receiverId, receiverName, r.roundNumber);
+      }
+
+      if (tNum && tableStats[tNum]) {
+        tableStats[tNum].referrals += 1;
+        if (isClosed) tableStats[tNum].closed += 1;
+        else if (isConnected) tableStats[tNum].connected += 1;
+        else tableStats[tNum].pending += 1;
+      } else {
+        // Deterministic distribution across tables if unassigned so total matches exactly
+        let hash = 0;
+        const str = String(r.id || r.fromName || idx);
+        for (let i = 0; i < str.length; i++) {
+          hash = ((hash << 5) - hash) + str.charCodeAt(i);
+          hash |= 0;
+        }
+        const assignedTable = (Math.abs(hash) % countToUse) + 1;
+        if (tableStats[assignedTable]) {
+          tableStats[assignedTable].referrals += 1;
+          if (isClosed) tableStats[assignedTable].closed += 1;
+          else if (isConnected) tableStats[assignedTable].connected += 1;
+          else tableStats[assignedTable].pending += 1;
+        }
+      }
+    });
+
+    return Object.values(tableStats);
+  }, [tables, selectedConclave, filteredReferrals]);
+
+  // Status breakdown data for the Bar Chart
+  const statusReferralsChartData = useMemo(() => {
+    return [
+      { name: 'Connected', count: connectedReferrals, fill: '#10b981' },
+      { name: 'Pending', count: pendingReferrals, fill: '#f59e0b' },
+      { name: 'Closed', count: closedReferrals, fill: '#71717a' },
+    ];
+  }, [connectedReferrals, pendingReferrals, closedReferrals]);
+
+  const maxReferralsY = useMemo(() => {
+    const maxVal = Math.max(...tableReferralsChartData.map(t => t.referrals), 0);
+    return Math.max(4, Math.ceil(maxVal * 1.2));
+  }, [tableReferralsChartData]);
+
   // Segment data for the Referrals Tracker donut chart
   const referralChartData = useMemo(() => {
     if (totalReferrals === 0) {
@@ -208,8 +357,10 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
   const [timerRunning, setTimerRunning] = useState(false);
 
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
-    startedAt: selectedConclave?.currentRoundStartedAt,
+    startedAt: clock.roundStartMs ?? selectedConclave?.currentRoundStartedAt,
     personsPerTable,
+    roundTiming: selectedConclave?.roundTiming,
+    extensionSeconds: (clock.extensionMs || 0) / 1000,
     isRunning: Boolean(selectedConclave?.currentRound && selectedConclave?.currentRoundStartedAt && !isUpcoming && !isCompleted),
     isPaused: isRoundPaused && !isCompleted,
     pausedAt: selectedConclave?.roundPausedAt,
@@ -234,8 +385,10 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
-        startedAt: selectedConclave?.currentRoundStartedAt,
+        startedAt: clock.roundStartMs ?? selectedConclave?.currentRoundStartedAt,
         personsPerTable,
+        roundTiming: selectedConclave?.roundTiming,
+        extensionSeconds: (clock.extensionMs || 0) / 1000,
         isRunning: isRoundLive || timerRunning,
         isPaused: isRoundPaused,
         pausedAt: selectedConclave?.roundPausedAt,
@@ -250,7 +403,7 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [selectedConclave, personsPerTable, isUpcoming, isCompleted, statusLower, timerRunning, isRoundPaused]);
+  }, [selectedConclave, personsPerTable, isUpcoming, isCompleted, statusLower, timerRunning, isRoundPaused, clock.roundStartMs, clock.extensionMs]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -261,33 +414,93 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
   // Audio chime state
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const lastChimeRef = useRef(null);
+  const audioCtxRef = useRef(null);
 
-  // Web Audio API chime synthesizer (realistic brass bell gong sound, zero MP3 dependency)
-  const playBellSound = (mode = 'chime') => {
-    if (!isSoundEnabled) return;
+  // Singleton AudioContext with state resumption
+  const getAudioContext = async () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      if (!AudioCtx) return null;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        await audioCtxRef.current.resume();
+      }
+      return audioCtxRef.current;
+    } catch (err) {
+      console.warn("AudioContext init error:", err);
+      return null;
+    }
+  };
+
+  // Unlock AudioContext on the user's first click or touch
+  useEffect(() => {
+    const unlockAudio = () => {
+      getAudioContext();
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
+  // Web Audio API brass bell chime synthesizer (realistic resonance + overtones, zero MP3 dependency)
+  const playBellSound = async (mode = 'chime') => {
+    if (!isSoundEnabled) return;
+    try {
+      const ctx = await getAudioContext();
+      if (!ctx) return;
+
       const now = ctx.currentTime;
+      // Notes: double = round change/end; single = resume; chime = manual test
+      const notes = mode === 'double'
+        ? [
+          { time: now, freq: 783.99 },
+          { time: now + 0.26, freq: 1046.50 }
+        ]
+        : mode === 'single'
+          ? [
+            { time: now, freq: 880.00 }
+          ]
+          : [
+            { time: now, freq: 880.00 },
+            { time: now + 0.22, freq: 1174.66 }
+          ];
 
-      const freqs = mode === 'double' ? [523.25, 659.25, 783.99] : mode === 'single' ? [659.25] : [659.25, 987.77];
-      freqs.forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+      notes.forEach(({ time, freq }) => {
+        // Fundamental bell body tone
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(freq, time);
+        gain1.gain.setValueAtTime(0.55, time);
+        gain1.gain.exponentialRampToValueAtTime(0.001, time + 2.2);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(time);
+        osc1.stop(time + 2.4);
 
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.18);
-
-        gain.gain.setValueAtTime(0.35, now + idx * 0.18);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 1.8);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start(now + idx * 0.18);
-        osc.stop(now + idx * 0.18 + 2.0);
+        // Overtone strike harmonic (2.76x physical brass bell ratio)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(freq * 2.76, time);
+        gain2.gain.setValueAtTime(0.22, time);
+        gain2.gain.exponentialRampToValueAtTime(0.001, time + 1.2);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(time);
+        osc2.stop(time + 1.4);
       });
+
+      if (mode === 'chime' || mode === 'test') {
+        showToast('🔔 Bell Sound', 'Bell chime sound played successfully.');
+      }
     } catch (err) {
       console.warn("Could not play bell sound:", err);
     }
@@ -363,8 +576,130 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Automatic Round Progression State
-  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(true);
+  // Live Round Extension States
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [isExtending, setIsExtending] = useState(false);
+
+  const handleExtendRound = async (additionalMinutes) => {
+    if (!selectedConclaveId || isExtending) return;
+    setIsExtending(true);
+    const addedSecs = additionalMinutes * 60;
+
+    // Optimistically update conclave state so timer extends instantly
+    setConclaves(prev => prev.map(c => {
+      if (c.id === selectedConclaveId) {
+        return {
+          ...c,
+          roundExtensionSeconds: (c.roundExtensionSeconds || 0) + addedSecs,
+        };
+      }
+      return c;
+    }));
+
+    try {
+      await api.post(`/admin/conclaves/${selectedConclaveId}/extend-round`, {
+        additionalSeconds: addedSecs,
+      });
+      playBellSound('single');
+      showToast('Round Extended', `Round ${activeRound} extended by +${additionalMinutes}m. All screens synced.`);
+      setShowExtensionModal(false);
+    } catch (err) {
+      console.error("Failed to extend round:", err);
+      showToast('Extension Failed', err.message || "Could not extend round time.");
+    } finally {
+      // Re-read the server's clock (undoes the optimistic change if it failed).
+      api.get('/admin/conclaves').then((fresh) => Array.isArray(fresh) && setConclaves(fresh)).catch(() => {});
+      setIsExtending(false);
+    }
+  };
+
+  // Automatic Round Progression State (persisted to localStorage and backend conclave setting)
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(() => {
+    try {
+      const cached = localStorage.getItem('bni_auto_advance_enabled');
+      if (cached !== null) return cached === 'true';
+    } catch { }
+    return true;
+  });
+
+  // Sync progression mode from selected conclave when loaded
+  useEffect(() => {
+    if (selectedConclave?.roundProgressionMode) {
+      const isAuto = selectedConclave.roundProgressionMode === 'automatic';
+      setAutoAdvanceEnabled(isAuto);
+      try {
+        localStorage.setItem('bni_auto_advance_enabled', String(isAuto));
+      } catch { }
+    }
+  }, [selectedConclave?.id, selectedConclave?.roundProgressionMode]);
+
+  const handleToggleAutoAdvance = async () => {
+    const nextVal = !autoAdvanceEnabled;
+    setAutoAdvanceEnabled(nextVal);
+    try {
+      localStorage.setItem('bni_auto_advance_enabled', String(nextVal));
+    } catch { }
+
+    if (!nextVal) {
+      if (autoStartTimerRef.current) {
+        clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+      }
+      setAutoStartCountdown(null);
+    }
+
+    if (selectedConclaveId) {
+      const mode = nextVal ? 'automatic' : 'manual';
+      setConclaves(prev => prev.map(c => {
+        if (c.id === selectedConclaveId) {
+          return { ...c, roundProgressionMode: mode };
+        }
+        return c;
+      }));
+
+      try {
+        await api.post(`/admin/conclaves/${selectedConclaveId}/progression-mode`, { mode });
+        showToast('Progression Mode', `Auto progression set to ${nextVal ? 'ON' : 'OFF'}.`);
+      } catch (err) {
+        console.warn("Failed to update progression mode on server:", err);
+      }
+    }
+  };
+
+  const handleSetProgressionMode = async (mode) => {
+    const isAuto = mode === 'automatic';
+    setAutoAdvanceEnabled(isAuto);
+    try {
+      localStorage.setItem('bni_auto_advance_enabled', String(isAuto));
+    } catch { }
+
+    if (!isAuto) {
+      if (autoStartTimerRef.current) {
+        clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+      }
+      setAutoStartCountdown(null);
+    }
+
+    if (selectedConclaveId) {
+      setConclaves(prev => prev.map(c => {
+        if (c.id === selectedConclaveId) {
+          return { ...c, roundProgressionMode: mode };
+        }
+        return c;
+      }));
+
+      try {
+        await api.post(`/admin/conclaves/${selectedConclaveId}/progression-mode`, { mode });
+        showToast('Progression Mode', `Round progression set to ${isAuto ? 'Automatic' : 'Manual'}.`);
+        const fresh = await api.get('/admin/conclaves').catch(() => null);
+        if (Array.isArray(fresh)) setConclaves(fresh);
+      } catch (err) {
+        console.warn("Failed to update progression mode on server:", err);
+      }
+    }
+  };
+
   const [autoStartCountdown, setAutoStartCountdown] = useState(null);
   const autoAdvancingRoundRef = useRef(null);
   const autoStartTimerRef = useRef(null);
@@ -388,40 +723,34 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
   }, []);
 
   // Automatic round progression effect:
-  // Starts next round automatically when previous round completes
+  // Starts next round automatically when previous round completes ONLY IF autoAdvanceEnabled is true.
+  // When all rounds (activeRound >= totalRounds) complete, mark conclave as completed!
   useEffect(() => {
-    if (!autoAdvanceEnabled) return;
+    if (isRoundPaused || timingState.isPaused) {
+      if (autoStartTimerRef.current) {
+        clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+      }
+      setAutoStartCountdown(null);
+      return;
+    }
     if (statusLower !== 'running') return;
     if (activeRound < 1) return; // Round 1 must be started manually by the admin!
 
     const isRoundEnded = Boolean(
       timingState.phase === 'ended' ||
       timingState.isEnded ||
-      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral')
+      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral' && timingState.phase !== 'paused')
     );
 
     if (isRoundEnded) {
       if (activeRound < totalRounds) {
-        const nextRoundNum = activeRound + 1;
-        if (autoAdvancingRoundRef.current === activeRound) return;
-        autoAdvancingRoundRef.current = activeRound;
-
-        let count = 5;
-        setAutoStartCountdown(count);
-
-        if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
-        autoStartTimerRef.current = setInterval(() => {
-          count -= 1;
-          if (count <= 0) {
-            clearInterval(autoStartTimerRef.current);
-            autoStartTimerRef.current = null;
-            setAutoStartCountdown(null);
-            handleStartNextRound(nextRoundNum);
-          } else {
-            setAutoStartCountdown(count);
-          }
-        }, 1000);
+        // Manual: wait for the admin. Automatic: the SERVER starts the next
+        // round after the conclave's move break (every phone follows the same
+        // clock) — the panel never starts rounds by itself.
+        return;
       } else if (activeRound >= totalRounds) {
+        // All rounds completed! Auto-complete the conclave
         if (autoAdvancingRoundRef.current === `finished-${activeRound}`) return;
         autoAdvancingRoundRef.current = `finished-${activeRound}`;
 
@@ -442,7 +771,7 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
         }, 1000);
       }
     }
-  }, [timingState.phase, timingState.isEnded, timingState.totalRemaining, activeRound, totalRounds, statusLower, autoAdvanceEnabled]);
+  }, [timingState.phase, timingState.isEnded, timingState.isPaused, timingState.totalRemaining, activeRound, totalRounds, statusLower, autoAdvanceEnabled, isRoundPaused]);
 
   // Start next round trigger (supports manual click and automated progression)
   const handleStartNextRound = async (customRoundNum = null) => {
@@ -529,16 +858,27 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
   // Pause active round
   const handlePauseRound = async () => {
     try {
+      if (autoStartTimerRef.current) {
+        clearInterval(autoStartTimerRef.current);
+        autoStartTimerRef.current = null;
+      }
+      setAutoStartCountdown(null);
+
+      const now = new Date();
       setConclaves(prev => prev.map(c => {
         if (c.id === selectedConclaveId) {
+          const startedAt = c.currentRoundStartedAt ? new Date(c.currentRoundStartedAt).getTime() : Date.now();
+          const elapsed = Math.max(0, now.getTime() - startedAt);
           return {
             ...c,
             isRoundPaused: true,
-            roundPausedAt: new Date(),
+            roundPausedAt: now,
+            roundElapsedMsBeforePause: elapsed,
           };
         }
         return c;
       }));
+      setTimerRunning(false);
 
       await api.post(`/admin/conclaves/${selectedConclaveId}/pause-round`);
       const data = await api.get('/admin/conclaves');
@@ -553,13 +893,16 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
   // Resume paused round
   const handleResumeRound = async () => {
     try {
+      const now = Date.now();
       setConclaves(prev => prev.map(c => {
         if (c.id === selectedConclaveId) {
+          const elapsed = c.roundElapsedMsBeforePause || 0;
           return {
             ...c,
             isRoundPaused: false,
             roundPausedAt: null,
             roundElapsedMsBeforePause: null,
+            currentRoundStartedAt: new Date(now - elapsed),
           };
         }
         return c;
@@ -593,583 +936,792 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
     }
   };
 
+  // Calculate table seating and activity chart data
+  const tableChartData = useMemo(() => {
+    if (!tables || tables.length === 0) {
+      const count = selectedConclave?.scheduleSummary?.tableCount || 8;
+      return Array.from({ length: Math.min(count, 12) }, (_, i) => ({
+        name: `T${i + 1}`,
+        members: Math.max(1, personsPerTable - 1),
+        capacity: personsPerTable,
+      }));
+    }
+    return tables.slice(0, 14).map(t => ({
+      name: `T${t.tableNumber}`,
+      members: (t.members?.length || 0) + (t.captain ? 1 : 0),
+      capacity: personsPerTable,
+    }));
+  }, [tables, selectedConclave, personsPerTable]);
+
+  // Round phase timing breakdown chart
+  const timingChartData = useMemo(() => {
+    const talking = timingState.activeSecs || 180;
+    const referral = timingState.referralSecs || 90;
+    const transition = timingState.transitionSecs || 75;
+    return [
+      { name: 'Talking', value: talking, fill: '#10b981' },
+      { name: 'Referrals', value: referral, fill: '#3b82f6' },
+      { name: 'Rotation', value: transition, fill: '#f59e0b' },
+    ];
+  }, [timingState]);
+
+  // 1 to personsPerTable visual dots
+  const speakerBeads = useMemo(() => {
+    const count = timingState.personsPerTable || 6;
+    const current = timingState.speakerNumber || 1;
+    return Array.from({ length: count }, (_, i) => {
+      const num = i + 1;
+      let state = 'upcoming';
+      if (timingState.phase === 'active') {
+        if (num < current) state = 'done';
+        else if (num === current) state = 'active';
+      } else if (timingState.phase === 'referral' || timingState.phase === 'transition' || timingState.phase === 'ended') {
+        state = 'done';
+      }
+      return { num, state };
+    });
+  }, [timingState.personsPerTable, timingState.speakerNumber, timingState.phase]);
+
+  // Array of round numbers 1..totalRounds
+  const roundPills = useMemo(() => {
+    return Array.from({ length: totalRounds }, (_, i) => {
+      const rNum = i + 1;
+      const isDone = isCompleted || (activeRound > rNum);
+      const isCurrent = !isCompleted && (activeRound === rNum);
+      return { rNum, isDone, isCurrent };
+    });
+  }, [totalRounds, activeRound, isCompleted]);
 
   return (
-    <div className={`w-full flex flex-col gap-6 animate-fade-in relative ${isHubMode ? '' : 'p-4 sm:p-6 max-w-[1600px] mx-auto'}`}>
+    <div className={`w-full max-w-full overflow-hidden flex flex-col animate-fade-in relative select-none gap-4 sm:gap-5 pb-6 ${isHubMode ? '' : 'p-2 sm:p-4'}`}>
 
-      {/* Header Section */}
-      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isHubMode ? 'pb-1' : 'border-b border-zinc-100 pb-6'}`}>
-        {!isHubMode && (
-          <div>
-            <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Round Runner</h2>
-            <p className="text-body-text text-zinc-500 mt-2">
-              Live control for <span className="font-bold text-brand-red">{conclaveName}</span>.
-            </p>
-          </div>
-        )}
+      {/* Main 3-Column Cockpit Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-12 gap-4 sm:gap-5 items-stretch min-w-0">
 
-        <div className={`flex flex-wrap items-center gap-3 shrink-0 ${isHubMode ? 'ml-auto' : ''}`}>
-          {!['completed', 'cancelled'].includes(statusLower) && (
-            <>
-              {activeRound > 0 && (
+        {/* COLUMN 1: Timer & Live Speaker Mission Control */}
+        <div className="lg:col-span-1 xl:col-span-4 flex flex-col justify-between gap-4 sm:gap-5 min-w-0">
+          {/* Main Timer Card */}
+          <div className="flex-1 bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[460px] sm:min-h-[500px] min-w-0">
+            {/* Top Phase Header */}
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timingState.phase === 'active' ? 'bg-emerald-400' : isRoundPaused ? 'bg-amber-400' : 'bg-brand-red'
+                    }`} />
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${timingState.phase === 'active' ? 'bg-emerald-500' : isRoundPaused ? 'bg-amber-500' : 'bg-brand-red'
+                    }`} />
+                </span>
+                <span className="text-xs font-black uppercase tracking-wider text-zinc-900">
+                  {isCompleted
+                    ? 'Conclave Completed'
+                    : isRoundPaused
+                      ? `Round ${activeRound} Paused`
+                      : timingState.phase === 'active'
+                        ? 'Talking Time'
+                        : timingState.phase === 'referral'
+                          ? 'Referral Window'
+                          : timingState.phase === 'transition'
+                            ? 'Move To Next Table'
+                            : timingState.phase === 'ended'
+                              ? 'Round Concluded'
+                              : 'Round Ready'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
+                  onClick={() => playBellSound('chime')}
+                  title="Test Bell Sound"
                   type="button"
-                  onClick={() => setAutoAdvanceEnabled(prev => !prev)}
-                  title="Toggle automatic progression between rounds"
-                  className={`inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-xs font-bold transition-smooth cursor-pointer ${autoAdvanceEnabled
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
-                    : 'bg-zinc-100 border-zinc-250 text-zinc-600 hover:bg-zinc-150'
-                    }`}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-600 transition-smooth cursor-pointer shadow-2xs"
                 >
-                  <Sparkles className={`w-3.5 h-3.5 ${autoAdvanceEnabled ? 'text-emerald-600 animate-pulse' : 'text-zinc-400'}`} />
-                  <span>Auto-Advance: {autoAdvanceEnabled ? 'ON' : 'PAUSED'}</span>
+                  <Volume2 className="w-3.5 h-3.5" />
                 </button>
-              )}
-
-              {activeRound === 0 ? (
                 <button
-                  onClick={() => handleStartNextRound(1)}
+                  onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+                  title={isSoundEnabled ? "Mute Bell Sound" : "Enable Bell Sound"}
                   type="button"
-                  className="inline-flex items-center justify-center gap-2 h-10 px-5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
+                  className={`p-1.5 rounded-lg border transition-smooth cursor-pointer shadow-2xs ${isSoundEnabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-50 text-zinc-400 border-zinc-200'}`}
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Start Round 1</span>
+                  {isSoundEnabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
                 </button>
-              ) : (
-                <>
-                  {isRoundPaused ? (
-                    <button
-                      onClick={handleResumeRound}
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                      title="Resume the active round timer"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>Resume</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handlePauseRound}
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                      title="Pause the active round timer"
-                    >
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pause</span>
-                    </button>
-                  )}
-
-                  {activeRound < (selectedConclave?.roundCount || 4) && (
-                    <button
-                      onClick={() => handleStartNextRound()}
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
-                      title="Manually force-start the next round now"
-                    >
-                      <RefreshCw className="w-4 h-4 text-zinc-500 animate-spin-slow" />
-                      <span>Start Round {activeRound + 1}</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleCloseRound}
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300 text-xs font-bold rounded-xl transition-smooth cursor-pointer"
-                    title={`Close active Round ${activeRound}`}
-                  >
-                    <Square className="w-3.5 h-3.5 fill-zinc-500 text-zinc-500" />
-                    <span>Close Round</span>
-                  </button>
-
-                  <button
-                    onClick={handleFinishConclave}
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 h-10 px-5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Finish Conclave</span>
-                  </button>
-                </>
-              )}
-            </>
-          )}
-          {onNavigateToReview && (
-            <button
-              onClick={onNavigateToReview}
-              type="button"
-              className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-250 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
-              title="Inspect member seating and table assignments in review matrix"
-            >
-              <span>Review Table Matrix</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Auto-Start Countdown Banner */}
-      {autoStartCountdown !== null && (
-        <div className="p-4 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-800 shrink-0">
-              <Sparkles className="w-5 h-5 animate-spin-slow text-amber-700" />
+                <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full border ${timingState.phase === 'active'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : timingState.phase === 'referral'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : timingState.phase === 'transition'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-zinc-100 text-zinc-600 border-zinc-250'
+                  }`}>
+                  {isCompleted ? 'Finished' : `${formatTime(timingState.phaseRemaining)} left`}
+                </span>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">
-                {activeRound < totalRounds ? `Round ${activeRound} Concluded` : 'All Rounds Concluded'}
-              </h4>
-              <p className="text-body-xs text-amber-900 font-semibold mt-0.5">
-                {activeRound < totalRounds
-                  ? `Round ${activeRound + 1} will start automatically in ${autoStartCountdown} second${autoStartCountdown === 1 ? '' : 's'}...`
-                  : `Live conclave will conclude automatically in ${autoStartCountdown} second${autoStartCountdown === 1 ? '' : 's'}...`}
+
+            {/* Huge Dynamic Digital Clock */}
+            <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6 my-auto">
+              <div className={`text-7xl sm:text-8xl xl:text-9xl font-black tabular-nums tracking-tighter leading-none select-none drop-shadow-xs ${isCompleted
+                ? 'text-zinc-350'
+                : isRoundPaused
+                  ? 'text-amber-500'
+                  : timingState.phase === 'active'
+                    ? 'text-emerald-600'
+                    : timingState.phase === 'referral'
+                      ? 'text-blue-600'
+                      : timingState.phase === 'transition'
+                        ? 'text-amber-600'
+                        : 'text-brand-red'
+                }`}>
+                {isCompleted ? '00:00' : formatTime(timeLeft)}
+              </div>
+
+              {/* Linear Progress Bar (Hidden when time is 0 / completed) */}
+              <div className={`w-full max-w-[320px] h-2.5 bg-zinc-100 rounded-full overflow-hidden mt-3 border border-zinc-200/60 ${(isCompleted || timeLeft <= 0) ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${timingState.phase === 'active'
+                    ? 'bg-emerald-500'
+                    : timingState.phase === 'referral'
+                      ? 'bg-blue-500'
+                      : timingState.phase === 'transition'
+                        ? 'bg-amber-500'
+                        : 'bg-brand-red'
+                    }`}
+                  style={{
+                    width: (isCompleted || timeLeft <= 0)
+                      ? '0%'
+                      : `${Math.min(
+                        100,
+                        Math.max(0, 100 - (timingState.phaseRemaining / Math.max(1, timingState.phase === 'active' ? timingState.activeSecs : timingState.phase === 'referral' ? timingState.referralSecs : timingState.transitionSecs)) * 100)
+                      )}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Speaker Turn Progression & Visual Beads */}
+            <div className="bg-zinc-50/90 border border-zinc-200/80 rounded-xl p-3 shrink-0 space-y-2.5">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="text-zinc-700 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-brand-red" />
+                  Speaker Turn
+                </span>
+                <span className="text-zinc-900 font-extrabold">
+                  {timingState.phase === 'active' && !isRoundPaused
+                    ? `Speaker ${timingState.speakerNumber} of ${timingState.personsPerTable} (${formatTime(timingState.speakerTimeLeft)})`
+                    : timingState.phase === 'referral'
+                      ? 'Referral Window'
+                      : timingState.phase === 'transition'
+                        ? 'Table Rotation'
+                        : timingState.bioSecs < 60
+                          ? `${timingState.bioSecs}s / Person`
+                          : `${(timingState.bioSecs / 60).toFixed(1).replace(/\.0$/, '')}m / Person`}
+                </span>
+              </div>
+
+              {/* Visual Speaker Seat Beads */}
+              <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                {speakerBeads.map(({ num, state }) => (
+                  <div
+                    key={num}
+                    className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-xs font-black border transition-all ${state === 'done'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : state === 'active'
+                        ? 'bg-brand-red text-white border-brand-red shadow-xs ring-2 ring-red-200 animate-pulse'
+                        : 'bg-white text-zinc-400 border-zinc-200'
+                      }`}
+                  >
+                    <span>S{num}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Formula Subtitle */}
+              <p className="text-[10px] text-zinc-400 font-semibold text-center uppercase tracking-wider">
+                {timingState.personsPerTable} Seats · {((timingState.talkingSecs || timingState.activeSecs) / 60).toFixed(1).replace(/\.0$/, '')}m Speaking + {(timingState.referralSecs / 60).toFixed(1).replace(/\.0$/, '')}m Referrals + {timingState.transitionSecs < 60 ? `${timingState.transitionSecs}s` : `${(timingState.transitionSecs / 60).toFixed(1).replace(/\.0$/, '')}m`} Move = {(timingState.totalBlockSecs / 60).toFixed(1).replace(/\.0$/, '')}m Round Total
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <button
-              onClick={() => {
-                if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
-                setAutoStartCountdown(null);
-                if (activeRound < totalRounds) {
-                  handleStartNextRound(activeRound + 1);
-                } else {
-                  handleFinishConclave();
-                }
-              }}
-              type="button"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-lg shadow-2xs transition-smooth cursor-pointer"
-            >
-              {activeRound < totalRounds ? `Start Round ${activeRound + 1} Now` : 'Finish Now'}
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Completed Conclave Notice */}
-      {['completed', 'cancelled'].includes(statusLower) && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-900 text-xs font-bold flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-            <span>This conclave is <strong>{formatStatus(selectedConclave?.status) || 'Completed'}</strong>. Live timer controls and round advancement are disabled.</span>
-          </div>
-          <span className="px-2.5 py-1 bg-emerald-200/60 rounded text-[9.5px] font-black uppercase tracking-wider text-emerald-950">Conclave Completed</span>
-        </div>
-      )}
+            {/* Mission Control Round Stepper & Action Controls */}
+            <div className="pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 flex-wrap shrink-0">
+              {/* Stepper Pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {isCompleted ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold shadow-2xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    All {totalRounds} Rounds Completed
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mr-0.5">Rounds:</span>
+                    {roundPills.map(({ rNum, isDone, isCurrent }) => (
+                      <div
+                        key={rNum}
+                        className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-black border transition-all ${isDone
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : isCurrent
+                              ? 'bg-brand-red text-white border-brand-red shadow-2xs'
+                              : 'bg-zinc-100 text-zinc-500 border-zinc-200'
+                          }`}
+                      >
+                        {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <span>R{rNum}</span>}
+                        {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />}
+                      </div>
+                    ))}
+                    {!['completed', 'cancelled'].includes(statusLower) && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-500">
+                        {autoAdvanceEnabled ? 'Auto' : 'Manual'}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
 
-      {/* Status & KPI cards — Full Width */}
-      <div className="bg-white border border-zinc-200/80 rounded-xl p-5 sm:p-6 shadow-sm space-y-6 w-full">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-zinc-100 pb-4">
-          <div className="flex items-center gap-4">
-            <div className={`px-3.5 py-1.5 rounded-lg border ${isCompleted ? 'bg-zinc-100 text-zinc-700 border-zinc-250' : 'bg-red-50 text-brand-red border-red-100'}`}>
-              <p className="text-[8px] font-bold uppercase tracking-wider">{isCompleted ? 'Conclave Status' : 'Current Stage'}</p>
-              <p className="text-body-sm font-bold mt-0.5">{isCompleted ? `Completed (${totalRounds}/${totalRounds} Rounds)` : `Round ${activeRound} of ${totalRounds}`}</p>
+              {/* Action Buttons */}
+              {!['completed', 'cancelled'].includes(statusLower) && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {activeRound === 0 ? (
+                    <div className="flex items-center gap-2">
+                      {/* Progression Mode selector BEFORE starting Round 1 */}
+                      <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('manual')}
+                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled
+                              ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250'
+                              : 'text-zinc-500 hover:text-zinc-800'
+                            }`}
+                          title="Manual Mode: Admin explicitly clicks to start each round"
+                        >
+                          Manual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('automatic')}
+                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer flex items-center gap-1 ${autoAdvanceEnabled
+                              ? 'bg-emerald-600 text-white shadow-2xs'
+                              : 'text-zinc-500 hover:text-zinc-800'
+                            }`}
+                          title="Automatic Mode: Rounds advance on the timer automatically"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Auto</span>
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleStartNextRound(1)}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 h-7 px-3 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-smooth shadow-xs cursor-pointer"
+                      >
+                        <Play className="w-3 h-3 fill-current" />
+                        <span>Start Round 1</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Manual / automatic can be switched at any time, even mid-conclave. */}
+                      <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs" role="group" aria-label="Round progression">
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('manual')}
+                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250' : 'text-zinc-500 hover:text-zinc-800'}`}
+                          title="Manual: you start each round"
+                        >
+                          Manual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('automatic')}
+                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${autoAdvanceEnabled ? 'bg-emerald-600 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                          title="Automatic: the next round starts after the move break"
+                        >
+                          Auto
+                        </button>
+                      </div>
+                      {isRoundPaused ? (
+                        <button
+                          onClick={handleResumeRound}
+                          type="button"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          title="Resume active round timer"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>Resume</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handlePauseRound}
+                          type="button"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          title="Pause active round timer"
+                        >
+                          <Pause className="w-3 h-3 fill-current" />
+                          <span>Pause</span>
+                        </button>
+                      )}
+
+                      {activeRound < (selectedConclave?.roundCount || 4) && (
+                        <button
+                          onClick={() => handleStartNextRound()}
+                          type="button"
+                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          title="Force start next round"
+                        >
+                          <RefreshCw className="w-3 h-3 text-zinc-500" />
+                          <span>Next</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleCloseRound}
+                        type="button"
+                        className="inline-flex items-center gap-1 h-7 px-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                        title={`End Round ${activeRound} early (keeps conclave running)`}
+                      >
+                        <Square className="w-3 h-3 fill-zinc-500 text-zinc-500" />
+                        <span>End Round {activeRound}</span>
+                      </button>
+
+                      <button
+                        onClick={handleFinishConclave}
+                        type="button"
+                        className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase rounded-lg transition-smooth shadow-xs cursor-pointer"
+                        title="Conclude entire conclave event (marks completed)"
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Finish Conclave</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-            {isCompleted ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-2xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Completed ({totalRounds}/{totalRounds})
-              </div>
-            ) : isUpcoming ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded-full text-[10px] font-bold uppercase">
-                <span className="relative flex h-2 w-2">
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                </span>
-                Upcoming (0/{totalRounds})
-              </div>
-            ) : isRoundPaused ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-[10px] font-bold uppercase">
-                <Pause className="w-3 h-3 fill-amber-600 text-amber-600" />
-                Round {activeRound} Paused
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-full text-[10px] font-bold uppercase">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Running
-              </div>
-            )}
           </div>
 
-          <div className="text-left sm:text-right">
-            <p className="text-[9px] text-zinc-455 font-bold uppercase tracking-wider mb-1">Global Completion</p>
-            <div className="w-56 h-2 rounded-full overflow-hidden">
+          {/* Quick Metrics 4-Grid Strip */}
+          <div className="shrink-0 grid grid-cols-4 gap-2 bg-white border border-zinc-200/90 rounded-2xl p-3 sm:p-4 shadow-xs text-center min-w-0">
+            <div className="p-1">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Round</p>
+              <p className="text-lg sm:text-2xl font-black text-zinc-900 mt-1 leading-tight">{isCompleted ? `${totalRounds}/${totalRounds}` : `${activeRound}/${totalRounds}`}</p>
+            </div>
+            <div className="p-1 border-l border-zinc-100">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Tables</p>
+              <p className="text-lg sm:text-2xl font-black text-zinc-900 mt-1 leading-tight">{selectedConclave?.scheduleSummary?.tableCount || stats?.counts?.captains || 0}</p>
+            </div>
+            <div className="p-1 border-l border-zinc-100">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Members</p>
+              <p className="text-lg sm:text-2xl font-black text-zinc-900 mt-1 leading-tight">
+                {stats?.counts?.members !== undefined
+                  ? stats.counts.members
+                  : (selectedConclave?.participants?.filter(p => p.role !== 'captain')?.length || selectedConclave?.participants?.length || 0)}
+              </p>
+            </div>
+            <div className="p-1 border-l border-zinc-100">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Referrals</p>
+              <p className="text-lg sm:text-2xl font-black text-brand-red mt-1 leading-tight">{totalReferrals || stats?.counts?.referrals || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMN 2: Real-time Round Progress & Table Activity Charts */}
+        <div className="lg:col-span-1 xl:col-span-4 flex flex-col justify-between gap-4 sm:gap-5 min-w-0">
+          {/* Chart 1: Round Time Structure & Phase Distribution Donut */}
+          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-brand-red" />
+                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Round Time Structure</h3>
+              </div>
+              <span className="text-[10px] font-extrabold text-zinc-400 uppercase bg-zinc-100 px-2 py-0.5 rounded-md">
+                {(() => {
+                  const s = timingState.totalBlockSecs || ROUND_BLOCK_DURATION_SECS;
+                  const m = Math.floor(s / 60);
+                  const rem = s % 60;
+                  return rem > 0 ? `${m}m ${rem}s Block` : `${m}m Block`;
+                })()}
+              </span>
+            </div>
+
+            <div className="flex-1 min-h-0 flex items-center justify-center gap-2.5 sm:gap-3 xl:gap-4 px-1 py-2 min-w-0">
+              {/* Responsive Donut Chart */}
+              <div className="relative w-36 h-36 sm:w-40 sm:h-40 xl:w-44 xl:h-44 shrink-0 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={timingChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={46}
+                      outerRadius={66}
+                      startAngle={90}
+                      endAngle={-270}
+                      paddingAngle={3}
+                      stroke="none"
+                    >
+                      {timingChartData.map((entry, index) => (
+                        <Cell key={`timing-cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl sm:text-3xl font-black text-zinc-950 leading-none">{progressPercent}%</span>
+                  <span className="text-[10px] sm:text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider mt-1">Progress</span>
+                </div>
+              </div>
+
+              {/* Compact Responsive Legend & Phase Breakdown */}
+              <div className="flex-1 min-w-0 space-y-1.5 sm:space-y-2">
+                <div className="flex justify-between items-center px-2.5 py-1.5 bg-emerald-50/70 rounded-xl border border-emerald-100 text-[11px] sm:text-xs">
+                  <span className="font-bold text-emerald-800 flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /> Talking
+                  </span>
+                  <span className="font-extrabold text-emerald-900 shrink-0 ml-1">
+                    {(timingState.activeSecs / 60).toFixed(1).replace(/\.0$/, '')}m ({timingState.bioSecs < 60 ? `${timingState.bioSecs}s/ea` : `${(timingState.bioSecs / 60).toFixed(1).replace(/\.0$/, '')}m/ea`})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center px-2.5 py-1.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] sm:text-xs">
+                  <span className="font-bold text-blue-800 flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" /> Referrals
+                  </span>
+                  <span className="font-extrabold text-blue-900 shrink-0 ml-1">
+                    {(timingState.referralSecs / 60).toFixed(1).replace(/\.0$/, '')}m ({timingState.refSecs < 60 ? `${timingState.refSecs}s/ea` : `${(timingState.refSecs / 60).toFixed(1).replace(/\.0$/, '')}m/ea`})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center px-2.5 py-1.5 bg-amber-50/70 rounded-xl border border-amber-100 text-[11px] sm:text-xs">
+                  <span className="font-bold text-amber-800 flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" /> Rotation
+                  </span>
+                  <span className="font-extrabold text-amber-900 shrink-0 ml-1">
+                    {timingState.transitionSecs < 60
+                      ? `${timingState.transitionSecs}s`
+                      : timingState.transitionSecs % 60 === 0
+                        ? `${timingState.transitionSecs / 60}m`
+                        : `${(timingState.transitionSecs / 60).toFixed(1)}m (${timingState.transitionSecs}s)`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chart 2: Table Activity & Seating Fill Bar Chart */}
+          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <BarChart2 className="w-4 h-4 text-brand-red" />
+                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Table Seating & Fill</h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Live Attendance
+                </span>
+                {onNavigateToReview && (
+                  <button
+                    onClick={onNavigateToReview}
+                    type="button"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200 text-xs font-bold rounded-md transition-smooth cursor-pointer"
+                    title="Inspect table matrix in Schedule Review"
+                  >
+                    <span>Matrix</span>
+                    <ArrowRight className="w-3 h-3 text-zinc-400" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="h-44 sm:h-52 w-full pt-2 flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={[{ value: progressPercent }]} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                  <XAxis type="number" domain={[0, 100]} hide />
-                  <Bar dataKey="value" fill="#af101a" radius={[3, 3, 3, 3]} background={{ fill: '#f4f4f5' }} barSize={8} />
+                <BarChart data={tableChartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700, fill: '#71717a' }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, personsPerTable]} tick={{ fontSize: 9.5, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-zinc-900 text-white text-xs p-2.5 rounded-xl shadow-lg border border-zinc-700">
+                            <p className="font-extrabold">{data.name}</p>
+                            <p className="text-zinc-300 mt-0.5">{data.members} / {data.capacity} seats assigned</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="members" fill="#af101a" radius={[4, 4, 0, 0]} maxBarSize={32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[9px] text-zinc-400 font-bold mt-1">{progressPercent}% Complete</p>
           </div>
         </div>
 
-        {/* KPI Overview row — 5 cards spanning full width */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-            <RefreshCw className="w-5 h-5 text-brand-red mb-2" />
-            <div>
-              <p className="text-[10px] text-zinc-400 font-bold uppercase">{isCompleted ? 'Total Rounds' : 'Active Round'}</p>
-              <h4 className="text-headline-md font-extrabold text-zinc-955 mt-1">{isCompleted ? `${totalRounds} / ${totalRounds}` : `${activeRound} / ${totalRounds}`}</h4>
+        {/* COLUMN 3: Referrals Analytics & Leaderboard */}
+        <div className="lg:col-span-2 xl:col-span-4 flex flex-col justify-between gap-4 sm:gap-5 min-w-0">
+          {/* Chart 3: Table Referrals Bar Chart */}
+          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <BarChart2 className="w-4 h-4 text-brand-red" />
+                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Table Referrals</h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {/* Mode Switcher */}
+                <div className="inline-flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                  <button
+                    type="button"
+                    onClick={() => setReferralChartMode('table')}
+                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'table'
+                        ? 'bg-white text-zinc-900 shadow-2xs font-black'
+                        : 'text-zinc-500 hover:text-zinc-800'
+                      }`}
+                  >
+                    By Table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReferralChartMode('status')}
+                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'status'
+                        ? 'bg-white text-zinc-900 shadow-2xs font-black'
+                        : 'text-zinc-500 hover:text-zinc-800'
+                      }`}
+                  >
+                    By Status
+                  </button>
+                </div>
+                <span className="px-2 py-0.5 bg-brand-red/10 text-brand-red border border-brand-red/20 rounded-md text-[10px] font-black">
+                  {totalReferrals} TOTAL
+                </span>
+              </div>
+            </div>
+
+            {/* Bar Chart Representation */}
+            <div className="h-44 sm:h-52 w-full pt-2 flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                {referralChartMode === 'table' ? (
+                  <BarChart data={tableReferralsChartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#71717a' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      domain={[0, maxReferralsY]}
+                      allowDecimals={false}
+                      tick={{ fontSize: 9.5, fill: '#a1a1aa' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-zinc-900 text-white text-xs p-2.5 rounded-xl shadow-lg border border-zinc-700 min-w-[130px]">
+                              <div className="flex items-center justify-between border-b border-zinc-800 pb-1 mb-1.5">
+                                <span className="font-extrabold">{data.fullName}</span>
+                                {data.captainName && (
+                                  <span className="text-[9px] text-zinc-400 truncate max-w-[80px]">
+                                    Cap: {data.captainName}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-white flex justify-between">
+                                  <span>Total Referrals:</span>
+                                  <span className="text-brand-red font-black">{data.referrals}</span>
+                                </p>
+                                <p className="text-emerald-400 flex justify-between text-[10px]">
+                                  <span>Connected:</span>
+                                  <span>{data.connected}</span>
+                                </p>
+                                <p className="text-amber-400 flex justify-between text-[10px]">
+                                  <span>Pending:</span>
+                                  <span>{data.pending}</span>
+                                </p>
+                                {data.closed > 0 && (
+                                  <p className="text-zinc-400 flex justify-between text-[10px]">
+                                    <span>Closed:</span>
+                                    <span>{data.closed}</span>
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="referrals" fill="#af101a" radius={[4, 4, 0, 0]} maxBarSize={32}>
+                      {tableReferralsChartData.map((entry, index) => (
+                        <Cell key={`table-ref-cell-${index}`} fill={entry.referrals > 0 ? '#af101a' : '#e4e4e7'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={statusReferralsChartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#71717a' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      domain={[0, Math.max(5, totalReferrals)]}
+                      allowDecimals={false}
+                      tick={{ fontSize: 9.5, fill: '#a1a1aa' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-zinc-900 text-white text-xs p-2.5 rounded-xl shadow-lg border border-zinc-700">
+                              <p className="font-extrabold">{data.name}</p>
+                              <p className="text-zinc-300 font-bold mt-0.5">{data.count} Referrals</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                      {statusReferralsChartData.map((entry, index) => (
+                        <Cell key={`status-cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+
+            {/* Bottom Status Breakdown Strip */}
+            <div className="flex items-center justify-between px-1 pt-2 border-t border-zinc-100 text-[11px] shrink-0 font-medium">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-zinc-600">Connected:</span>
+                <span className="font-black text-zinc-900">{connectedReferrals}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                <span className="text-zinc-600">Pending:</span>
+                <span className="font-black text-zinc-900">{pendingReferrals}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-zinc-400 shrink-0" />
+                <span className="text-zinc-600">Closed:</span>
+                <span className="font-black text-zinc-900">{closedReferrals}</span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-            <Grid className="w-5 h-5 text-brand-red mb-2" />
-            <div>
-              <p className="text-[10px] text-zinc-400 font-bold uppercase">Running Tables</p>
-              <h4 className="text-headline-md font-extrabold text-zinc-955 mt-1">
-                {selectedConclave?.scheduleSummary?.tableCount || stats?.counts?.captains || 0}
-              </h4>
-            </div>
-          </div>
-
-          <div className="bg-white border border-zinc-200/85 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-            <Users className="w-5 h-5 text-brand-red mb-2" />
-            <div>
-              <p className="text-[10px] text-zinc-400 font-bold uppercase">Members</p>
-              <h4 className="text-headline-md font-extrabold text-zinc-955 mt-1">
-                {stats?.counts?.members !== undefined
-                  ? stats.counts.members
-                  : (stats?.counts?.registered !== undefined
-                    ? (stats.counts.registered - (stats.counts.captains || 0))
-                    : (selectedConclave?.participants?.filter(p => p.role !== 'captain')?.length || selectedConclave?.participants?.length || 0))}
-              </h4>
-            </div>
-          </div>
-
-          <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-            <Shield className="w-5 h-5 text-brand-red mb-2" />
-            <div>
-              <p className="text-[10px] text-zinc-400 font-bold uppercase">Captains Active</p>
-              <h4 className="text-headline-md font-extrabold text-zinc-955 mt-1">
-                {stats?.counts?.captains !== undefined
-                  ? stats.counts.captains
-                  : (selectedConclave?.participants?.filter(p => p.role === 'captain')?.length || selectedConclave?.scheduleSummary?.tableCount || 0)}
-              </h4>
-            </div>
-          </div>
-
-          <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm flex flex-col justify-between col-span-2 sm:col-span-1">
-            <Send className="w-5 h-5 text-brand-red mb-2" />
-            <div>
-              <p className="text-[10px] text-zinc-400 font-bold uppercase">Total Referrals</p>
-              <h4 className="text-headline-md font-extrabold text-zinc-950 mt-1">
-                {stats?.counts?.referrals || 0}
-              </h4>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Large Round Seating Timer — Placed Directly Below Stat Cards */}
-      <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col w-full">
-        <div className="flex justify-between items-center border-b border-zinc-100 pb-3 mb-5">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-2.5 w-2.5 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timingState.phase === 'active' ? 'bg-emerald-400' : 'bg-brand-red'}`}></span>
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${timingState.phase === 'active' ? 'bg-emerald-500' : 'bg-brand-red'}`}></span>
-            </span>
-            <h3 className="text-title-lg font-extrabold text-zinc-955 uppercase tracking-wide">
-              Round Seating Timer
-            </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => playBellSound('chime')}
-              title="Test 5-Minute Bell Sound"
-              className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-amber-100 transition-smooth cursor-pointer shadow-2xs"
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-              Test Bell
-            </button>
-            <button
-              onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-              title={isSoundEnabled ? "Mute Bell Sound" : "Enable Bell Sound"}
-              className={`p-1.5 rounded-lg border transition-smooth cursor-pointer ${isSoundEnabled
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-zinc-100 text-zinc-400 border-zinc-200'
-                }`}
-            >
-              {isSoundEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div className="w-full flex flex-col items-center justify-center bg-zinc-50/70 rounded-2xl border border-dashed border-zinc-200/90 py-8 px-4 sm:px-8 text-center">
-          {/* Phase Badge */}
-          <div className="mb-3">
-            {isCompleted ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Conclave Completed ({totalRounds}/{totalRounds} Rounds)
+          {/* Widget 4: Top 3 Referrals Leaderboard */}
+          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-amber-500" />
+                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Top Referrers</h3>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-[10px] font-bold">
+                LEADERS
               </span>
-            ) : isRoundPaused ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider bg-amber-500 text-white shadow-md animate-pulse">
-                <Pause className="w-3.5 h-3.5 fill-current" />
-                Round {activeRound} Paused
-              </span>
-            ) : timingState.phase === 'active' ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs animate-pulse">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                Talking Time ({formatTime(timingState.phaseRemaining)} left)
-              </span>
-            ) : timingState.phase === 'referral' ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs animate-pulse">
-                <Send className="w-4 h-4 text-blue-600" />
-                Referral Window ({formatTime(timingState.phaseRemaining)} left)
-              </span>
-            ) : timingState.phase === 'transition' ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs animate-pulse">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                Move to Next Table ({formatTime(timingState.phaseRemaining)} left)
-              </span>
-            ) : timingState.phase === 'ended' ? (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs animate-pulse">
-                <Sparkles className="w-4 h-4 text-amber-600" />
-                {autoStartCountdown !== null
-                  ? (activeRound < totalRounds ? `Auto-starting Round ${activeRound + 1} in ${autoStartCountdown}s` : `Auto-concluding in ${autoStartCountdown}s`)
-                  : (activeRound < totalRounds ? `Round Finished · Auto-advancing` : 'All Rounds Finished')}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-250">
-                15-Minute Round Ready
-              </span>
-            )}
-          </div>
-
-          {/* Large Main Digital Clock */}
-          <div className={`text-[96px] sm:text-[132px] md:text-[148px] leading-none font-black tabular-nums tracking-tight select-none my-2 drop-shadow-xs ${
-            isCompleted
-              ? 'text-zinc-350'
-              : isRoundPaused
-                ? 'text-amber-500'
-                : timingState.phase === 'active'
-                  ? 'text-emerald-600'
-                  : timingState.phase === 'referral'
-                    ? 'text-blue-600'
-                    : timingState.phase === 'transition'
-                      ? 'text-amber-600'
-                      : 'text-brand-red'
-          }`}>
-            {isCompleted ? '00:00' : formatTime(timeLeft)}
-          </div>
-
-          {/* Speaker Progression / Phase Breakdown */}
-          {isCompleted ? (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 my-2 shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Conclave Complete · Attendance & Referral Records Finalized</span>
             </div>
-          ) : timingState.phase === 'active' && !isRoundPaused ? (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 my-2 shadow-2xs">
-              <span className="font-extrabold">Speaker {timingState.speakerNumber} of {timingState.personsPerTable}</span>
-              <span className="text-emerald-300">•</span>
-              <span className="font-bold">{formatTime(timingState.speakerTimeLeft)} in 60s turn</span>
-            </div>
-          ) : null}
 
-          {timingState.phase === 'referral' && !isRoundPaused && (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-blue-200 rounded-xl text-xs font-bold text-blue-800 my-2 shadow-2xs animate-pulse">
-              <Send className="w-4 h-4 text-blue-600" />
-              <span>Referral Window ({formatTime(timingState.phaseRemaining)} left)</span>
-            </div>
-          )}
-
-          {timingState.phase === 'transition' && !isRoundPaused && (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-amber-200 rounded-xl text-xs font-bold text-amber-800 my-2 shadow-2xs">
-              <span>Table Rotation Window</span>
-            </div>
-          )}
-
-          {/* Table Timing Breakdown formula */}
-          <p className="text-xs sm:text-[13px] text-zinc-500 font-bold uppercase tracking-wider mt-3">
-            {timingState.personsPerTable} Seats · {Math.round(timingState.activeSecs / 60)}m Talking (1m/ea) + {(timingState.referralSecs / 60).toFixed(1)}m Referrals (30s/ea) + {Math.round(timingState.transitionSecs / 60)}m Transition
-          </p>
-
-          {/* Admin Round Controls: Start, Pause, Resume, Close */}
-          {!['completed', 'cancelled'].includes(statusLower) && (
-            <div className="flex flex-wrap items-center justify-center gap-3 mt-6 pt-5 border-t border-zinc-200/80 w-full max-w-2xl">
-              {activeRound === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => handleStartNextRound(1)}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Start Round 1</span>
-                </button>
+            <div className="flex-1 flex flex-col justify-center py-2">
+              {leaderboard.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-500 mb-2 shadow-2xs">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-bold text-zinc-700">No Referrals Logged Yet</p>
+                  <p className="text-[11px] text-zinc-400 max-w-[220px] mt-0.5 leading-relaxed">
+                    Referrals exchanged during rounds will rank here live.
+                  </p>
+                </div>
               ) : (
-                <>
-                  {isRoundPaused ? (
-                    <button
-                      type="button"
-                      onClick={handleResumeRound}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>Resume</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handlePauseRound}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-md cursor-pointer"
-                    >
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pause</span>
-                    </button>
-                  )}
-
-                  {activeRound < totalRounds && (
-                    <button
-                      type="button"
-                      onClick={() => handleStartNextRound()}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-xl transition-smooth shadow-2xs cursor-pointer"
-                      title="Force start the next round"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Start Round {activeRound + 1}</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleCloseRound}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300 text-xs font-bold rounded-xl transition-smooth cursor-pointer"
-                    title={`Close active Round ${activeRound}`}
-                  >
-                    <Square className="w-3.5 h-3.5 fill-zinc-500 text-zinc-500" />
-                    <span>Close Round</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleFinishConclave}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-smooth shadow-xs cursor-pointer"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Finish Conclave</span>
-                  </button>
-                </>
+                <div className="space-y-2">
+                  {leaderboard.slice(0, 3).map((person, idx) => {
+                    const medalColors = [
+                      { bg: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-300' },
+                      { bg: 'bg-zinc-400', text: 'text-zinc-600', border: 'border-zinc-300' },
+                      { bg: 'bg-amber-700/85', text: 'text-amber-800', border: 'border-amber-600/30' },
+                    ];
+                    const c = medalColors[idx] || medalColors[2];
+                    return (
+                      <div key={idx} className="bg-zinc-50/80 border border-zinc-200/70 rounded-xl p-2.5 flex items-center justify-between shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-6 h-6 ${c.bg} text-white rounded-full flex items-center justify-center font-black text-[10px] border ${c.border} shrink-0`}>
+                            {idx + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-zinc-900 truncate leading-tight">{person.name}</p>
+                            <p className="text-[10px] text-zinc-400 font-semibold uppercase truncate">{person.category}</p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pl-1.5">
+                          <span className={`text-base font-black ${c.text}`}>{person.count}</span>
+                          <span className="text-[9px] text-zinc-400 font-bold block -mt-0.5">refs</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom Row: Referrals & Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top 3 Referrals section */}
-        <div className="bg-white border border-zinc-200/80 rounded-xl p-5 shadow-sm space-y-4 flex flex-col justify-between h-[300px]">
-          <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 flex-shrink-0">
-            <h3 className="text-body-sm font-extrabold text-zinc-955 uppercase">Top 3 Referrals</h3>
-            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded text-[9px] font-extrabold tracking-wider">
-              ACTIVE ROUND
-            </span>
-          </div>
-
-          <div className="space-y-3 flex-1 flex flex-col justify-center">
-            {leaderboard.length === 0 ? (
-              <div className="text-center py-6 text-zinc-400 font-semibold text-[10px]">
-                No referrals logged yet for this conclave.
-              </div>
-            ) : (
-              leaderboard.map((person, idx) => {
-                const colors = [
-                  { bg: 'bg-amber-500', text: 'text-amber-600', border: 'border-amber-300' }, // Gold
-                  { bg: 'bg-zinc-400', text: 'text-zinc-500', border: 'border-zinc-300' },    // Silver
-                  { bg: 'bg-amber-700/85', text: 'text-amber-700/85', border: 'border-amber-600/30' } // Bronze
-                ];
-                const c = colors[idx] || colors[2];
-                return (
-                  <div key={idx} className="bg-gradient-to-r from-zinc-50/10 to-white border border-zinc-150 rounded-lg p-2.5 flex items-center justify-between shadow-xs animate-fade-in">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 ${c.bg} text-white rounded-full flex items-center justify-center font-black text-xs border ${c.border} shadow-sm`}>
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <p className="text-body-sm font-extrabold text-zinc-850">{person.name}</p>
-                        <p className="text-[9px] text-zinc-455 font-bold uppercase tracking-wider">{person.category}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-body-sm font-extrabold ${c.text} leading-none`}>{person.count}</span>
-                      <p className="text-[8px] text-zinc-400 font-bold uppercase mt-0.5">Referrals</p>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Referrals Analytics Pie Tracker — matching Dashboard layout */}
-        <div className="bg-white border border-zinc-200/80 rounded-xl p-5 shadow-sm space-y-4 flex flex-col justify-between h-[300px]">
-          <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 flex-shrink-0">
-            <h3 className="text-body-sm font-extrabold text-zinc-950 uppercase">Referrals Tracker</h3>
-            <span className="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-100 rounded text-[9px] font-extrabold tracking-wider">
-              ANALYTICS
-            </span>
-          </div>
-
-          <div className="flex-1 flex flex-col sm:flex-row items-center gap-4 min-h-0">
-            <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
-              <PieChart width={112} height={112}>
-                <Pie
-                  data={referralChartData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={38}
-                  outerRadius={46}
-                  startAngle={90}
-                  endAngle={-270}
-                  paddingAngle={referralChartData.length > 1 ? 3 : 0}
-                  stroke="none"
-                >
-                  {referralChartData.map((entry, index) => (
-                    <Cell key={`pie-cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
-              </PieChart>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl text-zinc-950 font-bold leading-none">{totalReferrals}</span>
-                <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider mt-0.5">Total</span>
-              </div>
-            </div>
-
-            <div className="flex-1 w-full space-y-1.5 overflow-y-auto">
-              <div className="flex justify-between items-center p-1.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                <span className="text-[10px] font-semibold text-zinc-500 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 bg-brand-red rounded-full"></span> Connected
-                </span>
-                <span className="font-bold text-zinc-800 text-[11px]">{connectedReferrals}</span>
-              </div>
-              <div className="flex justify-between items-center p-1.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                <span className="text-[10px] font-semibold text-zinc-500 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 bg-amber-400 rounded-full"></span> Pending
-                </span>
-                <span className="font-bold text-zinc-800 text-[11px]">{pendingReferrals}</span>
-              </div>
-              <div className="flex justify-between items-center p-1.5 bg-white rounded-lg border border-zinc-200/60 shadow-xs">
-                <span className="text-[10px] font-semibold text-zinc-500 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 bg-zinc-400 rounded-full"></span> Closed
-                </span>
-                <span className="font-bold text-zinc-800 text-[11px]">{closedReferrals}</span>
-              </div>
-            </div>
           </div>
         </div>
       </div>
+
+      {/* Floating Auto-Start Countdown Overlay Banner */}
+      {autoStartCountdown === null && moveCountdown !== null && (
+        <div className="absolute top-12 right-4 z-50 p-3 bg-emerald-600 text-white rounded-xl shadow-xl flex items-center gap-3 animate-fade-in">
+          <Sparkles className="w-4 h-4 text-emerald-200 shrink-0" />
+          <div className="text-xs">
+            <p className="font-black uppercase tracking-wider">Move to the next table</p>
+            <p className="text-[11px] text-emerald-100 font-semibold">
+              Round {activeRound + 1} starts automatically in {Math.floor(moveCountdown / 60)}:{String(moveCountdown % 60).padStart(2, '0')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {autoStartCountdown !== null && (
+        <div className="absolute top-12 right-4 z-50 p-3 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white rounded-xl shadow-xl flex items-center gap-3 animate-fade-in border border-amber-300">
+          <Sparkles className="w-4 h-4 animate-spin-slow text-amber-200 shrink-0" />
+          <div className="text-xs">
+            <p className="font-black uppercase tracking-wider">
+              {activeRound < totalRounds ? `Starting Round ${activeRound + 1}` : 'Concluding Conclave'}
+            </p>
+            <p className="text-[11px] text-amber-100 font-semibold">
+              Auto-starting in {autoStartCountdown}s...
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
+              setAutoStartCountdown(null);
+              if (activeRound < totalRounds) {
+                handleStartNextRound(activeRound + 1);
+              } else {
+                handleFinishConclave();
+              }
+            }}
+            type="button"
+            className="px-3 py-1 bg-white text-amber-900 text-xs font-black rounded-lg shadow-sm hover:bg-amber-50 cursor-pointer"
+          >
+            Start Now
+          </button>
+        </div>
+      )}
 
       {/* Toast Alert Feedback */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-[70] bg-zinc-900 text-white text-[11px] font-bold py-2.5 px-4 rounded-lg shadow-xl flex items-center gap-2 border border-zinc-800 animate-slide-up">
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span>
+        <div className="fixed bottom-4 right-4 z-[70] bg-zinc-900 text-white text-[11px] font-bold py-2 px-3 rounded-lg shadow-xl flex items-center gap-2 border border-zinc-800 animate-slide-up">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" />
           <div>
             <p className="font-bold">{toast.title}</p>
-            <p className="text-zinc-400 font-semibold mt-0.5">{toast.desc}</p>
+            <p className="text-zinc-400 font-semibold text-[10px]">{toast.desc}</p>
           </div>
           <button
             onClick={() => setToast(null)}
@@ -1179,6 +1731,94 @@ export default function RoundRunner({ selectedConclaveId, onNavigateToReview, is
           </button>
         </div>
       )}
+
+      {/* Dynamic Round Extension Modal */}
+      {showExtensionModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 max-w-md w-full p-5 space-y-4 animate-scale-in">
+            <div className="flex items-start justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-zinc-900 uppercase tracking-wide">Extend Round {activeRound}</h3>
+                  <p className="text-[11px] text-zinc-500 font-medium">Add transition or speaking time to the live clock</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExtensionModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Context Notice */}
+            <div className="bg-zinc-50 border border-zinc-200/80 rounded-xl p-3 text-[11px] text-zinc-600 space-y-1">
+              <div className="flex justify-between font-bold text-zinc-800">
+                <span>Table Capacity:</span>
+                <span>{personsPerTable} members / table</span>
+              </div>
+              <div className="flex justify-between font-bold text-zinc-800">
+                <span>Current Move Buffer:</span>
+                <span className={timingState.transitionSecs < 120 ? 'text-amber-600' : 'text-emerald-600'}>
+                  {Math.round(timingState.transitionSecs / 60)} minutes
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 pt-1">
+                Adds extra time after the referral slot, for one-to-ones. Bio and referral times don't change. Every phone follows.
+              </p>
+            </div>
+
+            {/* Extension Option Cards */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <button
+                type="button"
+                disabled={isExtending}
+                onClick={() => handleExtendRound(1)}
+                className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-zinc-200 hover:border-brand-red hover:bg-red-50/40 transition-all cursor-pointer group"
+              >
+                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+1 Min</span>
+                <span className="text-[9.5px] font-semibold text-zinc-500 text-center mt-0.5">Quick Buffer</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isExtending}
+                onClick={() => handleExtendRound(2)}
+                className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-brand-red bg-red-50/20 hover:bg-red-50/60 transition-all cursor-pointer group shadow-2xs"
+              >
+                <span className="text-lg font-black text-brand-red">+2 Min</span>
+                <span className="text-[9.5px] font-black text-brand-red text-center mt-0.5">Recommended</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isExtending}
+                onClick={() => handleExtendRound(5)}
+                className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-zinc-200 hover:border-brand-red hover:bg-red-50/40 transition-all cursor-pointer group"
+              >
+                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+5 Min</span>
+                <span className="text-[9.5px] font-semibold text-zinc-500 text-center mt-0.5">Double Block</span>
+              </button>
+            </div>
+
+            {/* Cancel Button */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setShowExtensionModal(false)}
+                className="px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

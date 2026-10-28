@@ -127,9 +127,15 @@ async function getAuthHeaders() {
 }
 
 async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 6000, ...fetchOptions } = options;
+  const { timeout = 30000, ...fetchOptions } = options;
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+  const id = setTimeout(() => {
+    try {
+      controller.abort(new Error(`Request timed out after ${timeout}ms`));
+    } catch {
+      controller.abort();
+    }
+  }, timeout);
   try {
     const response = await fetch(resource, {
       ...fetchOptions,
@@ -204,11 +210,8 @@ export const api = {
         if (raw) {
           try {
             const parsed = JSON.parse(raw);
-            // Support old flat-array format or new {data, ts} format
             const cacheData = Array.isArray(parsed) ? parsed : parsed.data;
-            const cacheTs = Array.isArray(parsed) ? 0 : (parsed.ts || 0);
-            // Only use cache if it is less than 5 minutes old
-            if (Array.isArray(cacheData) && (Date.now() - cacheTs < 5 * 60 * 1000)) {
+            if (Array.isArray(cacheData) && cacheData.length > 0) {
               return cacheData;
             }
           } catch (e) {}

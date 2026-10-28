@@ -207,7 +207,7 @@ export default function MemberConclaveHistory({ loggedInMember }) {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans pb-16">
+    <div className="space-y-8 animate-fade-in font-sans pb-3">
 
       {/* Page Header */}
       <div>

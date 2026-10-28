@@ -4,6 +4,9 @@ import {
   LogOut,
   Edit2,
   Save,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { api } from '../../services/api';
 
@@ -41,15 +44,32 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
 
   // Local editable state for profile info
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: loggedInAdmin?.name || (isSuperadmin ? 'Superadmin' : 'Administrator'),
-    email: loggedInAdmin?.email || (isSuperadmin ? 'superadmin@bni.com' : 'admin@bni.com'),
-    phone: loggedInAdmin?.phone || loggedInAdmin?.mobile || 'N/A',
-    designation: isSuperadmin ? 'Global Administrator' : 'Regional Administrator',
-    organization: isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office',
-    region: isSuperadmin ? 'All Regions (Global)' : (loggedInAdmin?.chapter || loggedInAdmin?.region || 'BNI Region'),
-    joinedDate: formatJoinedDate(loggedInAdmin?.createdAt),
-    uid: loggedInAdmin?.uid || loggedInAdmin?.id || ''
+  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (title, desc, type = 'success') => {
+    setToast({ title, desc, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const [profileData, setProfileData] = useState(() => {
+    const cached = isSuperadmin
+      ? localStorage.getItem('bni_superadmin_profile')
+      : localStorage.getItem('bni_logged_admin');
+    let parsed = null;
+    if (cached) {
+      try { parsed = JSON.parse(cached); } catch (e) {}
+    }
+    return {
+      name: parsed?.name || loggedInAdmin?.name || (isSuperadmin ? 'Superadmin' : 'Administrator'),
+      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@bni.com' : 'admin@bni.com'),
+      phone: (parsed?.phone && parsed.phone !== 'N/A') ? parsed.phone : ((loggedInAdmin?.phone && loggedInAdmin.phone !== 'N/A') ? loggedInAdmin.phone : (loggedInAdmin?.mobile || '')),
+      designation: parsed?.designation || loggedInAdmin?.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
+      organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
+      region: isSuperadmin ? 'All Regions (Global)' : (parsed?.region || loggedInAdmin?.chapter || loggedInAdmin?.region || 'BNI Region'),
+      joinedDate: formatJoinedDate(parsed?.createdAt || loggedInAdmin?.createdAt),
+      uid: parsed?.uid || parsed?.id || loggedInAdmin?.uid || loggedInAdmin?.id || ''
+    };
   });
 
   const [conclavesCount, setConclavesCount] = useState(0);
@@ -87,9 +107,9 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           setProfileData(prev => ({
             name: fresh.name || prev.name,
             email: fresh.email || prev.email,
-            phone: fresh.phone || fresh.mobile || prev.phone,
-            designation: isSuperadmin ? 'Global Administrator' : (fresh.designation || prev.designation),
-            organization: isSuperadmin ? 'BNI Global LLC' : (fresh.organizationNode || fresh.organization || prev.organization),
+            phone: (fresh.phone && fresh.phone !== 'N/A') ? fresh.phone : (fresh.mobile || prev.phone),
+            designation: fresh.designation || prev.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
+            organization: fresh.organization || prev.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
             region: isSuperadmin ? 'All Regions (Global)' : (fresh.region || fresh.scope || prev.region),
             joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate),
             uid: fresh.uid || fresh.id || prev.uid
@@ -110,20 +130,28 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
   };
 
   const handleSave = async () => {
-    setIsEditing(false);
+    setIsSaving(true);
     try {
-      await api.put('/me', profileData);
-    } catch (e) {
-      console.warn("Backend profile save notice:", e.message);
-    }
+      const res = await api.put('/me', profileData);
+      const updatedProfile = res?.profile || res || {};
+      const merged = { ...profileData, ...updatedProfile };
+      setProfileData(merged);
+      setIsEditing(false);
 
-    if (isSuperadmin) {
-      localStorage.setItem('bni_superadmin_profile', JSON.stringify(profileData));
-    } else {
-      const updatedAdmin = { ...(loggedInAdmin || {}), ...profileData };
-      localStorage.setItem('bni_logged_admin', JSON.stringify(updatedAdmin));
+      if (isSuperadmin) {
+        localStorage.setItem('bni_superadmin_profile', JSON.stringify(merged));
+      } else {
+        const updatedAdmin = { ...(loggedInAdmin || {}), ...merged };
+        localStorage.setItem('bni_logged_admin', JSON.stringify(updatedAdmin));
+      }
+      window.dispatchEvent(new Event('storage'));
+      showToast("Profile Updated", "Your profile details have been saved successfully.", "success");
+    } catch (e) {
+      console.error("Backend profile save error:", e.message);
+      showToast("Save Failed", e.message || "Failed to save profile changes.", "error");
+    } finally {
+      setIsSaving(false);
     }
-    window.dispatchEvent(new Event('storage'));
   };
 
   const displayInitials = (profileData.name || 'Admin')
@@ -217,13 +245,23 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
 
               <div className="flex gap-2.5 w-full mt-5">
                 {isEditing ? (
-                  <button
-                    onClick={handleSave}
-                    className="flex-grow py-2 px-3 bg-brand-red hover:bg-red-750 text-white text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-smooth flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-brand-red/10"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    Save Changes
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSaving}
+                      className="py-2 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-smooth cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="flex-grow py-2 px-3 bg-brand-red hover:bg-red-750 text-white text-[10.5px] font-black uppercase tracking-wider rounded-lg transition-smooth flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-brand-red/10 disabled:opacity-50"
+                    >
+                      {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {isSaving ? "Saving..." : "Save Changes"}
+                    </button>
+                  </>
                 ) : (
                   <button
                     onClick={() => setIsEditing(true)}
@@ -263,13 +301,32 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           {/* Personal Information */}
           <section className="bg-white border border-zinc-200 rounded-xl shadow-2xs">
             <div className="p-4 flex justify-between items-center bg-zinc-50 rounded-t-xl">
-              <h2 className="text-body-md font-black text-zinc-900 leading-tight font-sans font-black">Administrative Information</h2>
-              {!isEditing && (
+              <h2 className="text-body-md font-black text-zinc-900 leading-tight font-sans">Administrative Information</h2>
+              {isEditing ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    disabled={isSaving}
+                    className="px-2.5 py-1 text-[11px] font-bold text-zinc-600 hover:text-zinc-900 bg-zinc-200/60 hover:bg-zinc-200 rounded-md transition-smooth cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="px-3 py-1 text-[11px] font-bold text-white bg-brand-red hover:bg-red-750 rounded-md transition-smooth flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    <span>{isSaving ? "Saving..." : "Save"}</span>
+                  </button>
+                </div>
+              ) : (
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="text-zinc-450 hover:text-brand-red transition-smooth cursor-pointer"
+                  className="text-zinc-450 hover:text-brand-red transition-smooth cursor-pointer flex items-center gap-1 text-[11px] font-bold"
                 >
-                  <Edit2 className="w-4 h-4" />
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit</span>
                 </button>
               )}
             </div>
@@ -288,12 +345,12 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
                   {isEditing && !field.disabled ? (
                     <input
                       type={field.type}
-                      value={profileData[field.key]}
+                      value={profileData[field.key] || ''}
                       onChange={(e) => handleInputChange(field.key, e.target.value)}
                       className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 placeholder-zinc-400 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
                     />
                   ) : (
-                    <p className="text-body-sm font-bold text-zinc-800 leading-tight">{profileData[field.key]}</p>
+                    <p className="text-body-sm font-bold text-zinc-800 leading-tight">{profileData[field.key] || 'Not specified'}</p>
                   )}
                 </div>
               ))}
@@ -302,6 +359,21 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
 
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-slide-up flex items-center gap-3 bg-white border border-zinc-200 px-4 py-3 rounded-xl shadow-lg">
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+          )}
+          <div>
+            <p className="text-xs font-bold text-zinc-900">{toast.title}</p>
+            <p className="text-[11px] font-semibold text-zinc-500">{toast.desc}</p>
+          </div>
+        </div>
+      )}
 
     </div>
   );
