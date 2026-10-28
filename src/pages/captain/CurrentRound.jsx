@@ -106,6 +106,24 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
   const conclaveStatus = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
   const isCompleted = conclaveStatus === 'completed';
 
+  // Must run before any early return (React hooks rule).
+  const conclaveStatusStr = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
+  const isConclaveCompleted = conclaveStatusStr === 'completed' || conclaveStatusStr === 'finished' || conclaveStatusStr === 'ended';
+
+  // If conclave is completed, directly switch captain to member portal
+  useEffect(() => {
+    if (isConclaveCompleted) {
+      localStorage.setItem('bni_user_role', 'member');
+      const storedMember = localStorage.getItem('bni_logged_member');
+      if (!storedMember && loggedInCaptain) {
+        localStorage.setItem('bni_logged_member', JSON.stringify({ ...loggedInCaptain, isCaptain: false, role: 'member' }));
+      }
+      localStorage.removeItem('bni_logged_captain');
+      window.dispatchEvent(new Event('storage'));
+      window.history.replaceState({}, '', '/member/dashboard');
+    }
+  }, [isConclaveCompleted]);
+
   if (isCompleted) {
     return (
       <div className="space-y-6 animate-fade-in font-sans">
@@ -154,22 +172,6 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
     );
   }
 
-  const conclaveStatusStr = (conclaveSyncData?.conclaveStatus?.status || '').toLowerCase();
-  const isConclaveCompleted = conclaveStatusStr === 'completed' || conclaveStatusStr === 'finished' || conclaveStatusStr === 'ended';
-
-  // If conclave is completed, directly switch captain to member portal
-  useEffect(() => {
-    if (isConclaveCompleted) {
-      localStorage.setItem('bni_user_role', 'member');
-      const storedMember = localStorage.getItem('bni_logged_member');
-      if (!storedMember && loggedInCaptain) {
-        localStorage.setItem('bni_logged_member', JSON.stringify({ ...loggedInCaptain, isCaptain: false, role: 'member' }));
-      }
-      localStorage.removeItem('bni_logged_captain');
-      window.dispatchEvent(new Event('storage'));
-      window.history.replaceState({}, '', '/member/dashboard');
-    }
-  }, [isConclaveCompleted]);
 
   if (isConclaveCompleted) {
     return (

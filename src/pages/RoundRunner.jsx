@@ -38,6 +38,7 @@ import {
   calculateRoundTiming,
   ROUND_BLOCK_DURATION_SECS,
 } from '../utils/roundTiming';
+import { liveClock } from '../utils/roundClock';
 const { initialTables } = runnerData;
 
 export default function RoundRunner({
@@ -99,10 +100,23 @@ export default function RoundRunner({
     return selectedConclave?.scheduleSummary?.roundCount || selectedConclave?.roundCount || 4;
   }, [selectedConclave]);
 
+  // The server's round clock, ticking every second: in automatic mode the
+  // round moves on without a stored update, so the round shown comes from it.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const clock = useMemo(() => liveClock(selectedConclave, nowTick), [selectedConclave, nowTick]);
+
   const isUpcoming = !isCompleted && (statusLower === 'upcoming' || statusLower === 'draft' || !selectedConclave?.currentRound);
   const activeRound = isCompleted
     ? (selectedConclave?.currentRound || totalRounds)
-    : (isUpcoming ? 0 : (selectedConclave?.currentRound || 0));
+    : (isUpcoming ? 0 : (clock.round || selectedConclave?.currentRound || 0));
+  // Automatic mode's move break: seconds until the next round starts by itself.
+  const moveCountdown = clock.phase === 'move' && clock.phaseEndsMs
+    ? Math.max(0, Math.ceil((clock.phaseEndsMs - nowTick) / 1000))
+    : null;
 
   const progressPercent = useMemo(() => {
     if (isCompleted) return 100;
@@ -343,11 +357,10 @@ export default function RoundRunner({
   const [timerRunning, setTimerRunning] = useState(false);
 
   const [timingState, setTimingState] = useState(() => calculateRoundTiming({
-    startedAt: selectedConclave?.currentRoundStartedAt,
+    startedAt: clock.roundStartMs ?? selectedConclave?.currentRoundStartedAt,
     personsPerTable,
     roundTiming: selectedConclave?.roundTiming,
-    roundDurationMinutes: selectedConclave?.roundDurationMinutes,
-    extensionSeconds: selectedConclave?.roundExtensionSeconds,
+    extensionSeconds: (clock.extensionMs || 0) / 1000,
     isRunning: Boolean(selectedConclave?.currentRound && selectedConclave?.currentRoundStartedAt && !isUpcoming && !isCompleted),
     isPaused: isRoundPaused && !isCompleted,
     pausedAt: selectedConclave?.roundPausedAt,
@@ -372,11 +385,10 @@ export default function RoundRunner({
 
     const updateTimer = () => {
       const timing = calculateRoundTiming({
-        startedAt: selectedConclave?.currentRoundStartedAt,
+        startedAt: clock.roundStartMs ?? selectedConclave?.currentRoundStartedAt,
         personsPerTable,
         roundTiming: selectedConclave?.roundTiming,
-        roundDurationMinutes: selectedConclave?.roundDurationMinutes,
-        extensionSeconds: selectedConclave?.roundExtensionSeconds,
+        extensionSeconds: (clock.extensionMs || 0) / 1000,
         isRunning: isRoundLive || timerRunning,
         isPaused: isRoundPaused,
         pausedAt: selectedConclave?.roundPausedAt,
@@ -391,7 +403,7 @@ export default function RoundRunner({
     updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [selectedConclave, personsPerTable, isUpcoming, isCompleted, statusLower, timerRunning, isRoundPaused]);
+  }, [selectedConclave, personsPerTable, isUpcoming, isCompleted, statusLower, timerRunning, isRoundPaused, clock.roundStartMs, clock.extensionMs]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -586,7 +598,6 @@ export default function RoundRunner({
 
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/extend-round`, {
-        additionalMinutes,
         additionalSeconds: addedSecs,
       });
       playBellSound('single');
@@ -596,6 +607,8 @@ export default function RoundRunner({
       console.error("Failed to extend round:", err);
       showToast('Extension Failed', err.message || "Could not extend round time.");
     } finally {
+      // Re-read the server's clock (undoes the optimistic change if it failed).
+      api.get('/admin/conclaves').then((fresh) => Array.isArray(fresh) && setConclaves(fresh)).catch(() => {});
       setIsExtending(false);
     }
   };
@@ -679,6 +692,8 @@ export default function RoundRunner({
       try {
         await api.post(`/admin/conclaves/${selectedConclaveId}/progression-mode`, { mode });
         showToast('Progression Mode', `Round progression set to ${isAuto ? 'Automatic' : 'Manual'}.`);
+        const fresh = await api.get('/admin/conclaves').catch(() => null);
+        if (Array.isArray(fresh)) setConclaves(fresh);
       } catch (err) {
         console.warn("Failed to update progression mode on server:", err);
       }
@@ -730,35 +745,10 @@ export default function RoundRunner({
 
     if (isRoundEnded) {
       if (activeRound < totalRounds) {
-        // In Manual mode, do NOT auto-advance to next round! Wait for admin.
-        if (!autoAdvanceEnabled) {
-          if (autoStartTimerRef.current) {
-            clearInterval(autoStartTimerRef.current);
-            autoStartTimerRef.current = null;
-          }
-          setAutoStartCountdown(null);
-          return;
-        }
-
-        const nextRoundNum = activeRound + 1;
-        if (autoAdvancingRoundRef.current === activeRound) return;
-        autoAdvancingRoundRef.current = activeRound;
-
-        let count = 5;
-        setAutoStartCountdown(count);
-
-        if (autoStartTimerRef.current) clearInterval(autoStartTimerRef.current);
-        autoStartTimerRef.current = setInterval(() => {
-          count -= 1;
-          if (count <= 0) {
-            clearInterval(autoStartTimerRef.current);
-            autoStartTimerRef.current = null;
-            setAutoStartCountdown(null);
-            handleStartNextRound(nextRoundNum);
-          } else {
-            setAutoStartCountdown(count);
-          }
-        }, 1000);
+        // Manual: wait for the admin. Automatic: the SERVER starts the next
+        // round after the conclave's move break (every phone follows the same
+        // clock) — the panel never starts rounds by itself.
+        return;
       } else if (activeRound >= totalRounds) {
         // All rounds completed! Auto-complete the conclave
         if (autoAdvancingRoundRef.current === `finished-${activeRound}`) return;
@@ -1228,6 +1218,25 @@ export default function RoundRunner({
                     </div>
                   ) : (
                     <>
+                      {/* Manual / automatic can be switched at any time, even mid-conclave. */}
+                      <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs" role="group" aria-label="Round progression">
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('manual')}
+                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250' : 'text-zinc-500 hover:text-zinc-800'}`}
+                          title="Manual: you start each round"
+                        >
+                          Manual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetProgressionMode('automatic')}
+                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${autoAdvanceEnabled ? 'bg-emerald-600 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                          title="Automatic: the next round starts after the move break"
+                        >
+                          Auto
+                        </button>
+                      </div>
                       {isRoundPaused ? (
                         <button
                           onClick={handleResumeRound}
@@ -1665,6 +1674,18 @@ export default function RoundRunner({
       </div>
 
       {/* Floating Auto-Start Countdown Overlay Banner */}
+      {autoStartCountdown === null && moveCountdown !== null && (
+        <div className="absolute top-12 right-4 z-50 p-3 bg-emerald-600 text-white rounded-xl shadow-xl flex items-center gap-3 animate-fade-in">
+          <Sparkles className="w-4 h-4 text-emerald-200 shrink-0" />
+          <div className="text-xs">
+            <p className="font-black uppercase tracking-wider">Move to the next table</p>
+            <p className="text-[11px] text-emerald-100 font-semibold">
+              Round {activeRound + 1} starts automatically in {Math.floor(moveCountdown / 60)}:{String(moveCountdown % 60).padStart(2, '0')}
+            </p>
+          </div>
+        </div>
+      )}
+
       {autoStartCountdown !== null && (
         <div className="absolute top-12 right-4 z-50 p-3 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white rounded-xl shadow-xl flex items-center gap-3 animate-fade-in border border-amber-300">
           <Sparkles className="w-4 h-4 animate-spin-slow text-amber-200 shrink-0" />
@@ -1747,7 +1768,7 @@ export default function RoundRunner({
                 </span>
               </div>
               <p className="text-[10px] text-zinc-400 pt-1">
-                Extending updates all captain and member phone timers in real time.
+                Adds extra time after the referral slot, for one-to-ones. Bio and referral times don't change. Every phone follows.
               </p>
             </div>
 
@@ -1756,30 +1777,30 @@ export default function RoundRunner({
               <button
                 type="button"
                 disabled={isExtending}
-                onClick={() => handleExtendRound(5)}
+                onClick={() => handleExtendRound(1)}
                 className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-zinc-200 hover:border-brand-red hover:bg-red-50/40 transition-all cursor-pointer group"
               >
-                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+5 Min</span>
+                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+1 Min</span>
                 <span className="text-[9.5px] font-semibold text-zinc-500 text-center mt-0.5">Quick Buffer</span>
               </button>
 
               <button
                 type="button"
                 disabled={isExtending}
-                onClick={() => handleExtendRound(10)}
+                onClick={() => handleExtendRound(2)}
                 className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-brand-red bg-red-50/20 hover:bg-red-50/60 transition-all cursor-pointer group shadow-2xs"
               >
-                <span className="text-lg font-black text-brand-red">+10 Min</span>
+                <span className="text-lg font-black text-brand-red">+2 Min</span>
                 <span className="text-[9.5px] font-black text-brand-red text-center mt-0.5">Recommended</span>
               </button>
 
               <button
                 type="button"
                 disabled={isExtending}
-                onClick={() => handleExtendRound(15)}
+                onClick={() => handleExtendRound(5)}
                 className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-zinc-200 hover:border-brand-red hover:bg-red-50/40 transition-all cursor-pointer group"
               >
-                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+15 Min</span>
+                <span className="text-lg font-black text-zinc-900 group-hover:text-brand-red">+5 Min</span>
                 <span className="text-[9.5px] font-semibold text-zinc-500 text-center mt-0.5">Double Block</span>
               </button>
             </div>

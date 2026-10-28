@@ -1,10 +1,13 @@
 /**
- * Round timing logic dynamically calibrated from backend settings:
- * 1. Talking Time: bioSeconds (default 60s) per person.
- * 2. Referral Window: referralSeconds (default 30s) per person.
- *    Referral sending is ONLY ACTIVE during this phase!
- * 3. Table Transition: Minimum bufferSeconds (default 120s) plus remaining round block time
- *    for members to stand and walk to their next table.
+ * Round timing (organisers' rules, 2026-10-28 — mirrors the backend's
+ * src/domain/roundClock.ts):
+ * 1. Bios: 1 min per person (fixed).
+ * 2. Referral slot: 30 s per person, after ALL bios (fixed). Referrals only here.
+ * 3. Extra time: only if the admin extended the round (+1/+2/+5 min), for
+ *    one-to-ones. Then the round ends.
+ * One clock for every table, sized by people-per-table (max 8): 8 → 12 min.
+ * Moving to the next table happens between rounds (manual: when the admin
+ * starts it; automatic: the conclave's move break) — not inside the round.
  */
 
 export const ROUND_BLOCK_DURATION_SECS = 15 * 60; // 900 seconds (15 minutes fallback)
@@ -119,10 +122,11 @@ export function calculateRoundTiming({
   const bioSecs = Number(activeTiming.bioSeconds) || DEFAULT_CONFIG.bioSeconds;
   const refSecs = Number(activeTiming.referralSeconds) || DEFAULT_CONFIG.referralSeconds;
   const bufSecs = Number(activeTiming.bufferSeconds) || DEFAULT_CONFIG.bufferSeconds;
-  const baseMinutes = Number(roundDurationMinutes) || activeTiming.roundDurationMinutes || null;
+  void roundDurationMinutes; // no fixed round length any more (kept for old callers)
+  const baseMinutes = null;
   const extSecs = Math.max(0, Number(extensionSeconds) || 0);
 
-  const p = Math.max(1, Number(personsPerTable) || activeTiming.personsPerTable || 6);
+  const p = Math.min(8, Math.max(1, Number(personsPerTable) || activeTiming.personsPerTable || 6));
 
   // Active round timing: speaking time + referral window
   const activeCadenceSecs = (p * bioSecs) + (p * refSecs);
@@ -268,7 +272,7 @@ export function calculateRoundTiming({
       phaseProgressPercent,
     };
   } else if (elapsedSecs < totalBlockSecs) {
-    // Phase 3: Transition Time (Move to next table)
+    // Phase 3: Extra time the admin added (one-to-ones)
     const transitionElapsed = elapsedSecs - (talkingSecs + referralSecs);
     const phaseRemaining = totalBlockSecs - elapsedSecs;
     const phaseProgressPercent = transitionSecs > 0
@@ -278,7 +282,7 @@ export function calculateRoundTiming({
     return {
       phase: isPaused ? 'paused' : 'transition',
       subPhase: 'transition',
-      phaseLabel: isPaused ? 'Round Paused' : 'Move to Next Table',
+      phaseLabel: isPaused ? 'Round Paused' : 'Extra Time',
       isPaused: Boolean(isPaused),
       isTalking: false,
       isReferral: false,

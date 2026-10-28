@@ -191,13 +191,14 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       const cached = localStorage.getItem('bni_conclave_defaults');
       if (cached) return JSON.parse(cached);
     } catch {}
-    return { personsPerTable: 7, roundCount: 6, roundDurationMinutes: 15 };
+    return { personsPerTable: 7, roundCount: 6 };
   });
 
   // Seating Parameter Config States (Defaulted directly from backend settings)
   const [personsPerTable, setPersonsPerTable] = useState(() => conclaveDefaults.personsPerTable || 7);
   const [roundCount, setRoundCount] = useState(() => conclaveDefaults.roundCount || 6);
-  const [roundDurationMinutes, setRoundDurationMinutes] = useState(() => conclaveDefaults.roundDurationMinutes || 15);
+  // Automatic mode's break between rounds: 1, 2 or 5 minutes (per conclave).
+  const [moveSeconds, setMoveSecondsState] = useState(() => selectedConclave?.moveSeconds || 120);
   const [randomSeed, setRandomSeed] = useState(92843);
   const [manualOverride, setManualOverride] = useState(false);
 
@@ -248,17 +249,14 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       } else if (conclaveDefaults.roundCount) {
         setRoundCount(conclaveDefaults.roundCount);
       }
-      if (typeof selectedConclave.roundDurationMinutes === 'number') {
-        setRoundDurationMinutes(selectedConclave.roundDurationMinutes);
-      } else if (conclaveDefaults.roundDurationMinutes) {
-        setRoundDurationMinutes(conclaveDefaults.roundDurationMinutes);
+      if (typeof selectedConclave.moveSeconds === 'number') {
+        setMoveSecondsState(selectedConclave.moveSeconds);
       }
     }
   }, [selectedConclave, stats, conclaveDefaults]);
 
   // Fetch fresh conclave defaults and round timing directly from backend settings
   const [roundTiming, setRoundTiming] = useState({ bioSeconds: 60, referralSeconds: 30, bufferSeconds: 120 });
-  const [showNoMoveTimeModal, setShowNoMoveTimeModal] = useState(false);
 
   useEffect(() => {
     async function loadBackendDefaults() {
@@ -273,9 +271,6 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
           }
           if (!selectedConclave || typeof selectedConclave.roundCount !== 'number') {
             setRoundCount(d.roundCount || 6);
-          }
-          if (!selectedConclave || typeof selectedConclave.roundDurationMinutes !== 'number') {
-            setRoundDurationMinutes(d.roundDurationMinutes || 15);
           }
         }
         const t = await api.get('/admin/settings/round-timing').catch(() => null)
@@ -303,8 +298,19 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
   const [diversityWeight, setDiversityWeight] = useState(70);
   const [regionWeight, setRegionWeight] = useState(50);
 
-  const speakingAndReferralSecs = personsPerTable * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
-  const availableMoveBufferSecs = (roundDurationMinutes * 60) - speakingAndReferralSecs;
+  // Round length is fixed by the organisers: 1 min bio + 30 s referral per person.
+  const roundLengthSecs = Math.min(8, personsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
+
+  const saveMoveSeconds = async (secs) => {
+    setMoveSecondsState(secs);
+    if (!selectedConclaveId) return;
+    try {
+      await api.patch(`/admin/conclaves/${selectedConclaveId}/move-time`, { moveSeconds: secs });
+      showToast('Move time saved', `${secs / 60} min between rounds in automatic mode.`);
+    } catch (err) {
+      showToast('Could not save move time', err.message || 'Please try again.');
+    }
+  };
 
   const handleStartGeneration = async () => {
     if (!selectedConclaveId) {
@@ -312,17 +318,10 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       return;
     }
 
-    // Intercept with pop up when there is no time left for table movement
-    if (availableMoveBufferSecs <= 0) {
-      setShowNoMoveTimeModal(true);
-      return;
-    }
-
     executeScheduleGeneration();
   };
 
-  const executeScheduleGeneration = async (customDurationMinutes = null) => {
-    const durationToUse = customDurationMinutes || roundDurationMinutes;
+  const executeScheduleGeneration = async () => {
 
     // Reset visual progress states
     setProgress(0);
@@ -357,10 +356,10 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/generate-schedule`, {
         activeOnly: false, // Seeded users are offline by default, so activeOnly must be false to seat them
-        autoFillCaptains: true,
+        // Captains are trained people the admin chooses: never auto-fill them.
+        autoFillCaptains: false,
         personsPerTable,
-        roundCount,
-        roundDurationMinutes: durationToUse
+        roundCount
       });
 
       clearInterval(simInterval);
@@ -717,7 +716,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                     <input
                       type="number"
                       min={1}
-                      max={50}
+                      max={8}
                       disabled={isConclaveCompleted}
                       value={calculatedTableCount}
                       onChange={(e) => {
@@ -765,12 +764,12 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                     <input
                       type="number"
                       min={2}
-                      max={50}
+                      max={8}
                       disabled={isConclaveCompleted}
                       value={personsPerTable}
                       onChange={(e) => {
                         const parsed = parseInt(e.target.value);
-                        if (!isNaN(parsed)) setPersonsPerTable(Math.min(50, Math.max(2, parsed)));
+                        if (!isNaN(parsed)) setPersonsPerTable(Math.min(8, Math.max(2, parsed)));
                       }}
                       className="w-full text-center font-black text-zinc-950 text-base sm:text-lg leading-tight outline-none bg-transparent py-0"
                     />
@@ -778,8 +777,8 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                   </div>
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || personsPerTable >= 50}
-                    onClick={() => setPersonsPerTable(prev => Math.min(50, prev + 1))}
+                    disabled={isConclaveCompleted || personsPerTable >= 8}
+                    onClick={() => setPersonsPerTable(prev => Math.min(8, prev + 1))}
                     className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -848,88 +847,42 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                 </div>
               </div>
 
-              {/* Stepper 4: Round Duration (Minutes) */}
+              {/* Round length (fixed) and move time between rounds */}
               <div className="space-y-1.5 w-full flex flex-col justify-between">
                 <div className="min-h-[28px] flex flex-col justify-end">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                    <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight whitespace-nowrap">
-                      Round Duration
-                    </label>
-                    <span className="font-bold text-[8.5px] sm:text-[9.5px] whitespace-nowrap">
-                      {availableMoveBufferSecs > 0 ? (
-                        <span className="text-emerald-600 font-black">
-                          +{Math.round(availableMoveBufferSecs / 60)}m move buffer
-                        </span>
-                      ) : (
-                        <span className="text-brand-red font-black flex items-center gap-0.5">
-                          <AlertTriangle className="w-2.5 h-2.5 text-brand-red shrink-0" />
-                          0m buffer
-                        </span>
-                      )}
-                    </span>
-                  </div>
+                  <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight">
+                    Round length
+                  </label>
                 </div>
-                <div className="flex items-center bg-white border border-zinc-250 rounded-xl p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || roundDurationMinutes <= 5}
-                    onClick={() => setRoundDurationMinutes(prev => Math.max(5, prev - 5))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                    title="Decrease 5 minutes"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex-1 flex flex-col items-center">
-                    <div className="flex items-baseline justify-center gap-0.5">
-                      <input
-                        type="number"
-                        min={5}
-                        max={120}
-                        step={5}
-                        disabled={isConclaveCompleted}
-                        value={roundDurationMinutes}
-                        onChange={(e) => {
-                          const parsed = parseInt(e.target.value);
-                          if (!isNaN(parsed)) setRoundDurationMinutes(Math.min(120, Math.max(5, parsed)));
-                        }}
-                        className="w-10 sm:w-12 text-center font-black text-zinc-950 text-base sm:text-lg leading-tight outline-none bg-transparent py-0"
-                      />
-                      <span className="font-extrabold text-[10px] sm:text-[11px] text-zinc-500">min</span>
-                    </div>
-                    <span className="text-[8px] sm:text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider leading-none mt-0.5">Timer Per Round</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || roundDurationMinutes >= 120}
-                    onClick={() => setRoundDurationMinutes(prev => Math.min(120, prev + 5))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                    title="Increase 5 minutes"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                <div className="bg-white border border-zinc-250 rounded-xl px-3 py-2 shadow-2xs">
+                  <p className="font-black text-zinc-950 text-base sm:text-lg leading-tight">{Math.round(roundLengthSecs / 60 * 10) / 10} min</p>
+                  <p className="text-[9.5px] font-semibold text-zinc-500 leading-snug">
+                    {Math.min(8, personsPerTable)} × 1 min bio, then {Math.min(8, personsPerTable)} × 30 s referrals. Fixed.
+                  </p>
                 </div>
               </div>
 
-              {/* High Table Capacity Recommendation Note (Full Width across 2 columns) */}
-              {personsPerTable >= 10 && (
-                <div className="col-span-2 p-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 text-[10px] leading-snug space-y-0.5">
-                  <div className="font-bold flex items-center gap-1">
-                    <span>⚠️ High capacity notice ({personsPerTable} members/table):</span>
-                  </div>
-                  <p className="text-zinc-600">
-                    Talking + referrals takes <strong>{Math.round((personsPerTable * 90) / 60)} minutes</strong>.
-                    {roundDurationMinutes <= 15 ? (
-                      <span className="text-amber-800 font-bold block mt-0.5">
-                        👉 Recommend 20–25m for rotation!
-                      </span>
-                    ) : (
-                      <span className="text-emerald-700 font-bold block mt-0.5">
-                        ✓ {roundDurationMinutes}m allows sufficient buffer.
-                      </span>
-                    )}
-                  </p>
+              <div className="col-span-2 space-y-1.5">
+                <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px]">
+                  Move time between rounds (automatic mode)
+                </label>
+                <div className="flex gap-2">
+                  {[60, 120, 300].map((secs) => (
+                    <button
+                      key={secs}
+                      type="button"
+                      disabled={isConclaveCompleted}
+                      onClick={() => saveMoveSeconds(secs)}
+                      className={`flex-1 py-2 rounded-xl border text-sm font-bold transition-smooth cursor-pointer disabled:opacity-40 ${
+                        moveSeconds === secs ? 'bg-brand-red border-brand-red text-white' : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
+                      }`}
+                    >
+                      {secs / 60} min
+                    </button>
+                  ))}
                 </div>
-              )}
+                <p className="text-[9.5px] font-semibold text-zinc-500">In manual mode the next round starts when you start it.</p>
+              </div>
             </div>
 
             {/* Random Seed & Manual Override */}
@@ -1525,76 +1478,6 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       )}
 
       {/* No Time for Table Movement Warning Modal */}
-      {showNoMoveTimeModal && createPortal(
-        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-amber-200">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-body-lg font-black text-zinc-900 leading-tight">No Time for Table Movement</h3>
-                <p className="text-[11.5px] text-zinc-500 font-medium leading-relaxed">
-                  With <strong className="text-zinc-800">{personsPerTable} members</strong> per table, speaking ({roundTiming?.bioSeconds || 60}s) and referrals ({roundTiming?.referralSeconds || 30}s) require <strong className="text-zinc-800">{(speakingAndReferralSecs / 60).toFixed(1)} minutes</strong> per round.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200/70 text-[11.5px] text-amber-900 space-y-1.5 font-medium">
-              <div className="flex justify-between">
-                <span>Selected Round Duration:</span>
-                <span className="font-extrabold">{roundDurationMinutes} mins</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Speaking + Referrals:</span>
-                <span className="font-extrabold">{(speakingAndReferralSecs / 60).toFixed(1)} mins</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-amber-200 text-amber-950 font-black">
-                <span>Table Movement Buffer:</span>
-                <span className="text-brand-red font-black">0 mins (No rotation time)</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-zinc-400 font-medium leading-normal">
-              Members will not have any transition window to stand up and walk to their next assigned table between rounds.
-            </p>
-
-            <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowNoMoveTimeModal(false)}
-                className="px-3.5 py-2 text-zinc-600 hover:bg-zinc-100 font-bold text-xs rounded-xl transition-smooth cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNoMoveTimeModal(false);
-                  executeScheduleGeneration();
-                }}
-                className="px-4 py-2 border border-zinc-250 hover:bg-zinc-100 text-zinc-700 font-bold text-xs rounded-xl transition-smooth cursor-pointer"
-              >
-                Proceed Anyway
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const safeMinutes = Math.ceil(speakingAndReferralSecs / 60) + 2;
-                  const newDuration = Math.max(roundDurationMinutes + 5, safeMinutes);
-                  setRoundDurationMinutes(newDuration);
-                  setShowNoMoveTimeModal(false);
-                  executeScheduleGeneration(newDuration);
-                }}
-                className="px-4 py-2 bg-brand-red hover:bg-red-700 text-white font-extrabold text-xs rounded-xl transition-smooth shadow-sm cursor-pointer"
-              >
-                Increase Duration (+5m)
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
       {toast && (
         <div className="fixed bottom-5 right-5 z-[70] bg-zinc-900 text-white text-[11px] font-bold py-2.5 px-4 rounded-lg shadow-xl flex items-center gap-2 border border-zinc-800 animate-slide-up">
           <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span>

@@ -1,3 +1,5 @@
+import { liveClock } from '../utils/roundClock';
+
 /**
  * Where a conclave is in its life, and what the admin should do next.
  *
@@ -37,12 +39,21 @@ export function nextStep(c) {
       return { text: 'This conclave was cancelled.', tab: null };
     case 'done':
       return { text: 'Finished. See how it went: referrals and feedback.', action: 'View results', tab: 'overview' };
-    case 'live':
-      return {
-        text: c?.isRoundPaused ? `Round ${c?.currentRound || ''} is paused.` : `Round ${c?.currentRound || ''} is live now.`,
-        action: 'Open round runner',
-        tab: 'schedule',
-      };
+    case 'live': {
+      // The round clock, not the stored number: automatic mode moves on by itself.
+      const k = liveClock(c);
+      const r = k.round || c?.currentRound || '';
+      const text = c?.isRoundPaused
+        ? `Round ${r} is paused.`
+        : k.phase === 'bio' ? `Round ${r}: bios.`
+        : k.phase === 'referral' ? `Round ${r}: referral slot open.`
+        : k.phase === 'extension' ? `Round ${r}: extra time for one-to-ones.`
+        : k.phase === 'move' ? `Moving to tables — round ${r + 1} starts by itself.`
+        : k.phase === 'waiting' ? `Round ${r} is over. Start round ${r + 1} when ready.`
+        : k.phase === 'done' ? 'All rounds are over. Mark the conclave completed (or it completes by itself).'
+        : `Round ${r} is live now.`;
+      return { text, action: 'Open round runner', tab: 'schedule' };
+    }
     case 'tables':
       if (c?.isScheduleLocked) return { text: 'Tables are locked. Start round 1 on the day.', action: 'Go to rounds', tab: 'schedule' };
       if (c?.schedule) return { text: 'Tables are generated. Review them, then lock.', action: 'Review tables', tab: 'schedule' };

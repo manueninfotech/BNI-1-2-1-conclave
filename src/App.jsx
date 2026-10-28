@@ -105,9 +105,6 @@ export default function App() {
         }
         if (config?.conclaveDefaults) {
           localStorage.setItem('bni_conclave_defaults', JSON.stringify(config.conclaveDefaults));
-          if (config.conclaveDefaults.roundDurationMinutes) {
-            setTimingConfig({ roundDurationMinutes: config.conclaveDefaults.roundDurationMinutes });
-          }
         }
       } catch (e) {
         // Fallback to cached timing & defaults
