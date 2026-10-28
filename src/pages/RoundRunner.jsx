@@ -448,14 +448,14 @@ export default function RoundRunner({
       // Notes: double = round change/end; single = resume; chime = manual test
       const notes = mode === 'double'
         ? [
-            { time: now, freq: 783.99 },
-            { time: now + 0.26, freq: 1046.50 }
-          ]
+          { time: now, freq: 783.99 },
+          { time: now + 0.26, freq: 1046.50 }
+        ]
         : mode === 'single'
-        ? [
+          ? [
             { time: now, freq: 880.00 }
           ]
-        : [
+          : [
             { time: now, freq: 880.00 },
             { time: now + 0.22, freq: 1174.66 }
           ];
@@ -605,7 +605,7 @@ export default function RoundRunner({
     try {
       const cached = localStorage.getItem('bni_auto_advance_enabled');
       if (cached !== null) return cached === 'true';
-    } catch {}
+    } catch { }
     return true;
   });
 
@@ -616,7 +616,7 @@ export default function RoundRunner({
       setAutoAdvanceEnabled(isAuto);
       try {
         localStorage.setItem('bni_auto_advance_enabled', String(isAuto));
-      } catch {}
+      } catch { }
     }
   }, [selectedConclave?.id, selectedConclave?.roundProgressionMode]);
 
@@ -625,7 +625,7 @@ export default function RoundRunner({
     setAutoAdvanceEnabled(nextVal);
     try {
       localStorage.setItem('bni_auto_advance_enabled', String(nextVal));
-    } catch {}
+    } catch { }
 
     if (!nextVal) {
       if (autoStartTimerRef.current) {
@@ -658,7 +658,7 @@ export default function RoundRunner({
     setAutoAdvanceEnabled(isAuto);
     try {
       localStorage.setItem('bni_auto_advance_enabled', String(isAuto));
-    } catch {}
+    } catch { }
 
     if (!isAuto) {
       if (autoStartTimerRef.current) {
@@ -1055,12 +1055,12 @@ export default function RoundRunner({
                   {isSoundEnabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
                 </button>
                 <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full border ${timingState.phase === 'active'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : timingState.phase === 'referral'
-                      ? 'bg-blue-50 text-blue-700 border-blue-200'
-                      : timingState.phase === 'transition'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : 'bg-zinc-100 text-zinc-600 border-zinc-250'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : timingState.phase === 'referral'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : timingState.phase === 'transition'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-zinc-100 text-zinc-600 border-zinc-250'
                   }`}>
                   {isCompleted ? 'Finished' : `${formatTime(timingState.phaseRemaining)} left`}
                 </span>
@@ -1070,16 +1070,16 @@ export default function RoundRunner({
             {/* Huge Dynamic Digital Clock */}
             <div className="flex-1 flex flex-col items-center justify-center py-4 sm:py-6 my-auto">
               <div className={`text-7xl sm:text-8xl xl:text-9xl font-black tabular-nums tracking-tighter leading-none select-none drop-shadow-xs ${isCompleted
-                  ? 'text-zinc-350'
-                  : isRoundPaused
-                    ? 'text-amber-500'
-                    : timingState.phase === 'active'
-                      ? 'text-emerald-600'
-                      : timingState.phase === 'referral'
-                        ? 'text-blue-600'
-                        : timingState.phase === 'transition'
-                          ? 'text-amber-600'
-                          : 'text-brand-red'
+                ? 'text-zinc-350'
+                : isRoundPaused
+                  ? 'text-amber-500'
+                  : timingState.phase === 'active'
+                    ? 'text-emerald-600'
+                    : timingState.phase === 'referral'
+                      ? 'text-blue-600'
+                      : timingState.phase === 'transition'
+                        ? 'text-amber-600'
+                        : 'text-brand-red'
                 }`}>
                 {isCompleted ? '00:00' : formatTime(timeLeft)}
               </div>
@@ -1088,20 +1088,20 @@ export default function RoundRunner({
               <div className={`w-full max-w-[320px] h-2.5 bg-zinc-100 rounded-full overflow-hidden mt-3 border border-zinc-200/60 ${(isCompleted || timeLeft <= 0) ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}>
                 <div
                   className={`h-full transition-all duration-300 rounded-full ${timingState.phase === 'active'
-                      ? 'bg-emerald-500'
-                      : timingState.phase === 'referral'
-                        ? 'bg-blue-500'
-                        : timingState.phase === 'transition'
-                          ? 'bg-amber-500'
-                          : 'bg-brand-red'
+                    ? 'bg-emerald-500'
+                    : timingState.phase === 'referral'
+                      ? 'bg-blue-500'
+                      : timingState.phase === 'transition'
+                        ? 'bg-amber-500'
+                        : 'bg-brand-red'
                     }`}
                   style={{
                     width: (isCompleted || timeLeft <= 0)
                       ? '0%'
                       : `${Math.min(
-                          100,
-                          Math.max(0, 100 - (timingState.phaseRemaining / Math.max(1, timingState.phase === 'active' ? timingState.activeSecs : timingState.phase === 'referral' ? timingState.referralSecs : timingState.transitionSecs)) * 100)
-                        )}%`
+                        100,
+                        Math.max(0, 100 - (timingState.phaseRemaining / Math.max(1, timingState.phase === 'active' ? timingState.activeSecs : timingState.phase === 'referral' ? timingState.referralSecs : timingState.transitionSecs)) * 100)
+                      )}%`
                   }}
                 />
               </div>
@@ -1133,10 +1133,10 @@ export default function RoundRunner({
                   <div
                     key={num}
                     className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-xs font-black border transition-all ${state === 'done'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : state === 'active'
-                          ? 'bg-brand-red text-white border-brand-red shadow-xs ring-2 ring-red-200 animate-pulse'
-                          : 'bg-white text-zinc-400 border-zinc-200'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : state === 'active'
+                        ? 'bg-brand-red text-white border-brand-red shadow-xs ring-2 ring-red-200 animate-pulse'
+                        : 'bg-white text-zinc-400 border-zinc-200'
                       }`}
                   >
                     <span>S{num}</span>
@@ -1165,13 +1165,12 @@ export default function RoundRunner({
                     {roundPills.map(({ rNum, isDone, isCurrent }) => (
                       <div
                         key={rNum}
-                        className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-black border transition-all ${
-                          isDone
+                        className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-black border transition-all ${isDone
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : isCurrent
-                            ? 'bg-brand-red text-white border-brand-red shadow-2xs'
-                            : 'bg-zinc-100 text-zinc-500 border-zinc-200'
-                        }`}
+                              ? 'bg-brand-red text-white border-brand-red shadow-2xs'
+                              : 'bg-zinc-100 text-zinc-500 border-zinc-200'
+                          }`}
                       >
                         {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <span>R{rNum}</span>}
                         {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />}
@@ -1179,7 +1178,7 @@ export default function RoundRunner({
                     ))}
                     {!['completed', 'cancelled'].includes(statusLower) && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-500">
-                        {autoAdvanceEnabled ? '⚡ Auto Progression' : '✋ Manual Progression'}
+                        {autoAdvanceEnabled ? 'Auto' : 'Manual'}
                       </span>
                     )}
                   </>
@@ -1196,11 +1195,10 @@ export default function RoundRunner({
                         <button
                           type="button"
                           onClick={() => handleSetProgressionMode('manual')}
-                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${
-                            !autoAdvanceEnabled
+                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled
                               ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250'
                               : 'text-zinc-500 hover:text-zinc-800'
-                          }`}
+                            }`}
                           title="Manual Mode: Admin explicitly clicks to start each round"
                         >
                           Manual
@@ -1208,11 +1206,10 @@ export default function RoundRunner({
                         <button
                           type="button"
                           onClick={() => handleSetProgressionMode('automatic')}
-                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer flex items-center gap-1 ${
-                            autoAdvanceEnabled
+                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer flex items-center gap-1 ${autoAdvanceEnabled
                               ? 'bg-emerald-600 text-white shadow-2xs'
                               : 'text-zinc-500 hover:text-zinc-800'
-                          }`}
+                            }`}
                           title="Automatic Mode: Rounds advance on the timer automatically"
                         >
                           <Sparkles className="w-3 h-3" />
@@ -1463,22 +1460,20 @@ export default function RoundRunner({
                   <button
                     type="button"
                     onClick={() => setReferralChartMode('table')}
-                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${
-                      referralChartMode === 'table'
+                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'table'
                         ? 'bg-white text-zinc-900 shadow-2xs font-black'
                         : 'text-zinc-500 hover:text-zinc-800'
-                    }`}
+                      }`}
                   >
                     By Table
                   </button>
                   <button
                     type="button"
                     onClick={() => setReferralChartMode('status')}
-                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${
-                      referralChartMode === 'status'
+                    className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'status'
                         ? 'bg-white text-zinc-900 shadow-2xs font-black'
                         : 'text-zinc-500 hover:text-zinc-800'
-                    }`}
+                      }`}
                   >
                     By Status
                   </button>
@@ -1715,7 +1710,7 @@ export default function RoundRunner({
           </button>
         </div>
       )}
-    
+
       {/* Dynamic Round Extension Modal */}
       {showExtensionModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">

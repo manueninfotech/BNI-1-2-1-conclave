@@ -145,48 +145,6 @@ export default function ScheduleHub({
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto shrink-0 flex-wrap">
-          {/* Progression Mode Switcher */}
-          <div className="inline-flex items-center p-0.5 bg-zinc-200/80 rounded-xl border border-zinc-200 shadow-2xs">
-            <button
-              type="button"
-              onClick={async () => {
-                if (!conclave?.id) return;
-                setConclave(prev => ({ ...prev, roundProgressionMode: 'manual' }));
-                try {
-                  await api.post(`/admin/conclaves/${conclave.id}/progression-mode`, { mode: 'manual' });
-                } catch (e) { console.error(e); }
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                (conclave?.roundProgressionMode || 'manual') === 'manual'
-                  ? 'bg-white text-zinc-950 shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-              title="Manual: Admin starts every round"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span>Manual</span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                if (!conclave?.id) return;
-                setConclave(prev => ({ ...prev, roundProgressionMode: 'automatic' }));
-                try {
-                  await api.post(`/admin/conclaves/${conclave.id}/progression-mode`, { mode: 'automatic' });
-                } catch (e) { console.error(e); }
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                conclave?.roundProgressionMode === 'automatic'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-              title="Automatic: Rounds progress automatically when timer ends"
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${conclave?.roundProgressionMode === 'automatic' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
-              <span>Automatic</span>
-            </button>
-          </div>
-
           {/* Modern Pill Switcher */}
           <div className="inline-flex items-center p-1 bg-zinc-200/70 rounded-xl border border-zinc-200/80 shadow-2xs shrink-0">
           {stages.map((st) => {
