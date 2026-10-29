@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   X,
   RefreshCw,
-  Send,
   Bell,
   BellOff,
   Volume2,
@@ -15,7 +14,6 @@ import {
   Award,
   BarChart2,
   ArrowRight,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -74,8 +72,14 @@ export default function RoundRunner({
     if (!selectedConclaveId) return;
     async function loadStats() {
       try {
-        const data = await api.get(`/admin/conclaves/${selectedConclaveId}/stats`);
-        setStats(data);
+        const [statsData, freshConclave] = await Promise.all([
+          api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
+          api.get(`/admin/conclaves/${selectedConclaveId}`).catch(() => null)
+        ]);
+        if (statsData) setStats(statsData);
+        if (freshConclave) {
+          setConclaves(prev => prev.map(c => c.id === selectedConclaveId ? { ...c, ...freshConclave } : c));
+        }
       } catch (err) {
         console.error("Failed to load conclave stats:", err);
       }
@@ -350,6 +354,10 @@ export default function RoundRunner({
     return selectedConclave?.personsPerTable || selectedConclave?.tableSize || (tables[0]?.members ? tables[0].members.length + 1 : 6);
   }, [selectedConclave, tables]);
 
+  const conclaveMoveSeconds = useMemo(() => {
+    return Number(selectedConclave?.moveSeconds) || 60;
+  }, [selectedConclave?.moveSeconds]);
+
   const isRoundPaused = Boolean(selectedConclave?.isRoundPaused);
 
   // Timer States (synchronized with active round)
@@ -404,6 +412,18 @@ export default function RoundRunner({
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, [selectedConclave, personsPerTable, isUpcoming, isCompleted, statusLower, timerRunning, isRoundPaused, clock.roundStartMs, clock.extensionMs]);
+
+  const isRoundEnded = useMemo(() => {
+    if (isCompleted || isUpcoming || activeRound === 0) return false;
+    return Boolean(
+      timingState.phase === 'ended' ||
+      timingState.isEnded ||
+      clock.phase === 'waiting' ||
+      clock.phase === 'done' ||
+      clock.phase === 'move' ||
+      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral' && timingState.phase !== 'paused')
+    );
+  }, [isCompleted, isUpcoming, activeRound, timingState.phase, timingState.isEnded, timingState.totalRemaining, clock.phase]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -608,7 +628,7 @@ export default function RoundRunner({
       showToast('Extension Failed', err.message || "Could not extend round time.");
     } finally {
       // Re-read the server's clock (undoes the optimistic change if it failed).
-      api.get('/admin/conclaves').then((fresh) => Array.isArray(fresh) && setConclaves(fresh)).catch(() => {});
+      api.get('/admin/conclaves').then((fresh) => Array.isArray(fresh) && setConclaves(fresh)).catch(() => { });
       setIsExtending(false);
     }
   };
@@ -791,7 +811,7 @@ export default function RoundRunner({
           ...c,
           currentRound: nextRoundVal,
           currentRoundStartedAt: now,
-          status: 'Running'
+          status: 'running'
         };
       }
       return c;
@@ -924,12 +944,28 @@ export default function RoundRunner({
     if (!window.confirm(`Close Round ${activeRound}? This will conclude the current round.`)) {
       return;
     }
+    const now = Date.now();
+    setConclaves(prev => prev.map(c => {
+      if (c.id === selectedConclaveId) {
+        return {
+          ...c,
+          currentRoundStartedAt: new Date(now - 3600 * 1000),
+          isRoundPaused: false,
+          roundPausedAt: null,
+          roundElapsedMsBeforePause: null
+        };
+      }
+      return c;
+    }));
+    setTimerRunning(false);
+    setTimeLeft(0);
+
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/close-round`);
       const data = await api.get('/admin/conclaves');
       if (Array.isArray(data)) setConclaves(data);
       playBellSound('double');
-      showToast('Round Concluded', `Round ${activeRound} has been closed.`);
+      showToast('Round Concluded', `Round ${activeRound} has been closed. Ready for Round ${activeRound + 1}.`);
     } catch (err) {
       console.error("Failed to close round:", err);
       showToast('Close Round Failed', err.message || "Could not close round.");
@@ -1136,112 +1172,120 @@ export default function RoundRunner({
 
               {/* Formula Subtitle */}
               <p className="text-[10px] text-zinc-400 font-semibold text-center uppercase tracking-wider">
-                {timingState.personsPerTable} Seats · {((timingState.talkingSecs || timingState.activeSecs) / 60).toFixed(1).replace(/\.0$/, '')}m Speaking + {(timingState.referralSecs / 60).toFixed(1).replace(/\.0$/, '')}m Referrals + {timingState.transitionSecs < 60 ? `${timingState.transitionSecs}s` : `${(timingState.transitionSecs / 60).toFixed(1).replace(/\.0$/, '')}m`} Move = {(timingState.totalBlockSecs / 60).toFixed(1).replace(/\.0$/, '')}m Round Total
+                {timingState.personsPerTable} Seats · {((timingState.talkingSecs || timingState.activeSecs) / 60).toFixed(1).replace(/\.0$/, '')}m Speaking + {(timingState.referralSecs / 60).toFixed(1).replace(/\.0$/, '')}m Referrals + {conclaveMoveSeconds < 60 ? `${conclaveMoveSeconds}s` : `${Math.round(conclaveMoveSeconds / 60)}m`} Move = {Math.round(((timingState.talkingSecs || timingState.activeSecs) + timingState.referralSecs + conclaveMoveSeconds) / 60)}m Round Total
               </p>
             </div>
 
             {/* Mission Control Round Stepper & Action Controls */}
-            <div className="pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 flex-wrap shrink-0">
-              {/* Stepper Pills */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {isCompleted ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold shadow-2xs">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    All {totalRounds} Rounds Completed
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mr-0.5">Rounds:</span>
-                    {roundPills.map(({ rNum, isDone, isCurrent }) => (
-                      <div
-                        key={rNum}
-                        className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-black border transition-all ${isDone
+            <div className="pt-3 border-t border-zinc-100 flex flex-col gap-2 shrink-0">
+              {/* Row 1: Stepper Pills & Mode Selector */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {isCompleted ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-extrabold shadow-2xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      All {totalRounds} Rounds Completed
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mr-0.5">Rounds:</span>
+                      {roundPills.map(({ rNum, isDone, isCurrent }) => (
+                        <div
+                          key={rNum}
+                          className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-black border transition-all ${isDone
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : isCurrent
                               ? 'bg-brand-red text-white border-brand-red shadow-2xs'
                               : 'bg-zinc-100 text-zinc-500 border-zinc-200'
-                          }`}
-                      >
-                        {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <span>R{rNum}</span>}
-                        {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />}
-                      </div>
-                    ))}
-                    {!['completed', 'cancelled'].includes(statusLower) && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-500">
-                        {autoAdvanceEnabled ? 'Auto' : 'Manual'}
-                      </span>
-                    )}
-                  </>
+                            }`}
+                        >
+                          {isDone ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <span>R{rNum}</span>}
+                          {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                {/* Progression Mode Selector (Manual / Auto) */}
+                {!['completed', 'cancelled'].includes(statusLower) && (
+                  <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs" role="group" aria-label="Round progression">
+                    <button
+                      type="button"
+                      onClick={() => handleSetProgressionMode('manual')}
+                      className={`px-2 py-0.5 text-[10px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250' : 'text-zinc-500 hover:text-zinc-800'}`}
+                      title="Manual Mode: You start each round explicitly"
+                    >
+                      Manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetProgressionMode('automatic')}
+                      className={`px-2 py-0.5 text-[10px] font-black rounded-md transition-smooth cursor-pointer flex items-center gap-1 ${autoAdvanceEnabled ? 'bg-emerald-600 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                      title="Automatic Mode: Rounds advance on the timer automatically"
+                    >
+                      <Sparkles className="w-2.5 h-2.5" />
+                      <span>Auto</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* Action Buttons */}
+              {/* Row 2: Action Buttons */}
               {!['completed', 'cancelled'].includes(statusLower) && (
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 flex-wrap w-full pt-1">
                   {activeRound === 0 ? (
-                    <div className="flex items-center gap-2">
-                      {/* Progression Mode selector BEFORE starting Round 1 */}
-                      <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs">
+                    <button
+                      onClick={() => handleStartNextRound(1)}
+                      type="button"
+                      className="inline-flex items-center gap-1.5 h-7.5 px-3.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-smooth shadow-xs cursor-pointer whitespace-nowrap"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Start Round 1</span>
+                    </button>
+                  ) : isRoundEnded ? (
+                    <div className="flex items-center justify-between gap-2 flex-wrap w-full">
+                      {activeRound < totalRounds ? (
                         <button
+                          onClick={() => handleStartNextRound(activeRound + 1)}
                           type="button"
-                          onClick={() => handleSetProgressionMode('manual')}
-                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled
-                              ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250'
-                              : 'text-zinc-500 hover:text-zinc-800'
-                            }`}
-                          title="Manual Mode: Admin explicitly clicks to start each round"
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-smooth shadow-xs cursor-pointer animate-pulse whitespace-nowrap"
+                          title={`Start Round ${activeRound + 1}`}
                         >
-                          Manual
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Start Round {activeRound + 1}</span>
                         </button>
+                      ) : (
                         <button
+                          onClick={handleFinishConclave}
                           type="button"
-                          onClick={() => handleSetProgressionMode('automatic')}
-                          className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer flex items-center gap-1 ${autoAdvanceEnabled
-                              ? 'bg-emerald-600 text-white shadow-2xs'
-                              : 'text-zinc-500 hover:text-zinc-800'
-                            }`}
-                          title="Automatic Mode: Rounds advance on the timer automatically"
+                          className="inline-flex items-center gap-1.5 h-7.5 px-3.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-smooth shadow-xs cursor-pointer whitespace-nowrap"
+                          title="Conclude entire conclave event (marks completed)"
                         >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Auto</span>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Finish Conclave</span>
                         </button>
-                      </div>
+                      )}
 
-                      <button
-                        onClick={() => handleStartNextRound(1)}
-                        type="button"
-                        className="inline-flex items-center gap-1.5 h-7 px-3 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-smooth shadow-xs cursor-pointer"
-                      >
-                        <Play className="w-3 h-3 fill-current" />
-                        <span>Start Round 1</span>
-                      </button>
+                      {activeRound < totalRounds && (
+                        <button
+                          onClick={handleFinishConclave}
+                          type="button"
+                          className="inline-flex items-center gap-1.5 h-7.5 px-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-xs font-bold rounded-lg transition-smooth cursor-pointer whitespace-nowrap ml-auto"
+                          title="Conclude entire conclave event early (marks completed)"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500" />
+                          <span>Finish Conclave</span>
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <>
-                      {/* Manual / automatic can be switched at any time, even mid-conclave. */}
-                      <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 shadow-2xs" role="group" aria-label="Round progression">
-                        <button
-                          type="button"
-                          onClick={() => handleSetProgressionMode('manual')}
-                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${!autoAdvanceEnabled ? 'bg-white text-zinc-900 shadow-2xs border border-zinc-250' : 'text-zinc-500 hover:text-zinc-800'}`}
-                          title="Manual: you start each round"
-                        >
-                          Manual
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSetProgressionMode('automatic')}
-                          className={`px-2 py-1 text-[11px] font-black rounded-md transition-smooth cursor-pointer ${autoAdvanceEnabled ? 'bg-emerald-600 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                          title="Automatic: the next round starts after the move break"
-                        >
-                          Auto
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-1.5 flex-wrap w-full">
                       {isRoundPaused ? (
                         <button
                           onClick={handleResumeRound}
                           type="button"
-                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          className="inline-flex items-center gap-1 h-7.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                           title="Resume active round timer"
                         >
                           <Play className="w-3 h-3 fill-current" />
@@ -1251,7 +1295,7 @@ export default function RoundRunner({
                         <button
                           onClick={handlePauseRound}
                           type="button"
-                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          className="inline-flex items-center gap-1 h-7.5 px-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                           title="Pause active round timer"
                         >
                           <Pause className="w-3 h-3 fill-current" />
@@ -1259,11 +1303,11 @@ export default function RoundRunner({
                         </button>
                       )}
 
-                      {activeRound < (selectedConclave?.roundCount || 4) && (
+                      {activeRound < totalRounds && (
                         <button
                           onClick={() => handleStartNextRound()}
                           type="button"
-                          className="inline-flex items-center gap-1 h-7 px-2.5 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                          className="inline-flex items-center gap-1 h-7.5 px-2.5 bg-white border border-zinc-250 hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                           title="Force start next round"
                         >
                           <RefreshCw className="w-3 h-3 text-zinc-500" />
@@ -1274,7 +1318,7 @@ export default function RoundRunner({
                       <button
                         onClick={handleCloseRound}
                         type="button"
-                        className="inline-flex items-center gap-1 h-7 px-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-xs font-bold rounded-lg transition-smooth cursor-pointer"
+                        className="inline-flex items-center gap-1 h-7.5 px-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-250 text-xs font-bold rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                         title={`End Round ${activeRound} early (keeps conclave running)`}
                       >
                         <Square className="w-3 h-3 fill-zinc-500 text-zinc-500" />
@@ -1284,13 +1328,13 @@ export default function RoundRunner({
                       <button
                         onClick={handleFinishConclave}
                         type="button"
-                        className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase rounded-lg transition-smooth shadow-xs cursor-pointer"
+                        className="inline-flex items-center gap-1.5 h-7.5 px-2.5 bg-brand-red hover:bg-red-750 text-white text-xs font-bold uppercase rounded-lg transition-smooth shadow-xs cursor-pointer whitespace-nowrap ml-auto"
                         title="Conclude entire conclave event (marks completed)"
                       >
-                        <CheckCircle2 className="w-3 h-3" />
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Finish Conclave</span>
                       </button>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
@@ -1456,6 +1500,61 @@ export default function RoundRunner({
 
         {/* COLUMN 3: Referrals Analytics & Leaderboard */}
         <div className="lg:col-span-2 xl:col-span-4 flex flex-col justify-between gap-4 sm:gap-5 min-w-0">
+          {/* Widget 4: Top 3 Referrals Leaderboard */}
+          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-amber-500" />
+                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Top Referrers</h3>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-[10px] font-bold">
+                LEADERS
+              </span>
+            </div>
+
+            <div className="flex-1 flex flex-col justify-center py-2">
+              {leaderboard.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-500 mb-2 shadow-2xs">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-bold text-zinc-700">No Referrals Logged Yet</p>
+                  <p className="text-[11px] text-zinc-400 max-w-[220px] mt-0.5 leading-relaxed">
+                    Referrals exchanged during rounds will rank here live.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {leaderboard.slice(0, 3).map((person, idx) => {
+                    const medalColors = [
+                      { bg: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-300' },
+                      { bg: 'bg-zinc-400', text: 'text-zinc-600', border: 'border-zinc-300' },
+                      { bg: 'bg-amber-700/85', text: 'text-amber-800', border: 'border-amber-600/30' },
+                    ];
+                    const c = medalColors[idx] || medalColors[2];
+                    return (
+                      <div key={idx} className="bg-zinc-50/80 border border-zinc-200/70 rounded-xl p-2.5 flex items-center justify-between shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-6 h-6 ${c.bg} text-white rounded-full flex items-center justify-center font-black text-[10px] border ${c.border} shrink-0`}>
+                            {idx + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-zinc-900 truncate leading-tight">{person.name}</p>
+                            <p className="text-[10px] text-zinc-400 font-semibold uppercase truncate">{person.category}</p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pl-1.5">
+                          <span className={`text-base font-black ${c.text}`}>{person.count}</span>
+                          <span className="text-[9px] text-zinc-400 font-bold block -mt-0.5">refs</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Chart 3: Table Referrals Bar Chart */}
           <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
             <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
@@ -1470,8 +1569,8 @@ export default function RoundRunner({
                     type="button"
                     onClick={() => setReferralChartMode('table')}
                     className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'table'
-                        ? 'bg-white text-zinc-900 shadow-2xs font-black'
-                        : 'text-zinc-500 hover:text-zinc-800'
+                      ? 'bg-white text-zinc-900 shadow-2xs font-black'
+                      : 'text-zinc-500 hover:text-zinc-800'
                       }`}
                   >
                     By Table
@@ -1480,8 +1579,8 @@ export default function RoundRunner({
                     type="button"
                     onClick={() => setReferralChartMode('status')}
                     className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-colors cursor-pointer ${referralChartMode === 'status'
-                        ? 'bg-white text-zinc-900 shadow-2xs font-black'
-                        : 'text-zinc-500 hover:text-zinc-800'
+                      ? 'bg-white text-zinc-900 shadow-2xs font-black'
+                      : 'text-zinc-500 hover:text-zinc-800'
                       }`}
                   >
                     By Status
@@ -1615,61 +1714,6 @@ export default function RoundRunner({
               </div>
             </div>
           </div>
-
-          {/* Widget 4: Top 3 Referrals Leaderboard */}
-          <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between min-h-[250px] sm:min-h-[280px] flex-1 min-w-0">
-            <div className="flex justify-between items-center border-b border-zinc-100 pb-2.5 shrink-0">
-              <div className="flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-amber-500" />
-                <h3 className="text-xs font-black uppercase text-zinc-900 tracking-wider">Top Referrers</h3>
-              </div>
-              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md text-[10px] font-bold">
-                LEADERS
-              </span>
-            </div>
-
-            <div className="flex-1 flex flex-col justify-center py-2">
-              {leaderboard.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-500 mb-2 shadow-2xs">
-                    <Award className="w-5 h-5" />
-                  </div>
-                  <p className="text-xs font-bold text-zinc-700">No Referrals Logged Yet</p>
-                  <p className="text-[11px] text-zinc-400 max-w-[220px] mt-0.5 leading-relaxed">
-                    Referrals exchanged during rounds will rank here live.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {leaderboard.slice(0, 3).map((person, idx) => {
-                    const medalColors = [
-                      { bg: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-300' },
-                      { bg: 'bg-zinc-400', text: 'text-zinc-600', border: 'border-zinc-300' },
-                      { bg: 'bg-amber-700/85', text: 'text-amber-800', border: 'border-amber-600/30' },
-                    ];
-                    const c = medalColors[idx] || medalColors[2];
-                    return (
-                      <div key={idx} className="bg-zinc-50/80 border border-zinc-200/70 rounded-xl p-2.5 flex items-center justify-between shadow-2xs">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`w-6 h-6 ${c.bg} text-white rounded-full flex items-center justify-center font-black text-[10px] border ${c.border} shrink-0`}>
-                            {idx + 1}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-extrabold text-zinc-900 truncate leading-tight">{person.name}</p>
-                            <p className="text-[10px] text-zinc-400 font-semibold uppercase truncate">{person.category}</p>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0 pl-1.5">
-                          <span className={`text-base font-black ${c.text}`}>{person.count}</span>
-                          <span className="text-[9px] text-zinc-400 font-bold block -mt-0.5">refs</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1763,8 +1807,8 @@ export default function RoundRunner({
               </div>
               <div className="flex justify-between font-bold text-zinc-800">
                 <span>Current Move Buffer:</span>
-                <span className={timingState.transitionSecs < 120 ? 'text-amber-600' : 'text-emerald-600'}>
-                  {Math.round(timingState.transitionSecs / 60)} minutes
+                <span className={conclaveMoveSeconds < 120 ? 'text-amber-600' : 'text-emerald-600'}>
+                  {Math.round(conclaveMoveSeconds / 60)} {conclaveMoveSeconds === 60 ? 'minute' : 'minutes'}
                 </span>
               </div>
               <p className="text-[10px] text-zinc-400 pt-1">

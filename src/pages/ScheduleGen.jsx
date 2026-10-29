@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  RefreshCw,
-  Download,
-  Play,
-  Calendar,
   Settings as SettingsIcon,
   CheckCircle2,
-  Clock,
-  Check,
   X,
   PlayCircle,
   StopCircle,
@@ -17,11 +11,7 @@ import {
   ArrowRight,
   Users,
   Award,
-  Briefcase,
-  Layers,
-  MapPin,
   SlidersHorizontal,
-  Hash,
   Gauge,
   Plus,
   Minus,
@@ -30,7 +20,7 @@ import {
   Building2,
   AlertTriangle,
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
 import { formatStatus } from '../utils/statusUtils';
@@ -190,7 +180,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     try {
       const cached = localStorage.getItem('bni_conclave_defaults');
       if (cached) return JSON.parse(cached);
-    } catch {}
+    } catch { }
     return { personsPerTable: 7, roundCount: 6 };
   });
 
@@ -306,6 +296,13 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     if (!selectedConclaveId) return;
     try {
       await api.patch(`/admin/conclaves/${selectedConclaveId}/move-time`, { moveSeconds: secs });
+      try {
+        const cached = JSON.parse(localStorage.getItem('bni_admin_conclaves_cache') || '[]');
+        if (Array.isArray(cached)) {
+          const updated = cached.map(c => c.id === selectedConclaveId ? { ...c, moveSeconds: secs } : c);
+          localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(updated));
+        }
+      } catch { }
       showToast('Move time saved', `${secs / 60} min between rounds in automatic mode.`);
     } catch (err) {
       showToast('Could not save move time', err.message || 'Please try again.');
@@ -873,9 +870,8 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                       type="button"
                       disabled={isConclaveCompleted}
                       onClick={() => saveMoveSeconds(secs)}
-                      className={`flex-1 py-2 rounded-xl border text-sm font-bold transition-smooth cursor-pointer disabled:opacity-40 ${
-                        moveSeconds === secs ? 'bg-brand-red border-brand-red text-white' : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
-                      }`}
+                      className={`flex-1 py-2 rounded-xl border text-sm font-bold transition-smooth cursor-pointer disabled:opacity-40 ${moveSeconds === secs ? 'bg-brand-red border-brand-red text-white' : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
+                        }`}
                     >
                       {secs / 60} min
                     </button>

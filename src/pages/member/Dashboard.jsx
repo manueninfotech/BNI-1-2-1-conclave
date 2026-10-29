@@ -957,7 +957,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
 
                   {/* Refer button */}
                   {member.uid !== (loggedInMember?.uid || loggedInMember?.id) && (
-                    timingState?.isTalking ? (
+                    timingState?.isReferralOpen ? (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -972,11 +972,19 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       >
                         Send Referral
                       </button>
+                    ) : timingState?.isTalking ? (
+                      <button
+                        disabled
+                        title="Referrals open during the referral window (after speaking concludes)"
+                        className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9.5px] font-bold uppercase tracking-wider cursor-not-allowed text-center truncate"
+                      >
+                        Referrals Open in {formatTime(timingState?.phaseRemaining)}
+                      </button>
                     ) : (
                       <button
                         disabled
-                        title="Referrals are closed after talking time for this round"
-                        className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9.5px] font-black uppercase tracking-wider cursor-not-allowed"
+                        title="Referrals are closed for this round"
+                        className="w-full py-1.5 border border-zinc-200 text-zinc-400 bg-zinc-100 rounded-xl text-[9.5px] font-black uppercase tracking-wider cursor-not-allowed text-center"
                       >
                         Referrals Closed
                       </button>

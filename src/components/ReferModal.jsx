@@ -19,7 +19,7 @@ export default function ReferModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Check whether referral submission is allowed
-  const isAllowed = isTalkingTimeActive !== undefined ? isTalkingTimeActive : isReferralOpen;
+  const isAllowed = isTalkingTimeActive !== undefined ? isTalkingTimeActive : Boolean(isReferralOpen);
 
   // Lock background scrolling when modal is open
   useEffect(() => {
@@ -196,15 +196,15 @@ export default function ReferModal({
             <div className="relative">
               <textarea
                 value={description}
-                disabled={!isTalkingTimeActive}
+                disabled={!isAllowed}
                 onChange={(e) => {
                   setDescription(e.target.value);
                   setError('');
                 }}
-                placeholder={isTalkingTimeActive ? "E.g., I have a client looking to redesign their office space, please contact their admin at contact@email.com." : "Referral sending is closed because round talking time has ended."}
+                placeholder={isAllowed ? "E.g., I have a client looking to redesign their office space, please contact their admin at contact@email.com." : "Referral sending is only open during the dedicated Referral Window."}
                 rows="4"
                 className={`w-full p-3.5 border rounded-xl text-[12px] font-semibold transition-smooth placeholder-zinc-400 resize-none leading-relaxed shadow-2xs ${
-                  !isTalkingTimeActive
+                  !isAllowed
                     ? 'border-zinc-200 bg-zinc-100/70 text-zinc-400 cursor-not-allowed'
                     : 'border-zinc-200/90 bg-white text-zinc-800 focus:outline-none focus:border-brand-red focus:ring-3 focus:ring-brand-red/10'
                 }`}
@@ -223,14 +223,14 @@ export default function ReferModal({
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting || !isTalkingTimeActive}
+              disabled={isSubmitting || !isAllowed}
               className={`w-full py-3 rounded-xl text-[11.5px] font-black uppercase tracking-wider transition-smooth flex items-center justify-center gap-2 shadow-xs ${
-                !isTalkingTimeActive
+                !isAllowed
                   ? 'bg-zinc-200 text-zinc-400 border border-zinc-250 cursor-not-allowed shadow-none'
                   : 'bg-brand-red hover:bg-red-700 disabled:bg-zinc-300 text-white cursor-pointer shadow-brand-red/15'
               }`}
             >
-              {!isTalkingTimeActive ? (
+              {!isAllowed ? (
                 <span>Referrals Closed</span>
               ) : isSubmitting ? (
                 <>
