@@ -136,7 +136,10 @@ export default function Home({ base, loggedInAdmin }) {
   const conclaveChartData = useMemo(() => {
     return conclaves.slice(0, 6).map((c) => {
       const count = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
-      const refs = Number(c.referralCount ?? c.referralsCount ?? 0);
+      let refs = Number(c.referralCount ?? c.referralsCount ?? 0);
+      if (c.id === current?.id && currentStats?.counts?.referrals !== undefined) {
+        refs = Math.max(refs, Number(currentStats.counts.referrals));
+      }
       return {
         id: c.id,
         name: c.name || 'Conclave',
@@ -145,7 +148,7 @@ export default function Home({ base, loggedInAdmin }) {
         referrals: refs,
       };
     });
-  }, [conclaves]);
+  }, [conclaves, current?.id, currentStats]);
 
   return (
     <div className="w-full space-y-3.5 sm:space-y-4 pb-6 font-sans">

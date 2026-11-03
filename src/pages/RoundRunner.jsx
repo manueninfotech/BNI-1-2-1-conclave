@@ -1488,36 +1488,42 @@ export default function RoundRunner({
             {/* If tables are scheduled, show the vertical bar visualizer or grid */}
             {tables.length > 0 ? (
               seatingViewMode === 'bars' ? (
-                <div className="flex items-stretch gap-2.5 pt-2 overflow-x-auto pb-1.5 custom-scrollbar h-44">
+                <div className="flex items-stretch gap-1.5 sm:gap-2 pt-2 overflow-x-auto pb-1.5 custom-scrollbar h-44">
                   {tables.map((t) => {
                     const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
                     const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));
                     const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
                     return (
-                      <div key={t.tableNumber} className="flex flex-col items-center h-full flex-1 min-w-[72px]">
-                        {/* Seated count tag: fixed height so top is uniformly aligned */}
+                      <div
+                        key={t.tableNumber}
+                        className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
+                        title={`Table ${t.tableNumber}: ${captainFullName} (${seatedCount}/${personsPerTable} seated)`}
+                      >
+                        {/* Hover Tooltip Popup */}
+                        <div className="absolute -top-9 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
+                          <span>{captainFullName}</span>
+                          <span className="text-zinc-400 font-normal">({seatedCount}/{personsPerTable})</span>
+                        </div>
+
+                        {/* Seated count tag */}
                         <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
                           <span className="font-sans tabular-nums text-caption text-brand-red font-bold leading-none">
                             {seatedCount}/{personsPerTable}
                           </span>
                         </div>
 
-                        {/* Vertical Bar: thin flat square bar with no background grey track */}
+                        {/* Vertical Bar: rounded top shoulders, flat bottom (like image 2) */}
                         <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[44px]">
                           <div
-                            className="w-3 sm:w-3.5 bg-gradient-to-t from-red-700 to-brand-red rounded-none transition-all duration-500 shadow-2xs"
+                            className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
                             style={{ height: `${heightPercent}%`, minHeight: '6px' }}
                           />
                         </div>
 
-                        {/* Bottom Labels: fixed height container (h-11) so every bar starts at the exact same baseline height */}
-                        <div className="flex flex-col items-center justify-start shrink-0 mt-1.5 w-full h-11">
-                          <span className="text-caption font-black text-zinc-900 leading-tight">T{t.tableNumber}</span>
-                          <span
-                            className="text-[10px] text-zinc-600 font-bold uppercase text-center leading-tight line-clamp-2 px-0.5 block break-words"
-                            title={captainFullName}
-                          >
-                            {captainFullName}
+                        {/* Bottom Label: clean T1, T2 without overlapping names */}
+                        <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
+                            T{t.tableNumber}
                           </span>
                         </div>
                       </div>
@@ -1620,13 +1626,23 @@ export default function RoundRunner({
             {/* Content: By Table (Vertical Bars) or By Status (Vertical Bars) */}
             {referralChartMode === 'table' ? (
               <div className="flex-1 w-full flex flex-col justify-end min-h-[160px] pt-2">
-                <div className="flex items-stretch gap-2 overflow-x-auto pb-1 h-full custom-scrollbar">
+                <div className="flex items-stretch gap-1.5 sm:gap-2 overflow-x-auto pb-1 h-full custom-scrollbar">
                   {tableReferralsChartData.map((t) => {
                     const heightPercent = maxTableReferrals > 0 && t.referrals > 0
                       ? Math.min(100, Math.max(15, Math.round((t.referrals / maxTableReferrals) * 100)))
                       : 0;
                     return (
-                      <div key={t.tableNumber} className="flex flex-col items-center h-full flex-1 min-w-[48px]">
+                      <div
+                        key={t.tableNumber}
+                        className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
+                        title={`Table ${t.tableNumber}: ${t.referrals} referrals`}
+                      >
+                        {/* Hover Tooltip Popup */}
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
+                          <span>Table {t.tableNumber}</span>
+                          <span className="text-zinc-400 font-normal">({t.referrals} referrals)</span>
+                        </div>
+
                         {/* Referral count on top: fixed height */}
                         <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
                           <span className="font-sans tabular-nums text-caption font-bold text-brand-red leading-none">
@@ -1634,10 +1650,10 @@ export default function RoundRunner({
                           </span>
                         </div>
 
-                        {/* Vertical Bar: square shape, no curved corners, no background grey track */}
+                        {/* Vertical Bar: rounded top shoulders, flat bottom (like image 2) */}
                         <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
                           <div
-                            className="w-3 sm:w-3.5 bg-gradient-to-t from-red-700 to-brand-red rounded-none transition-all duration-500 shadow-2xs"
+                            className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
                             style={{ height: `${heightPercent > 0 ? heightPercent : 6}%`, minHeight: '6px' }}
                           />
                         </div>
@@ -1665,7 +1681,7 @@ export default function RoundRunner({
                     </div>
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
                       <div
-                        className="w-3.5 sm:w-4 bg-[#00875A] rounded-none transition-all duration-500 shadow-2xs"
+                        className="w-6 sm:w-7 bg-[#00875A] rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((connectedReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
@@ -1688,7 +1704,7 @@ export default function RoundRunner({
                     </div>
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
                       <div
-                        className="w-3.5 sm:w-4 bg-amber-500 rounded-none transition-all duration-500 shadow-2xs"
+                        className="w-6 sm:w-7 bg-amber-500 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((pendingReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
@@ -1711,7 +1727,7 @@ export default function RoundRunner({
                     </div>
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
                       <div
-                        className="w-3.5 sm:w-4 bg-zinc-600 rounded-none transition-all duration-500 shadow-2xs"
+                        className="w-6 sm:w-7 bg-zinc-600 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((closedReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
