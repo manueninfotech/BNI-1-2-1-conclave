@@ -49,6 +49,7 @@ export default function Home({ base, loggedInAdmin }) {
 
   // Live conclave stats & real audit activities
   const [currentStats, setCurrentStats] = useState(null);
+  const [conclaveStatsMap, setConclaveStatsMap] = useState({});
   const [activities, setActivities] = useState([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
 
@@ -60,20 +61,34 @@ export default function Home({ base, loggedInAdmin }) {
     return /region$/i.test(reg) ? `${reg} Admin` : `${reg} Region Admin`;
   }, [loggedInAdmin]);
 
-  // Fetch real stats for the active conclave
+  // Fetch real stats for all conclaves in parallel so every conclave receives accurate referral slips
   useEffect(() => {
-    if (!current?.id) {
-      setCurrentStats(null);
+    if (!conclaves || conclaves.length === 0) {
+      setConclaveStatsMap({});
       return;
     }
     let isMounted = true;
-    api.get(`/admin/conclaves/${current.id}/stats`)
-      .then((data) => {
-        if (isMounted && data) setCurrentStats(data);
-      })
-      .catch(() => { });
+    const targetConclaves = conclaves.slice(0, 10);
+    Promise.all(
+      targetConclaves.map((c) =>
+        api.get(`/admin/conclaves/${c.id}/stats`)
+          .then((st) => ({ id: c.id, stats: st }))
+          .catch(() => ({ id: c.id, stats: null }))
+      )
+    ).then((results) => {
+      if (!isMounted) return;
+      const map = {};
+      results.forEach((r) => {
+        if (r.stats) map[r.id] = r.stats;
+      });
+      setConclaveStatsMap(map);
+      if (current?.id && map[current.id]) {
+        setCurrentStats(map[current.id]);
+      }
+    });
+
     return () => { isMounted = false; };
-  }, [current?.id]);
+  }, [conclaves, current?.id]);
 
   // Fetch real recent audit activity from backend
   useEffect(() => {
@@ -109,7 +124,13 @@ export default function Home({ base, loggedInAdmin }) {
 
     conclaves.forEach((c) => {
       const reg = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
-      const refs = Number(c.referralCount ?? c.referralsCount ?? 0);
+      const conclaveStat = conclaveStatsMap[c.id];
+      let refs = Number(c.referralCount ?? c.referralsCount ?? 0);
+      if (conclaveStat?.counts?.referrals !== undefined) {
+        refs = Math.max(refs, Number(conclaveStat.counts.referrals));
+      } else if (c.id === current?.id && currentStats?.counts?.referrals !== undefined) {
+        refs = Math.max(refs, Number(currentStats.counts.referrals));
+      }
 
       totalRegistered += reg;
       totalReferrals += refs;
@@ -130,14 +151,17 @@ export default function Home({ base, loggedInAdmin }) {
       totalRegistered,
       totalReferrals,
     };
-  }, [conclaves, currentStats]);
+  }, [conclaves, currentStats, conclaveStatsMap, current?.id]);
 
   // Real conclave data for analytics charts (up to 6 conclaves)
   const conclaveChartData = useMemo(() => {
     return conclaves.slice(0, 6).map((c) => {
       const count = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
+      const conclaveStat = conclaveStatsMap[c.id];
       let refs = Number(c.referralCount ?? c.referralsCount ?? 0);
-      if (c.id === current?.id && currentStats?.counts?.referrals !== undefined) {
+      if (conclaveStat?.counts?.referrals !== undefined) {
+        refs = Math.max(refs, Number(conclaveStat.counts.referrals));
+      } else if (c.id === current?.id && currentStats?.counts?.referrals !== undefined) {
         refs = Math.max(refs, Number(currentStats.counts.referrals));
       }
       return {
@@ -148,7 +172,7 @@ export default function Home({ base, loggedInAdmin }) {
         referrals: refs,
       };
     });
-  }, [conclaves, current?.id, currentStats]);
+  }, [conclaves, current?.id, currentStats, conclaveStatsMap]);
 
   return (
     <div className="w-full space-y-3.5 sm:space-y-4 pb-6 font-sans">
