@@ -1,6 +1,22 @@
 @import "tailwindcss";
 
 @font-face {
+  font-family: 'Helvetica Neue';
+  src: local('Helvetica Neue'), local('HelveticaNeue'), local('Helvetica'), url('/fonts/arial.ttf') format('truetype');
+  font-weight: 100 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Helvetica Neue';
+  src: local('Helvetica Neue Bold'), local('HelveticaNeue-Bold'), local('Helvetica-Bold'), url('/fonts/arialbd.ttf') format('truetype');
+  font-weight: 500 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Arial';
   src: local('Arial'), url('/fonts/arial.ttf') format('truetype');
   font-weight: 100 400;
@@ -38,12 +54,28 @@
   --font-sans: "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Enforce official theme.js typography ("Helvetica Neue", Arial, sans-serif) universally */
+html,
+body,
+#root,
+.admin-panel,
+.admin-panel * {
+  font-family: "Helvetica Neue", Arial, sans-serif !important;
+}
+
 body {
-  font-family: var(--font-sans);
+  font-family: "Helvetica Neue", Arial, sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: "Helvetica Neue", Arial, sans-serif !important;
 }
 
 

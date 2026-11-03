@@ -290,7 +290,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <MapPin className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Venue</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Venue</span>
                     <span className="block text-[13px] font-bold text-zinc-800">{venueStr}</span>
                   </div>
                 </div>
@@ -299,7 +299,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <Clock className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Date</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Date</span>
                     <span className="block text-[13px] font-bold text-zinc-800">{formatConclaveDate(startDateStr)}</span>
                     {timeWindow && (
                       <span className="block text-[11px] text-zinc-500 font-semibold mt-0.5">{timeWindow}</span>
@@ -311,7 +311,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <Clock className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Time</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Time</span>
                     <span className="block text-[13px] font-bold text-zinc-800">{timeWindow || formatTimeStr(startTimeStr)}</span>
                   </div>
                 </div>
@@ -320,7 +320,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <MapPin className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Venue</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Venue</span>
                     <span className="block text-[13px] font-bold text-zinc-500">To be announced</span>
                   </div>
                 </div>
@@ -330,13 +330,13 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
             {/* Card 2: Your Place */}
             <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
               <div className="px-4 pt-3.5 pb-1">
-                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Your Place</span>
+                <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Your Place</span>
               </div>
               <div className="divide-y divide-zinc-100">
                 <div className="flex items-start gap-3.5 p-4">
                   <User className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Role</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Role</span>
                     <span className="block text-[13px] font-bold text-zinc-800">
                       {isCaptain ? 'Captain - you anchor a table' : 'Member - you move tables each round'}
                     </span>
@@ -345,7 +345,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <Coffee className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Table</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Table</span>
                     <span className="block text-[13px] font-bold text-zinc-800">
                       {myTableNum ? `Table ${myTableNum}` : 'Assigned when Round 1 starts'}
                     </span>
@@ -362,13 +362,13 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
             {/* Card 3: How It Works */}
             <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
               <div className="px-4 pt-3.5 pb-1">
-                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">How It Works</span>
+                <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">How It Works</span>
               </div>
               <div className="divide-y divide-zinc-100">
                 <div className="flex items-start gap-3.5 p-4">
                   <Users className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Table size</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Table size</span>
                     <span className="block text-[13px] font-bold text-zinc-800">
                       {tableSizeApprox} people, including the captain
                     </span>
@@ -377,7 +377,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <ArrowRight className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Rounds</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Rounds</span>
                     <span className="block text-[13px] font-bold text-zinc-800">
                       {totalRounds} rounds total
                     </span>
@@ -386,7 +386,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                 <div className="flex items-start gap-3.5 p-4">
                   <Check className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Seating rule</span>
+                    <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Seating rule</span>
                     <span className="block text-[13px] font-bold text-zinc-800">
                       No two people from the same business category ever share a table
                     </span>
@@ -400,7 +400,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
               <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs p-4 flex items-center gap-3.5">
                 <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <span className="block text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest mb-0.5">Official Agenda</span>
+                  <span className="block text-[9.5px] font-extrabold text-zinc-700 uppercase tracking-widest mb-0.5">Official Agenda</span>
                   <span className="block text-[12.5px] font-bold text-zinc-800 truncate">{agendaDoc.name || 'Agenda.pdf'}</span>
                 </div>
                 <button
@@ -519,11 +519,11 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
 
               <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 mt-3">
                 <div className="flex flex-col">
-                  <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Current Table</span>
+                  <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Current Table</span>
                   <span className="text-[13px] font-black text-zinc-900 mt-0.5">Table {currentRoundSeating?.tableNumber || 'N/A'}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Table Captain</span>
+                  <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Table Captain</span>
                   <span className="text-[13px] font-black text-zinc-900 mt-0.5">{currentRoundSeating?.captain || 'Unknown'}</span>
                 </div>
               </div>
@@ -552,19 +552,19 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
           <div className="bg-white rounded-xl border border-zinc-200 shadow-2xs p-4 flex justify-around items-center gap-4 divide-x divide-zinc-150">
             <div className="flex-1 text-center py-1">
               <span className="block text-base font-black text-zinc-900">{rounds.length}</span>
-              <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest mt-1 block">Total Rounds</span>
+              <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest mt-1 block">Total Rounds</span>
             </div>
             <div className="flex-1 text-center py-1">
               <span className="block text-base font-black text-zinc-900">
                 {new Set(rounds.flatMap(r => r.participants || []).map(p => p.category)).size}
               </span>
-              <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest mt-1 block">Unique Niches</span>
+              <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest mt-1 block">Unique Niches</span>
             </div>
             <div className="flex-1 text-center py-1">
               <span className="block text-base font-black text-zinc-900">
                 {Math.max(0, new Set(rounds.flatMap(r => r.participants || []).map(p => p.name)).size - 1)}
               </span>
-              <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest mt-1 block">New Connections</span>
+              <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest mt-1 block">New Connections</span>
             </div>
           </div>
 
@@ -637,7 +637,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                             <span className="px-1.5 py-0.5 bg-red-50 border border-red-100 text-brand-red text-[8px] font-black rounded uppercase tracking-wider animate-pulse">ACTIVE NOW</span>
                           )}
                           {isUpcoming && (
-                            <span className="px-1.5 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-400 text-[8px] font-black rounded uppercase tracking-wider">UPCOMING</span>
+                            <span className="px-1.5 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-700 text-[8px] font-black rounded uppercase tracking-wider">UPCOMING</span>
                           )}
                           <span className="text-[10px] text-zinc-450 font-bold uppercase tracking-wider">
                             {isUpcoming ? formatUpcomingRoundRange(rnd.time) : rnd.time}
@@ -685,11 +685,11 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
               <div className="p-4 space-y-4">
                 <div className="flex justify-between items-center">
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Round {nextRound.number}</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Round {nextRound.number}</span>
                     <span className="text-[13.5px] font-black text-zinc-900 mt-0.5">{nextRound.table}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block">Starts At</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest block">Starts At</span>
                     <span className="text-[13.5px] font-black text-brand-red mt-0.5">
                       {formatUpcomingRoundStartTime(nextRound.time)}
                     </span>

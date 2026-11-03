@@ -153,7 +153,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
           { label: 'Table Density', val: `${new Set(filteredMembers.map(m => m.category)).size} Categories`, accent: false }
         ].map((kpi, idx) => (
           <div key={idx} className="bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs">
-            <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider mb-1">{kpi.label}</p>
+            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-wider mb-1">{kpi.label}</p>
             {kpi.isStatus ? (
               <div className={`flex items-center gap-1.5 text-[14px] font-black ${selectedRound === (conclaveSyncData?.conclaveStatus?.currentRound || 1) ? 'text-brand-red' : selectedRound < (conclaveSyncData?.conclaveStatus?.currentRound || 1) ? 'text-emerald-600' : 'text-zinc-550'}`}>
                 {selectedRound === (conclaveSyncData?.conclaveStatus?.currentRound || 1) && <span className="w-1.5 h-1.5 rounded-full bg-brand-red animate-pulse"></span>}
@@ -230,7 +230,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                     ></div>
                   </div>
 
-                  <div className="flex justify-between text-[9px] text-zinc-400 font-bold uppercase tracking-wider">
+                  <div className="flex justify-between text-[9px] text-zinc-700 font-bold uppercase tracking-wider">
                     <span>Optimal Seating: {maxSeats} Members Max</span>
                     <span>Diversity Index: High</span>
                   </div>
@@ -373,7 +373,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                 )}
               </div>
               <div className="mt-2.5 pt-2 border-t border-zinc-200/70 flex items-center justify-between text-[10px] px-1">
-                <span className="text-zinc-400 font-bold uppercase tracking-wider">Total Round Time</span>
+                <span className="text-zinc-700 font-bold uppercase tracking-wider">Total Round Time</span>
                 <span className="font-mono font-black text-zinc-700">{formatTime(timingState.totalRemaining)}</span>
               </div>
             </div>
@@ -492,7 +492,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                   <ArrowRight className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-[9px] text-zinc-400 font-extrabold uppercase tracking-widest leading-none">Coming Up Next</p>
+                  <p className="text-[9px] text-zinc-700 font-extrabold uppercase tracking-widest leading-none">Coming Up Next</p>
                   <h4 className="font-extrabold text-zinc-900 text-body-sm leading-tight mt-1.5">Round {nextRoundNum} Migration</h4>
                 </div>
               </div>

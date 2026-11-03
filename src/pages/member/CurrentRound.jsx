@@ -355,15 +355,15 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
             {/* Session Stats grid footer */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-4">
               <div>
-                <p className="text-[9.5px] font-black text-zinc-400 uppercase tracking-widest">Assigned Table</p>
+                <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Assigned Table</p>
                 <p className="font-black text-zinc-900 text-body-lg mt-0.5">Table {conclaveSyncData?.tableNumber || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-[9.5px] font-black text-zinc-400 uppercase tracking-widest">Session Captain</p>
+                <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Session Captain</p>
                 <p className="font-black text-zinc-900 text-body-lg mt-0.5">{conclaveSyncData?.captainName || 'Unknown'}</p>
               </div>
               <div className="col-span-2 md:col-span-1">
-                <p className="text-[9.5px] font-black text-zinc-400 uppercase tracking-widest">Location</p>
+                <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Location</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <MapPin className="w-4.5 h-4.5 text-brand-red shrink-0" />
                   <p className="font-black text-zinc-900 text-body-lg truncate">{conclaveSyncData?.conclaveStatus?.venue || 'TBD Venue'}</p>
@@ -472,7 +472,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
             {/* Small Total Round Time */}
             <div className="w-full max-w-[210px] bg-white border border-zinc-200 rounded-lg py-1.5 px-3 mb-3.5 shadow-2xs flex items-center justify-between">
-              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Total Round Time</span>
+              <span className="text-[9px] font-bold text-zinc-700 uppercase tracking-wider">Total Round Time</span>
               <span className="text-[12px] font-mono font-black text-zinc-800">{formatTime(timeLeft)}</span>
             </div>
 
@@ -896,7 +896,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
             if (!nextRoundObj) {
               return (
                 <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs text-center">
-                  <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1">SESSION STATUS</span>
+                  <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest block mb-1">SESSION STATUS</span>
                   <p className="text-xs font-bold text-zinc-700">Final Round In Progress</p>
                 </div>
               );
@@ -928,7 +928,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                       {nextCapInitials}
                     </div>
                     <div>
-                      <p className="text-[8px] text-zinc-400 font-extrabold uppercase tracking-widest">Upcoming Captain</p>
+                      <p className="text-[8px] text-zinc-700 font-extrabold uppercase tracking-widest">Upcoming Captain</p>
                       <p className="text-[12px] font-black text-zinc-900 mt-0.5 leading-none">{nextCapName}</p>
                     </div>
                   </div>

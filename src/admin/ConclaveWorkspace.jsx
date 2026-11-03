@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CalendarRange, MapPin, Users } from 'lucide-react';
+import { ArrowLeft, CalendarRange, MapPin, Users } from 'lucide-react';
 import { api } from '../services/api';
-import { nextStep, formatConclaveDate } from './conclaveStage';
-import StageSteps from './StageSteps';
+import { formatConclaveDate } from './conclaveStage';
+import { formatStatus, getStatusBadgeClasses } from '../utils/statusUtils';
 import GenWarningBanner from './GenWarningBanner';
 import Dashboard from '../pages/Dashboard';
 import Members from '../pages/Members';
@@ -70,47 +70,53 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
   if (!CONCLAVE_TABS.some((t) => t.id === tab)) return <Navigate to={`${base}/conclaves/${id}`} replace />;
   const tabs = CONCLAVE_TABS.filter((t) => !t.paidOnly || !conclave || isPaid(conclave) || tab === t.id);
 
-  const step = conclave ? nextStep(conclave) : null;
   const tabPath = (t) => `${base}/conclaves/${id}${t === 'overview' ? '' : `/${t}`}`;
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-4">
-        <Link to={`${base}/conclaves`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-500 hover:text-zinc-900">
-          <ArrowLeft className="w-4 h-4" /> All conclaves
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:gap-3.5">
+        <Link to={`${base}/conclaves`} className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 transition-colors self-start">
+          <ArrowLeft className="w-3.5 h-3.5" /> All conclaves
         </Link>
 
         {error ? (
-          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm font-semibold">{error}</div>
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">{error}</div>
         ) : !conclave ? (
-          <div className="h-24 rounded-xl bg-white border border-zinc-200 animate-pulse" />
+          <div className="h-10 rounded-xl bg-white border border-zinc-200 animate-pulse" />
         ) : (
-          <div className="rounded-2xl bg-white border border-zinc-200 shadow-sm">
-            <div className="p-5 sm:p-6 flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-black text-zinc-950 tracking-tight break-words">{conclave.name}</h1>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-zinc-500">
-                  <span className="inline-flex items-center gap-1.5"><CalendarRange className="w-4 h-4" />{formatConclaveDate(conclave)}</span>
-                  {conclave.venueLocation && <span className="inline-flex items-center gap-1.5"><MapPin className="w-4 h-4" />{conclave.venueLocation}</span>}
-                  {conclave.region && <span className="inline-flex items-center gap-1.5"><Users className="w-4 h-4" />{conclave.region}</span>}
-                </div>
-              </div>
-              <StageSteps conclave={conclave} />
-            </div>
-            {step && (
-              <div className="px-5 sm:px-6 py-3 bg-zinc-50 border-t border-zinc-100 rounded-b-2xl flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-zinc-800">{step.text}</p>
-                {step.tab && step.tab !== tab && (
-                  <Link to={tabPath(step.tab)} className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-red hover:text-red-700">
-                    {step.action} <ArrowRight className="w-4 h-4" />
-                  </Link>
+          /* Sleek compact header */
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 py-0.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-black text-zinc-950 tracking-tight leading-none">
+                {conclave.name}
+              </h1>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-2xs ${getStatusBadgeClasses(conclave.status)}`}>
+                {formatStatus(conclave.status)}
+              </span>
+              <span className="text-zinc-300 hidden sm:inline">·</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500 font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarRange className="w-3.5 h-3.5 text-zinc-400" />
+                  {formatConclaveDate(conclave)}
+                </span>
+                {conclave.venueLocation && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                    {conclave.venueLocation}
+                  </span>
+                )}
+                {conclave.region && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-zinc-400" />
+                    {conclave.region}
+                  </span>
                 )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        <nav className="flex gap-1 overflow-x-auto border-b border-zinc-200 -mx-1 px-1" aria-label="Conclave sections">
+        <nav className="flex gap-1 overflow-x-auto border-b border-zinc-200 -mx-1 px-1 pt-1.5 sm:pt-2" aria-label="Conclave sections">
           {tabs.map((t) => (
             <NavLink
               key={t.id}
@@ -129,7 +135,7 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
       </div>
 
       {/* Each tab is an existing page, pointed at this conclave. */}
-      <div key={`${id}:${tab}`}>
+      <div key={`${id}:${tab}`} className="pt-0.5">
         {tab === 'overview' && <Dashboard selectedConclaveId={id} loggedInAdmin={loggedInAdmin} embedded />}
         {tab === 'members' && (
           <Members
@@ -138,13 +144,14 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
             searchQuery={searchQuery}
             allowedScopes={['conclave']}
             initialRoleFilter={params.get('role') === 'captain' ? 'Captain' : 'All'}
+            embedded
           />
         )}
         {tab === 'schedule' && (
           <ScheduleHub selectedConclaveId={id} showGenWarning={showGenWarning} clearGenWarning={clearGenWarning} searchQuery={searchQuery} initialStage="auto" />
         )}
-        {tab === 'payments' && <Payments selectedConclaveId={id} />}
-        {tab === 'feedback' && <Feedback selectedConclaveId={id} />}
+        {tab === 'payments' && <Payments selectedConclaveId={id} embedded />}
+        {tab === 'feedback' && <Feedback selectedConclaveId={id} embedded />}
         {tab === 'activity' && <Activity conclaveId={id} embedded />}
       </div>
 

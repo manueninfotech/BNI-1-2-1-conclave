@@ -420,7 +420,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                     <><span className="w-1.5 h-1.5 rounded-full bg-brand-red animate-pulse inline-block" /> Live Now</>
                   ) : 'Conclave Session'}
                 </span>
-                <span className="text-zinc-400 text-[10px] font-semibold uppercase tracking-widest">
+                <span className="text-zinc-700 text-[10px] font-semibold uppercase tracking-widest">
                   {conclaveSyncData?.conclaveStatus?.region || conclaveSyncData?.region || 'BNI Region'}
                 </span>
               </div>
@@ -453,7 +453,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
 
             {/* Right: Round info */}
             <div className="shrink-0 hidden sm:flex flex-col items-center justify-center bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-2.5 text-center min-w-[64px]">
-              <span className="text-[8.5px] font-extrabold text-zinc-400 uppercase tracking-widest">{isConclaveCompleted ? 'Status' : 'Round'}</span>
+              <span className="text-[8.5px] font-extrabold text-zinc-700 uppercase tracking-widest">{isConclaveCompleted ? 'Status' : 'Round'}</span>
               <span className="text-xl font-black text-zinc-900 leading-none mt-0.5">
                 {isConclaveCompleted ? 'Ended' : conclaveSyncData?.conclaveStatus?.currentRound || 0}
                 {!isConclaveCompleted && <span className="text-xs font-semibold text-zinc-400">/{conclaveSyncData?.mySchedule?.length || 6}</span>}
@@ -678,7 +678,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                     return (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11.5px] font-semibold text-zinc-600">
                         <div className="space-y-1">
-                          <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Synergy Score</span>
+                          <span className="text-[9px] text-zinc-700 font-bold uppercase tracking-wider block">Synergy Score</span>
                           <div className="flex items-center gap-2">
                             <span className="text-[13px] font-black text-zinc-950 leading-none">{synergyPct}% Optimal</span>
                             <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 leading-none">
@@ -688,14 +688,14 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Coordinating Captain</span>
+                          <span className="text-[9px] text-zinc-700 font-bold uppercase tracking-wider block">Coordinating Captain</span>
                           <div className="text-[12px] font-extrabold text-zinc-800 leading-none pt-0.5">
                             {loggedInCaptain.name}
                           </div>
                         </div>
 
                         <div className="space-y-1 sm:col-span-2">
-                          <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider block">Represented Chapters</span>
+                          <span className="text-[9px] text-zinc-700 font-bold uppercase tracking-wider block">Represented Chapters</span>
                           <p className="text-[11px] font-extrabold text-zinc-800 leading-normal">
                             {chaptersText}
                           </p>
@@ -711,7 +711,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-body-lg font-black text-zinc-900 tracking-tight">Current Round Participants</h3>
-                <span className="text-zinc-400 font-extrabold text-[10px] uppercase tracking-wider">
+                <span className="text-zinc-700 font-extrabold text-[10px] uppercase tracking-wider">
                   {myTable.members.length} Members at {displayTable}
                 </span>
               </div>
@@ -759,7 +759,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                         </div>
 
                         {member.chapter && (
-                          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider truncate">
+                          <p className="text-[10px] text-zinc-700 font-bold uppercase tracking-wider truncate">
                             {member.chapter}
                           </p>
                         )}

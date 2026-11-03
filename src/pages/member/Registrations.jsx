@@ -730,16 +730,16 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
               {/* Event Info Brief */}
               <div className="bg-zinc-50 border border-zinc-150 p-3 rounded-lg flex flex-col gap-1 text-[11px] font-semibold text-zinc-650">
                 <div className="flex justify-between">
-                  <span className="text-zinc-400 uppercase font-extrabold text-[9px]">Venue Location</span>
+                  <span className="text-zinc-700 uppercase font-extrabold text-[9px]">Venue Location</span>
                   <span className="text-zinc-800 font-bold text-right truncate max-w-[250px]">{selectedConclaveForReg.venue}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-400 uppercase font-extrabold text-[9px]">Date Schedule</span>
+                  <span className="text-zinc-700 uppercase font-extrabold text-[9px]">Date Schedule</span>
                   <span className="text-zinc-800 font-bold">{selectedConclaveForReg.dateRange}</span>
                 </div>
                 {(selectedConclaveForReg.startTime || selectedConclaveForReg.endTime) && (
                   <div className="flex justify-between">
-                    <span className="text-zinc-400 uppercase font-extrabold text-[9px]">Timing</span>
+                    <span className="text-zinc-700 uppercase font-extrabold text-[9px]">Timing</span>
                     <span className="text-zinc-800 font-bold">
                       {formatTimeNice(selectedConclaveForReg.startTime)} – {formatTimeNice(selectedConclaveForReg.endTime)}
                     </span>

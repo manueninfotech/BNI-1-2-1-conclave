@@ -224,7 +224,7 @@ export default function Header({
               <span className="text-[12px] font-bold text-zinc-900 leading-tight truncate max-w-[130px] group-hover:text-brand-red transition-colors">
                 {loggedInAdmin?.name || 'Admin'}
               </span>
-              <span className="text-[9.5px] text-zinc-400 font-semibold uppercase tracking-wider leading-none mt-0.5 truncate">
+              <span className="text-[9.5px] text-zinc-650 font-semibold uppercase tracking-wider leading-none mt-0.5 truncate">
                 {loggedInAdmin?.region ? `${loggedInAdmin.region} Admin` : (loggedInAdmin?.role || 'Admin')}
               </span>
             </div>
@@ -235,7 +235,7 @@ export default function Header({
           {showProfileDropdown && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1 text-zinc-700 animate-fade-in font-medium">
               <div className="px-4 py-2 border-b border-zinc-100">
-                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Signed in as</p>
+                <p className="text-[10px] text-zinc-700 font-bold uppercase tracking-wider">Signed in as</p>
                 <p className="text-body-sm font-extrabold text-zinc-800 truncate mt-0.5">{loggedInAdmin?.name || 'Admin'}</p>
               </div>
 

@@ -1,48 +1,57 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Settings as SettingsIcon,
-  CheckCircle2,
   X,
+  Play,
   PlayCircle,
   StopCircle,
   Lock,
   ShieldAlert,
-  ArrowRight,
   Users,
   Award,
   SlidersHorizontal,
-  Gauge,
   Plus,
   Minus,
   Dices,
   ChevronRight,
   Building2,
   AlertTriangle,
+  RotateCcw,
+  Sparkles,
+  LayoutGrid,
+  Layers,
+  Clock,
+  Check,
+  Zap,
+  Search,
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
 import { formatStatus } from '../utils/statusUtils';
 
-export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearGenWarning, onScheduleReady, isHubMode = false }) {
-  // Read locked state from local storage conclaves
+export default function ScheduleGen({
+  selectedConclaveId,
+  showGenWarning,
+  clearGenWarning,
+  onScheduleReady,
+  onNavigateToRunner,
+  isHubMode = false,
+}) {
+  // Conclaves list state
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_schedule_gen_conclaves_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
+      try { return JSON.parse(cached); } catch { }
     }
     const adminCached = localStorage.getItem('bni_admin_conclaves_cache');
     if (adminCached) {
-      try { return JSON.parse(adminCached); } catch (e) { }
+      try { return JSON.parse(adminCached); } catch { }
     }
     return [];
   });
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     async function loadConclaves() {
-      setIsLoading(false);
       try {
         const data = await api.get('/admin/conclaves');
         if (data && data.length > 0) {
@@ -78,12 +87,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
           });
           setConclaves(mapped);
           localStorage.setItem('bni_schedule_gen_conclaves_cache', JSON.stringify(mapped));
-          return;
         }
       } catch (err) {
-        console.error("API load failed for conclaves:", err);
-      } finally {
-        setIsLoading(false);
+        console.error('API load failed for conclaves:', err);
       }
     }
     loadConclaves();
@@ -97,20 +103,17 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
 
   const isLocked = Boolean(selectedConclave?.isScheduleLocked || selectedConclave?.status?.toLowerCase() === 'locked');
 
-  const displayStatus = (status) => {
-    if (isLocked) return 'Locked';
-    return formatStatus(status);
-  };
-
+  // Stats state
   const [stats, setStats] = useState(() => {
     const cached = localStorage.getItem('bni_admin_stats_cache');
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
+      try { return JSON.parse(cached); } catch { }
     }
     return null;
   });
 
   useEffect(() => {
+    let alive = true;
     async function loadStatsAndMembers() {
       if (!selectedConclaveId) return;
       try {
@@ -118,6 +121,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         let allUsers = await api.get('/admin/users').catch(() => []);
 
         let registeredCount = statsData?.counts?.registered || 0;
+        let activeCount = statsData?.counts?.active ?? 0;
         let captainsCount = statsData?.counts?.captains || 0;
 
         const distinctCatCount = new Set((allUsers || []).map(u => u.category?.trim() || u.businessCategory?.trim()).filter(Boolean)).size || 0;
@@ -125,24 +129,32 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         const updatedStats = {
           counts: {
             registered: registeredCount,
+            active: activeCount,
             captains: captainsCount,
             businessTypes: distinctCatCount
           }
         };
-        setStats(updatedStats);
-        localStorage.setItem('bni_admin_stats_cache', JSON.stringify(updatedStats));
+        if (alive) {
+          setStats(updatedStats);
+          localStorage.setItem('bni_admin_stats_cache', JSON.stringify(updatedStats));
+        }
       } catch (err) {
-        console.error("Failed to load conclave stats:", err);
+        console.error('Failed to load conclave stats:', err);
       }
     }
     loadStatsAndMembers();
+    const interval = setInterval(loadStatsAndMembers, 15000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
   }, [selectedConclaveId]);
 
+  // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [checkedQuality, setCheckedQuality] = useState(false);
   const [checkedEdits, setCheckedEdits] = useState(false);
 
-  // Lock background body scroll when modal is open
   useEffect(() => {
     if (isModalOpen) {
       document.body.classList.add('modal-open');
@@ -157,8 +169,6 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     };
   }, [isModalOpen]);
 
-
-
   const isConclaveRunningOrLocked = Boolean(
     selectedConclave && (
       ['running', 'completed', 'locked'].includes((selectedConclave.status || '').toLowerCase()) ||
@@ -171,9 +181,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
   const [isGenerating, setIsGenerating] = useState(false);
   const [elapsed, setElapsed] = useState(isConclaveRunningOrLocked ? 42 : 0);
   const [processed, setProcessed] = useState(isConclaveRunningOrLocked ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
-  const [currentStep, setCurrentStep] = useState(isConclaveRunningOrLocked ? 'Complete' : 'Idle');
-  const [round3Status, setRound3Status] = useState(isConclaveRunningOrLocked ? 'COMPLETED' : 'PENDING');
-  const [activeStepIndex, setActiveStepIndex] = useState(isConclaveRunningOrLocked ? 5 : 0);
+  const [genStep, setGenStep] = useState('Idle');
 
   // Backend Conclave Defaults State
   const [conclaveDefaults, setConclaveDefaults] = useState(() => {
@@ -184,36 +192,55 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     return { personsPerTable: 7, roundCount: 6 };
   });
 
-  // Seating Parameter Config States (Defaulted directly from backend settings)
+  // Parameters
   const [personsPerTable, setPersonsPerTable] = useState(() => conclaveDefaults.personsPerTable || 7);
   const [roundCount, setRoundCount] = useState(() => conclaveDefaults.roundCount || 6);
-  // Automatic mode's break between rounds: 1, 2 or 5 minutes (per conclave).
   const [moveSeconds, setMoveSecondsState] = useState(() => selectedConclave?.moveSeconds || 120);
   const [randomSeed, setRandomSeed] = useState(92843);
   const [manualOverride, setManualOverride] = useState(false);
 
-  const totalAttendees = useMemo(() => {
+  // Active sub-tab inside Schedule Generation
+  const [activeTab, setActiveTab] = useState('planner'); // 'planner' | 'visual' | 'blueprint'
+  const [visualRound, setVisualRound] = useState(1);
+  const [tableSearch, setTableSearch] = useState('');
+
+  // Attendee Seating Pool Scope: false = all registered members; true = only members active in the room today
+  const [activeOnly, setActiveOnly] = useState(false);
+
+  const registeredAttendees = useMemo(() => {
     return Number(stats?.counts?.registered || selectedConclave?.registrationCount || selectedConclave?.participants?.length || 0);
   }, [stats, selectedConclave]);
+
+  const activeAttendees = useMemo(() => {
+    return Number(stats?.counts?.active || 0);
+  }, [stats]);
+
+  const effectiveAttendees = activeOnly ? activeAttendees : registeredAttendees;
+  const totalAttendees = effectiveAttendees;
 
   const captainsCount = useMemo(() => {
     return Number(stats?.counts?.captains || selectedConclave?.captainCount || 0);
   }, [stats, selectedConclave]);
 
+  const [targetTableCount, setTargetTableCount] = useState(null);
+
   const calculatedTableCount = useMemo(() => {
+    if (targetTableCount !== null && targetTableCount > 0) {
+      return targetTableCount;
+    }
     if (totalAttendees <= 0) return selectedConclave?.scheduleSummary?.tableCount || 5;
     return Math.max(1, Math.ceil(totalAttendees / Math.max(2, personsPerTable)));
-  }, [totalAttendees, personsPerTable, selectedConclave]);
+  }, [targetTableCount, totalAttendees, personsPerTable, selectedConclave]);
 
   const handleTableCountChange = (newCount) => {
     const targetTables = Math.max(1, Math.min(50, newCount));
-    if (totalAttendees > 0) {
-      const newCapacity = Math.max(2, Math.ceil(totalAttendees / targetTables));
-      setPersonsPerTable(newCapacity);
-    }
+    setTargetTableCount(targetTables);
+    const count = totalAttendees > 0 ? totalAttendees : 30;
+    const newCapacity = Math.max(2, Math.min(12, Math.ceil(count / targetTables)));
+    setPersonsPerTable(newCapacity);
   };
 
-  // Sync seating parameters if selected conclave changes or conclaveDefaults updates
+  // Sync parameters with conclave
   useEffect(() => {
     const isRunning = Boolean(
       selectedConclave && (
@@ -225,9 +252,6 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     setProgress(isRunning ? 100 : 0);
     setElapsed(isRunning ? 42 : 0);
     setProcessed(isRunning ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
-    setCurrentStep(isRunning ? 'Complete' : 'Idle');
-    setRound3Status(isRunning ? 'COMPLETED' : 'PENDING');
-    setActiveStepIndex(isRunning ? 5 : 0);
     if (selectedConclave) {
       if (typeof selectedConclave.personsPerTable === 'number') {
         setPersonsPerTable(selectedConclave.personsPerTable);
@@ -245,7 +269,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     }
   }, [selectedConclave, stats, conclaveDefaults]);
 
-  // Fetch fresh conclave defaults and round timing directly from backend settings
+  // Round Timing
   const [roundTiming, setRoundTiming] = useState({ bioSeconds: 60, referralSeconds: 30, bufferSeconds: 120 });
 
   useEffect(() => {
@@ -273,7 +297,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
       }
     }
     loadBackendDefaults();
-  }, [selectedConclaveId]);
+  }, [selectedConclaveId, selectedConclave]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -281,14 +305,12 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Expandable algorithm weights
-  const [showWeights, setShowWeights] = useState(false);
+  // Algorithm weights
   const [overlapWeight, setOverlapWeight] = useState(80);
   const [chapterWeight, setChapterWeight] = useState(90);
   const [diversityWeight, setDiversityWeight] = useState(70);
   const [regionWeight, setRegionWeight] = useState(50);
 
-  // Round length is fixed by the organisers: 1 min bio + 30 s referral per person.
   const roundLengthSecs = Math.min(8, personsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
 
   const saveMoveSeconds = async (secs) => {
@@ -311,57 +333,48 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
 
   const handleStartGeneration = async () => {
     if (!selectedConclaveId) {
-      showToast('Error', 'No conclave selected. Please create a conclave first.');
+      showToast('Error', 'No conclave selected. Please select a conclave first.');
       return;
     }
-
+    if (activeOnly && activeAttendees === 0) {
+      showToast(
+        'No Active Members',
+        'There are no members currently active in the room. Switch to "All Registered" or wait for members to open the mobile app.'
+      );
+      return;
+    }
     executeScheduleGeneration();
   };
 
   const executeScheduleGeneration = async () => {
-
-    // Reset visual progress states
     setProgress(0);
     setElapsed(0);
     setProcessed(0);
-    setCurrentStep('Sorting Niches');
-    setRound3Status('IN PROGRESS');
-    setActiveStepIndex(1);
+    setGenStep('Checking member businesses...');
     setIsGenerating(true);
 
-    // Start visual progress simulation timer (runs up to 95% until API finishes)
     let simProgress = 0;
     const simInterval = setInterval(() => {
       simProgress = Math.min(simProgress + 10, 95);
       setProgress(simProgress);
       setElapsed(prev => prev + 1);
-      setProcessed(prev => Math.min(prev + 5, stats?.counts?.registered || 48));
-      if (simProgress === 30) {
-        setCurrentStep('Table Balances');
-        setActiveStepIndex(2);
-      }
-      if (simProgress === 60) {
-        setCurrentStep('Diversity Mapping');
-        setActiveStepIndex(3);
-      }
-      if (simProgress === 80) {
-        setCurrentStep('Conflict Resolution');
-        setActiveStepIndex(4);
-      }
+      setProcessed(prev => Math.min(prev + 5, effectiveAttendees || 48));
+      if (simProgress === 30) setGenStep('Separating members from same chapter...');
+      if (simProgress === 60) setGenStep('Balancing tables...');
+      if (simProgress === 80) setGenStep('Checking for repeat meetings...');
     }, 250);
 
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/generate-schedule`, {
-        activeOnly: false, // Seeded users are offline by default, so activeOnly must be false to seat them
-        // Captains are trained people the admin chooses: never auto-fill them.
+        activeOnly,
         autoFillCaptains: false,
         personsPerTable,
-        roundCount
+        roundCount,
+        tableCount: calculatedTableCount
       });
 
       clearInterval(simInterval);
 
-      // Re-fetch conclaves to update local state with generated schedule & scheduleSummary
       try {
         const data = await api.get('/admin/conclaves');
         setConclaves(data.map(c => {
@@ -375,16 +388,13 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
           };
         }));
       } catch (err) {
-        console.warn("Refetching conclaves failed:", err);
+        console.warn('Refetching conclaves failed:', err);
       }
 
-      // Instantly mark completed
       setProgress(100);
       setIsGenerating(false);
-      setCurrentStep('Schedule Completion');
-      setRound3Status('COMPLETED');
-      setProcessed(stats?.counts?.registered || 48);
-      setActiveStepIndex(5);
+      setGenStep('Schedule Ready');
+      setProcessed(effectiveAttendees || 48);
 
       confetti({
         particleCount: 100,
@@ -392,22 +402,19 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         origin: { y: 0.6 }
       });
 
-      showToast('Schedule Generated Successfully', 'Tables allocated and saved to database.');
+      showToast('Schedule Created', 'All tables and members have been arranged.');
     } catch (err) {
       clearInterval(simInterval);
-      const msg = err.message || 'Backend schedule generation failed.';
-      console.warn('Backend schedule generation failed:', msg);
+      const msg = err.message || 'Schedule creation failed.';
+      console.warn('Schedule creation failed:', msg);
 
       const isCaptainError = msg.toLowerCase().includes('captain');
       const details = err.details || {};
       if (typeof showGenWarning === 'function') {
         showGenWarning({
           type: isCaptainError ? 'captain' : 'error',
-          title: isCaptainError ? 'Captain Count Mismatch' : 'Schedule Generation Failed',
+          title: isCaptainError ? 'Need More Table Captains' : 'Could Not Create Schedule',
           message: msg,
-          // The engine returns exactly WHY it refused: blocking issues, soft
-          // warnings, the derived roster math, and a one-line hint. Surface all
-          // of it instead of a generic "failed" so the admin can act.
           issues: Array.isArray(details.issues) ? details.issues : [],
           warnings: Array.isArray(details.warnings) ? details.warnings : [],
           derived: details.derived || null,
@@ -417,12 +424,15 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
 
       setIsGenerating(false);
       setProgress(0);
+      setGenStep('Idle');
     }
   };
 
   const handleAbort = () => {
     setIsGenerating(false);
-    showToast('Generation Paused', 'Task execution stopped by administrator.');
+    setProgress(0);
+    setGenStep('Stopped');
+    showToast('Stopped', 'Schedule creation stopped.');
   };
 
   const handleConfirmLock = async () => {
@@ -444,15 +454,14 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         localStorage.setItem('bni_schedule_gen_conclaves_cache', JSON.stringify(updatedConclaves));
         localStorage.setItem('bni_conclaves_cache', JSON.stringify(updatedConclaves));
         localStorage.setItem('bni_superadmin_conclaves_cache', JSON.stringify(updatedConclaves));
-      } catch (e) { }
+      } catch { }
       setIsModalOpen(false);
-      showToast('Conclave Locked Successfully', 'Seating assignments are now frozen, published, and conclave registration is closed.');
+      showToast('Seating Finalized & Locked', 'Table assignments are now locked and visible in the mobile app.');
     } catch (err) {
-      console.error("Backend conclave lock failed:", err.message);
-      showToast('Error', err.message || 'Failed to lock conclave. Please try again.');
+      console.error('Backend conclave lock failed:', err.message);
+      showToast('Error', err.message || 'Failed to lock seating. Please try again.');
     }
 
-    // Confetti drop
     confetti({
       particleCount: 120,
       spread: 70,
@@ -460,50 +469,22 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     });
   };
 
-  // Recharts Progress Gauge Data
-  const chartData = useMemo(() => {
-    return [
-      { name: 'progress', value: progress },
-      { name: 'remaining', value: 100 - progress }
-    ];
-  }, [progress]);
-
-  // Export schedule config as CSV
-  const exportSchedule = () => {
-    const headers = ['Parameter', 'Value'];
-    const config = [
-      ['Conclave', 'Annual Global Summit 2024'],
-      ['Date', 'Nov 12-14, V Convention, Guntur'],
-      ['Members', '1,240'],
-      ['Captains', '48'],
-      ['Rounds', roundCount],
-      ['Tables', Math.ceil(1240 / personsPerTable)],
-      ['Persons Per Table', personsPerTable],
-      ['Random Seed', randomSeed],
-      ['Manual Override', manualOverride ? 'Yes' : 'No'],
-      ['Generation Progress', `${progress}%`],
-      ['Members Processed', processed],
-      ['Elapsed Time (s)', elapsed],
-      ['Current Step', currentStep],
-      ['Status', progress === 100 ? 'COMPLETED' : 'IN PROGRESS']
-    ];
-    const rows = config.map(([param, val]) =>
-      [`"${param}"`, `"${String(val).replace(/"/g, '""')}"`].join(',')
-    );
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `schedule-generation-config-${Date.now()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast('Export Downloaded', `Schedule configuration exported (${progress}% complete).`);
+  const handleStartRound = async (roundNumber = 1) => {
+    if (!selectedConclaveId) return;
+    try {
+      await api.post(`/admin/conclaves/${selectedConclaveId}/start-round`, { roundNumber });
+      showToast('Round 1 Started', 'Round 1 is now in progress.');
+      if (typeof onNavigateToRunner === 'function') {
+        onNavigateToRunner();
+      }
+    } catch (err) {
+      console.error('Failed to start round:', err.message || err);
+      showToast('Start Round Failed', err.message || 'Could not start round.');
+    }
   };
 
   const [showRepeatModal, setShowRepeatModal] = useState(false);
 
-  // Lock body scroll when repeat audit modal is active
   useEffect(() => {
     if (showRepeatModal) {
       document.body.classList.add('modal-open');
@@ -617,577 +598,144 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
     )
   );
 
+  // Visual layout round data
+  const currentVisualRoundData = useMemo(() => {
+    if (!selectedConclave?.schedule?.rounds) return null;
+    return selectedConclave.schedule.rounds.find(r => (r.roundNumber || r.round || r.number) === visualRound) || selectedConclave.schedule.rounds[0];
+  }, [selectedConclave, visualRound]);
+
   return (
-    <div className={`w-full flex flex-col gap-3.5 sm:gap-4 animate-fade-in pb-10 sm:pb-14 ${isHubMode ? '' : 'max-w-[1600px] mx-auto'}`}>
+    <div className={`w-full flex flex-col gap-3.5 animate-fade-in pb-8 sm:pb-10 ${isHubMode ? '' : 'max-w-[1600px] mx-auto'}`}>
 
+      {/* Standalone Header (Rendered only when not embedded in ScheduleHub) */}
+      {!isHubMode && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-0.5">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
+              Schedule Generation
+            </h1>
+            <p className="text-xs text-zinc-500 font-semibold mt-0.5">
+              {conclaveName} · Create tables and assign members for every round
+            </p>
+          </div>
+        </div>
+      )}
 
-
-      {/* KPI Overview Grid - Matching the clean, spacious card style */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Members */}
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-2xl flex flex-col justify-between transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Total Members</span>
-          <div className="flex items-baseline justify-between mt-3">
-            <span className="text-display-sm font-extrabold text-zinc-900 leading-none">
-              {stats ? stats.counts.registered.toLocaleString() : (selectedConclave?.memberCount || 0).toLocaleString()}
+      {/* Executive 4-Metric KPI Strip (Feedback UI & Typography) */}
+      <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 sm:grid-cols-4">
+        {/* Metric 1: Total Members */}
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Members</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">
+              {totalAttendees.toLocaleString()}
             </span>
-            <Users className="w-5 h-5 text-zinc-400" />
           </div>
         </div>
 
-        {/* Card 2: Captains */}
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-2xl flex flex-col justify-between transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Table Captains</span>
-          <div className="flex items-baseline justify-between mt-3">
-            <span className="text-display-sm font-extrabold text-zinc-900 leading-none">
-              {stats ? stats.counts.captains : (selectedConclave?.captainCount || 0)}
-            </span>
-            <Award className="w-5 h-5 text-zinc-400" />
+        {/* Metric 2: Table Captains */}
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Table Captains</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainsCount}</span>
+          </div>
+          <div className="text-[10px] font-bold truncate">
           </div>
         </div>
 
-        {/* Card 3: Quality Score */}
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-2xl flex flex-col justify-between transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Quality Score</span>
-          <div className="flex items-baseline justify-between mt-3">
-            <span className="text-display-sm font-extrabold text-emerald-600 leading-none">
-              {uniqueMeetingsVal}% Optimal
-            </span>
-            <Gauge className="w-5 h-5 text-emerald-500" />
+        {/* Metric 3: Total Seats */}
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Seats</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{calculatedTableCount * personsPerTable}</span>
+          </div>
+        </div>
+
+        {/* Metric 4: People You Meet */}
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">People You Meet</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{Math.max(1, personsPerTable - 1) * roundCount}</span>
           </div>
         </div>
       </div>
 
       {/* Completed Notice */}
       {isConclaveCompleted && (
-        <div className="p-4 bg-amber-50 border border-amber-200/80 rounded-2xl text-amber-900 text-xs font-bold flex items-center justify-between shadow-2xs">
+        <div className="p-3.5 sm:p-4 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2.5">
             <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>This conclave is <strong>{formatStatus(selectedConclave?.status)}</strong>. Assignments are locked and archived.</span>
+            <span>This conclave is <strong>{formatStatus(selectedConclave?.status)}</strong>. Seating is finalized and locked.</span>
           </div>
-          <span className="px-2.5 py-1 bg-amber-200/60 rounded text-[9.5px] font-black uppercase tracking-wider text-amber-900">Completed</span>
+          <span className="px-2.5 py-0.5 bg-amber-200/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+            Locked
+          </span>
         </div>
       )}
 
-      {/* 2. SPLIT WORKBENCH CANVAS (Left: Parameter Config, Right: Real-time Synthesis Engine) */}
-      <div className="bg-white border border-zinc-200/90 rounded-2xl shadow-sm overflow-hidden flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-zinc-200/80">
-
-        {/* LEFT COLUMN: Seating Constraints & Rules */}
-        <div className="w-full lg:w-[500px] xl:w-[540px] p-5 sm:p-6 space-y-5 bg-zinc-50/50 shrink-0 flex flex-col justify-between">
-          <div className="space-y-5">
-            <div className="flex items-center justify-between border-b border-zinc-200/80 pb-3">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-brand-red" />
-                <h3 className="font-black text-zinc-950 text-xs uppercase tracking-wider">Seating Parameters</h3>
-              </div>
-              <span className="text-[10px] font-bold text-zinc-500 bg-white px-2 py-0.5 rounded-md border border-zinc-200">
-                Constraints
-              </span>
-            </div>
-
-            {/* Steppers Container (2 Per Row) */}
-            <div className="grid grid-cols-2 gap-3 w-full">
-              {/* Stepper 1: Number of Tables */}
-              <div className="space-y-1.5 w-full flex flex-col justify-between">
-                <div className="min-h-[28px] flex flex-col justify-end">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                    <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight whitespace-nowrap">
-                      Number of Tables
-                    </label>
-                    <span className="font-bold text-brand-red text-[8.5px] sm:text-[9.5px] whitespace-nowrap">
-                      {totalAttendees > 0 ? `${totalAttendees} Attendees Total` : 'Setup'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center bg-white border border-zinc-250 rounded-xl p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || calculatedTableCount <= 1}
-                    onClick={() => handleTableCountChange(calculatedTableCount - 1)}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                    title="Decrease tables (increases seats per table)"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex-1 flex flex-col items-center">
-                    <input
-                      type="number"
-                      min={1}
-                      max={8}
-                      disabled={isConclaveCompleted}
-                      value={calculatedTableCount}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value);
-                        if (!isNaN(parsed)) handleTableCountChange(parsed);
-                      }}
-                      className="w-full text-center font-black text-zinc-950 text-base sm:text-lg leading-tight outline-none bg-transparent py-0"
-                    />
-                    <span className="text-[8px] sm:text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider leading-none mt-0.5">Tables to Set Up</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || calculatedTableCount >= 50}
-                    onClick={() => handleTableCountChange(calculatedTableCount + 1)}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                    title="Increase tables (decreases seats per table)"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Stepper 2: Members / Capacity Per Table */}
-              <div className="space-y-1.5 w-full flex flex-col justify-between">
-                <div className="min-h-[28px] flex flex-col justify-end">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                    <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight whitespace-nowrap">
-                      Members Per Table
-                    </label>
-                    <span className="font-bold text-emerald-700 text-[8.5px] sm:text-[9.5px] whitespace-nowrap">
-                      {Math.max(1, personsPerTable - 1)} Members + 1 Captain
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center bg-white border border-zinc-250 rounded-xl p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || personsPerTable <= 2}
-                    onClick={() => setPersonsPerTable(prev => Math.max(2, prev - 1))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex-1 flex flex-col items-center">
-                    <input
-                      type="number"
-                      min={2}
-                      max={8}
-                      disabled={isConclaveCompleted}
-                      value={personsPerTable}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value);
-                        if (!isNaN(parsed)) setPersonsPerTable(Math.min(8, Math.max(2, parsed)));
-                      }}
-                      className="w-full text-center font-black text-zinc-950 text-base sm:text-lg leading-tight outline-none bg-transparent py-0"
-                    />
-                    <span className="text-[8px] sm:text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider leading-none mt-0.5">Total Seats / Table</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || personsPerTable >= 8}
-                    onClick={() => setPersonsPerTable(prev => Math.min(8, prev + 1))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Visual Table Seats Preview */}
-                <div className="flex items-center justify-center gap-1 pt-0.5">
-                  {Array.from({ length: Math.min(10, personsPerTable) }).map((_, sIdx) => (
-                    <span
-                      key={sIdx}
-                      className={`w-1.5 h-1.5 rounded-full ${sIdx === 0 ? 'bg-brand-red ring-2 ring-red-200' : 'bg-zinc-300'}`}
-                      title={sIdx === 0 ? 'Table Captain' : `Member ${sIdx}`}
-                    />
-                  ))}
-                  {personsPerTable > 10 && (
-                    <span className="text-[8.5px] font-bold text-zinc-400">+{personsPerTable - 10}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Stepper 3: Number of Rounds */}
-              <div className="space-y-1.5 w-full flex flex-col justify-between">
-                <div className="min-h-[28px] flex flex-col justify-end">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                    <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight whitespace-nowrap">
-                      Total Rounds
-                    </label>
-                    <span className="font-bold text-zinc-400 uppercase text-[8.5px] sm:text-[9.5px] whitespace-nowrap">
-                      Sessions
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center bg-white border border-zinc-250 rounded-xl p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || roundCount <= 1}
-                    onClick={() => setRoundCount(prev => Math.max(1, prev - 1))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex-1 flex flex-col items-center">
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      disabled={isConclaveCompleted}
-                      value={roundCount}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value);
-                        if (!isNaN(parsed)) setRoundCount(Math.min(20, Math.max(1, parsed)));
-                      }}
-                      className="w-full text-center font-black text-zinc-950 text-base sm:text-lg leading-tight outline-none bg-transparent py-0"
-                    />
-                    <span className="text-[8px] sm:text-[8.5px] font-bold text-zinc-400 uppercase tracking-wider leading-none mt-0.5">Conclave Sessions</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isConclaveCompleted || roundCount >= 20}
-                    onClick={() => setRoundCount(prev => Math.min(20, prev + 1))}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-zinc-100 hover:bg-zinc-200/70 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Round length (fixed) and move time between rounds */}
-              <div className="space-y-1.5 w-full flex flex-col justify-between">
-                <div className="min-h-[28px] flex flex-col justify-end">
-                  <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px] leading-tight">
-                    Round length
-                  </label>
-                </div>
-                <div className="bg-white border border-zinc-250 rounded-xl px-3 py-2 shadow-2xs">
-                  <p className="font-black text-zinc-950 text-base sm:text-lg leading-tight">{Math.round(roundLengthSecs / 60 * 10) / 10} min</p>
-                  <p className="text-[9.5px] font-semibold text-zinc-500 leading-snug">
-                    {Math.min(8, personsPerTable)} × 1 min bio, then {Math.min(8, personsPerTable)} × 30 s referrals. Fixed.
-                  </p>
-                </div>
-              </div>
-
-              <div className="col-span-2 space-y-1.5">
-                <label className="font-black text-zinc-800 uppercase tracking-wider text-[10px] sm:text-[10.5px]">
-                  Move time between rounds (automatic mode)
-                </label>
-                <div className="flex gap-2">
-                  {[60, 120, 300].map((secs) => (
-                    <button
-                      key={secs}
-                      type="button"
-                      disabled={isConclaveCompleted}
-                      onClick={() => saveMoveSeconds(secs)}
-                      className={`flex-1 py-2 rounded-xl border text-sm font-bold transition-smooth cursor-pointer disabled:opacity-40 ${moveSeconds === secs ? 'bg-brand-red border-brand-red text-white' : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
-                        }`}
-                    >
-                      {secs / 60} min
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[9.5px] font-semibold text-zinc-500">In manual mode the next round starts when you start it.</p>
-              </div>
-            </div>
-
-            {/* Random Seed & Manual Override */}
-            <div className="grid grid-cols-2 gap-3.5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-500 font-black uppercase tracking-wider block">Random Seed</label>
-                <div className="flex items-center bg-white border border-zinc-250 rounded-xl px-3 py-2 shadow-2xs">
-                  <input
-                    type="number"
-                    value={randomSeed}
-                    onChange={(e) => setRandomSeed(parseInt(e.target.value) || 92843)}
-                    className="w-full text-xs font-black text-zinc-900 outline-none bg-transparent"
-                  />
-                  <button
-                    type="button"
-                    title="Generate new seed"
-                    onClick={() => {
-                      const next = Math.floor(10000 + Math.random() * 90000);
-                      setRandomSeed(next);
-                      showToast('Seed Updated', `Generator random seed set to ${next}`);
-                    }}
-                    className="text-zinc-400 hover:text-brand-red cursor-pointer ml-1"
-                  >
-                    <Dices className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-zinc-500 font-black uppercase tracking-wider block">Manual Overrides</label>
-                <div className="flex items-center justify-between bg-white border border-zinc-250 rounded-xl px-3 py-2 shadow-2xs">
-                  <span className="text-xs font-black text-zinc-800">{manualOverride ? 'Enabled' : 'Locked'}</span>
-                  <label className="relative inline-flex items-center cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={manualOverride}
-                      onChange={(e) => {
-                        setManualOverride(e.target.checked);
-                        showToast('Mode Changed', `Manual override: ${e.target.checked ? 'Enabled' : 'Disabled'}`);
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-8 h-4.5 bg-zinc-250 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-brand-red"></div>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Algorithm Weights Drawer */}
-            <div className="border border-zinc-200/80 bg-white rounded-2xl p-4 space-y-3 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black text-zinc-900 uppercase tracking-wider">Engine Bias</span>
-                <button
-                  type="button"
-                  onClick={() => setShowWeights(!showWeights)}
-                  className="text-[10.5px] text-brand-red font-black hover:underline cursor-pointer"
-                >
-                  {showWeights ? 'Collapse' : 'Tune Weights →'}
-                </button>
-              </div>
-
-              {showWeights ? (
-                <div className="space-y-3 pt-1 text-xs">
-                  <div>
-                    <div className="flex justify-between font-bold text-zinc-500 mb-1">
-                      <span>Overlap Avoidance</span>
-                      <span className="text-zinc-950 font-black">{overlapWeight}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={overlapWeight}
-                      onChange={(e) => setOverlapWeight(parseInt(e.target.value))}
-                      className="w-full accent-brand-red cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold text-zinc-500 mb-1">
-                      <span>Chapter Diversity</span>
-                      <span className="text-zinc-950 font-black">{diversityWeight}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={diversityWeight}
-                      onChange={(e) => setDiversityWeight(parseInt(e.target.value))}
-                      className="w-full accent-brand-red cursor-pointer"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1.5 text-[11px] font-semibold text-zinc-500">
-                  <div className="flex items-center justify-between">
-                    <span>Cross-Chapter Separation</span>
-                    <span className="text-emerald-600 font-bold">Enforced</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Duplicate Partner Collision</span>
-                    <span className="text-emerald-600 font-bold">Filtered (0%)</span>
-                  </div>
-                </div>
-              )}
-            </div>
+      {/* Central Optimization Command Center */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 sm:p-5 shadow-2xs space-y-4">
+        {/* Header Row: Title, Status Pill, Action Buttons */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-zinc-950 tracking-tight">
+              Schedule Generation
+            </h2>
+            <p className="text-xs text-zinc-400 font-semibold mt-1">
+              Automatically arranges members at different tables each round so people meet new business partners without repeats.
+            </p>
           </div>
 
-          {/* Roster Readiness */}
-          <div className="border-t border-zinc-200/80 pt-4 space-y-2">
-            <span className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider block">Attendee Roster Readiness</span>
-
-            {/* Indicator 1: Total Tables Setup */}
-            <div className="flex items-center justify-between text-xs font-bold text-zinc-700 bg-white p-2.5 rounded-xl border border-zinc-200/60 shadow-2xs">
-              <span className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-brand-red" />
-                <span>Total Tables</span>
-              </span>
-              <strong className="text-zinc-950 font-black">
-                {calculatedTableCount} Tables ({totalAttendees} registered)
-              </strong>
-            </div>
-
-            {/* Indicator 2: Members Per Table */}
-            <div className="flex items-center justify-between text-xs font-bold text-zinc-700 bg-white p-2.5 rounded-xl border border-zinc-200/60 shadow-2xs">
-              <span className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span>Members / Table</span>
-              </span>
-              <strong className="text-zinc-950 font-black">
-                {Math.max(1, personsPerTable - 1)} Members + 1 Captain ({personsPerTable} seats)
-              </strong>
-            </div>
-
-            {/* Indicator 3: Captains Coverage */}
-            <div className="flex items-center justify-between text-xs font-bold text-zinc-700 bg-white p-2.5 rounded-xl border border-zinc-200/60 shadow-2xs">
-              <span className="flex items-center gap-2">
-                {captainsCount >= calculatedTableCount ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                )}
-                <span>Captains Coverage</span>
-              </span>
-              <strong className="text-zinc-950 font-black text-right">
-                {captainsCount === calculatedTableCount ? (
-                  <span className="text-emerald-700">{captainsCount} / {calculatedTableCount} Tables (✓ 100%)</span>
-                ) : captainsCount > calculatedTableCount ? (
-                  <span className="text-emerald-700">{captainsCount} Assigned ({calculatedTableCount} Tables · {captainsCount - calculatedTableCount} Standby)</span>
-                ) : (
-                  <span className="text-amber-600">{captainsCount} / {calculatedTableCount} Tables (⚠️ Need {calculatedTableCount - captainsCount} More)</span>
-                )}
-              </strong>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Real-time Synthesis Engine & Live Quality Diagnostics */}
-        <div className="flex-1 p-6 sm:p-8 space-y-6 flex flex-col justify-between bg-white">
-
-          {/* Engine Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-zinc-100 pb-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="font-black text-zinc-950 text-base tracking-tight">Matrix Optimization Engine</h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider border ${isGenerating
-                  ? 'bg-red-50 text-brand-red border-red-200 animate-pulse'
-                  : progress === 100
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                  }`}>
-                  {isGenerating ? 'Synthesizing...' : progress === 100 ? 'Matrix Complete & Optimal' : 'Ready'}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400 font-semibold mt-0.5">Constraint satisfaction engine with dynamic table rebalancing</p>
-            </div>
-          </div>
-
-          {/* Centerstage: Radial Progress + Pipeline + Execution Pods */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center py-2">
-            {/* Circular Gauge */}
-            <div className="md:col-span-5 flex flex-col items-center justify-center">
-              <div className="w-40 h-40 relative flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={56}
-                      outerRadius={68}
-                      startAngle={90}
-                      endAngle={-270}
-                      dataKey="value"
-                    >
-                      <Cell fill="#af101a" stroke="none" />
-                      <Cell fill="#f4f4f5" stroke="none" />
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute flex flex-col items-center">
-                  <span className="text-3xl font-black text-zinc-950 leading-none tracking-tight">{progress}%</span>
-                  <span className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mt-1">Synthesis</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Execution Pods */}
-            <div className="md:col-span-7 flex flex-col justify-center">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-zinc-50 border border-zinc-200/70 rounded-2xl p-4">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Elapsed</span>
-                  <strong className="text-base font-black text-zinc-900 mt-1 block">00:{elapsed < 10 ? `0${elapsed}` : elapsed}s</strong>
-                </div>
-
-                <div className="bg-zinc-50 border border-zinc-200/70 rounded-2xl p-4">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Processed</span>
-                  <strong className="text-base font-black text-zinc-900 mt-1 block">{processed} / {stats?.counts?.registered || selectedConclave?.memberCount || 0}</strong>
-                </div>
-
-                <div className="bg-zinc-50 border border-zinc-200/70 rounded-2xl p-4">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Estimated ETA</span>
-                  <strong className="text-base font-black text-brand-red mt-1 block">{progress === 100 ? '0s' : `${Math.ceil((100 - progress) * 0.8)}s`}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Embedded Seating Quality Diagnostics (No Cards!) */}
-          <div className="border border-zinc-200/80 rounded-2xl p-4 sm:p-5 bg-zinc-50/60 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-zinc-200/60 pb-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Optimization Health Gauges</span>
-              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">98% Benchmark Met</span>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              {/* Unique Meetings */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-extrabold text-zinc-700">Unique Networking Connections</span>
-                  <span className="font-black text-emerald-700">{uniqueMeetingsVal}% <span className="text-[9.5px] font-bold text-zinc-400">(Goal &gt;90%)</span></span>
-                </div>
-                <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700"
-                    style={{ width: `${uniqueMeetingsVal}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Repeat Pairings */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-extrabold text-zinc-700">Repeat Pairings Collisions</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-zinc-950">{repeatedPairingsVal} duplicates</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowRepeatModal(true)}
-                      className="text-[10px] font-black text-brand-red hover:underline cursor-pointer"
-                    >
-                      (View Names →)
-                    </button>
-                  </div>
-                </div>
-                <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-brand-red rounded-full transition-all duration-700"
-                    style={{ width: `${Math.min(100, (repeatedPairingsVal || 0) * 8)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Diversity */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-extrabold text-zinc-700">Cross-Chapter Diversity Score</span>
-                  <span className="font-black text-blue-700">{diversityVal}% <span className="text-[9.5px] font-bold text-zinc-400">(Balanced)</span></span>
-                </div>
-                <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-700"
-                    style={{ width: `${diversityVal}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Engine CTA Controls */}
-          <div className="pt-2">
+          {/* Action Button Group */}
+          <div className="flex items-center gap-2.5 flex-wrap">
             {isGenerating ? (
               <button
                 type="button"
                 onClick={handleAbort}
-                className="w-full flex items-center justify-center gap-2 border border-brand-red text-brand-red hover:bg-red-50/50 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-brand-red text-brand-red hover:bg-red-50/50 text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer"
               >
-                <StopCircle className="w-4.5 h-4.5" />
-                <span>Abort Generation Task</span>
+                <StopCircle className="w-4 h-4" />
+                <span>Stop</span>
               </button>
             ) : progress === 100 ? (
-              <div className="flex flex-col sm:flex-row gap-3">
-                {onScheduleReady && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleStartGeneration}
+                  disabled={isLocked || isConclaveCompleted}
+                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-40"
+                  title="Create the schedule again"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Create Again</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('visual')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-extrabold transition-smooth cursor-pointer shadow-2xs"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>View Tables</span>
+                </button>
+
+                {selectedConclave?.status?.toLowerCase() === 'running' ? (
                   <button
                     type="button"
-                    onClick={onScheduleReady}
-                    className="flex-1 flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl bg-brand-red hover:bg-red-750 text-white font-black text-xs uppercase tracking-wider transition-smooth cursor-pointer shadow-sm"
+                    onClick={() => onNavigateToRunner && onNavigateToRunner()}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer shadow-sm animate-pulse"
                   >
-                    <span>Inspect Seating Matrix</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Round in Progress →</span>
+                  </button>
+                ) : !isConclaveCompleted && (
+                  <button
+                    type="button"
+                    onClick={() => handleStartRound(1)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer shadow-sm"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Start Round 1 →</span>
                   </button>
                 )}
 
@@ -1200,140 +748,910 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                     }
                     setIsModalOpen(true);
                   }}
-                  disabled={isLocked}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl text-xs font-black transition-smooth cursor-pointer uppercase tracking-wider ${isLocked
-                    ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg'
+                  disabled={isLocked || isConclaveCompleted}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer ${isLocked || isConclaveCompleted
+                    ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
                     }`}
                 >
-                  <Lock className="w-4 h-4" />
-                  <span>{isLocked ? 'Conclave Locked' : 'Lock Conclave & Publish'}</span>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{isLocked ? 'Schedule Locked' : 'Lock & Finalize'}</span>
                 </button>
-              </div>
+              </>
             ) : (
               <button
                 type="button"
                 onClick={handleStartGeneration}
-                className="w-full flex items-center justify-center gap-2.5 bg-gradient-to-r from-red-600 to-brand-red hover:from-red-500 hover:to-red-700 text-white py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-smooth shadow-lg shadow-red-900/30 cursor-pointer"
+                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider transition-smooth shadow-sm cursor-pointer"
               >
-                <PlayCircle className="w-5 h-5" />
-                <span>Start Schedule Generation</span>
+                <PlayCircle className="w-4.5 h-4.5" />
+                <span>Create Schedule</span>
               </button>
             )}
           </div>
-
         </div>
 
-      </div>
-
-      {/* 3. INTEGRATED ROUND BLUEPRINT MATRIX TABLE */}
-      <div className="bg-white border border-zinc-200/90 rounded-2xl shadow-sm overflow-hidden">
-        {/* Table Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-zinc-200/80 bg-zinc-50/50">
-          <div>
-            <h3 className="font-black text-zinc-950 text-base tracking-tight">Round Allocations & Table Distribution</h3>
-            <p className="text-xs text-zinc-400 font-semibold mt-0.5">Live status and seat fulfillment per conclave session</p>
+        {/* Dynamic Center State Body */}
+        {isGenerating ? (
+          /* State 1: Active Progress */
+          <div className="bg-zinc-50/80 border border-zinc-200 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-extrabold text-zinc-900 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-brand-red animate-pulse" />
+                <span>{genStep}</span>
+              </span>
+              <span className="font-black text-brand-red">{progress}% complete</span>
+            </div>
+            <div className="w-full h-3 bg-zinc-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-red rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3 pt-1 text-center">
+              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Time Elapsed</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">00:{elapsed < 10 ? `0${elapsed}` : elapsed}s</strong>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Members Placed</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">{processed} / {totalAttendees}</strong>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Time Remaining</span>
+                <strong className="text-xs font-black text-brand-red mt-0.5 block">{Math.ceil((100 - progress) * 0.8)}s</strong>
+              </div>
+            </div>
           </div>
-          <span className="px-3 py-1 bg-white border border-zinc-200/80 rounded-full text-[10px] font-black uppercase tracking-wider text-zinc-700 shadow-2xs">
-            {roundCount} Rounds Scheduled
-          </span>
-        </div>
+        ) : progress === 100 ? (
+          /* State 2: Generated & Verification Matrix */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Health 1: New Connections */}
+              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-zinc-700">New Connections</span>
+                  <span className="font-black text-emerald-700">{uniqueMeetingsVal}%</span>
+                </div>
+                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{ width: `${uniqueMeetingsVal}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-400 font-semibold">Goal: Meet different people each round</p>
+              </div>
 
-        {/* Clean, Dense Table Layout */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-zinc-200/70 bg-zinc-50/80 text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                <th className="py-3.5 px-6">Round</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Tables</th>
-                <th className="py-3.5 px-4">Members Seated</th>
-                <th className="py-3.5 px-4">Captains</th>
-                <th className="py-3.5 px-4">Capacity Utilization</th>
-                <th className="py-3.5 px-6 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 font-semibold text-zinc-700">
-              {Array.from({ length: roundCount }).map((_, idx) => {
-                const roundNum = idx + 1;
-                const currentRound = selectedConclave?.currentRound || 0;
-                let roundStatus = 'SCHEDULED';
-                let isRoundCompleted = false;
-                let isRoundActive = false;
+              {/* Health 2: Repeat Meetings */}
+              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-zinc-700">Repeat Pairings</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-zinc-950">{repeatedPairingsVal} repeats</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowRepeatModal(true)}
+                      className="text-[10.5px] font-black text-brand-red hover:underline cursor-pointer ml-1"
+                    >
+                      (See Names →)
+                    </button>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 rounded-full"
+                    style={{ width: `${Math.min(100, (repeatedPairingsVal || 0) * 8)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-400 font-semibold">Members sitting together more than once</p>
+              </div>
 
-                if (progress < 100) {
-                  roundStatus = roundNum === 1 ? 'GENERATING...' : 'QUEUED';
-                } else if (isConclaveCompleted) {
-                  roundStatus = 'COMPLETED';
-                  isRoundCompleted = true;
-                } else if (currentRound === 0) {
-                  roundStatus = 'SCHEDULED';
-                } else if (roundNum < currentRound) {
-                  roundStatus = 'COMPLETED';
-                  isRoundCompleted = true;
-                } else if (roundNum === currentRound) {
-                  roundStatus = 'ACTIVE';
-                  isRoundActive = true;
-                } else {
-                  roundStatus = 'SCHEDULED';
-                }
+              {/* Health 3: Chapter Mixing */}
+              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold text-zinc-700">Chapter Mixing</span>
+                  <span className="font-black text-blue-700">{diversityVal}%</span>
+                </div>
+                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full"
+                    style={{ width: `${diversityVal}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-400 font-semibold">Keeps same-chapter members at different tables</p>
+              </div>
+            </div>
 
-                const totalTables = Math.ceil((stats?.counts?.registered || selectedConclave?.memberCount || 0) / (personsPerTable || 6));
-                const totalMembers = stats?.counts?.registered || selectedConclave?.memberCount || 0;
+            {/* Quick summary strip */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-zinc-600 bg-zinc-50/50 px-4 py-2.5 rounded-lg border border-zinc-200/60">
+              <span className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>{roundCount} Rounds Created</span>
+              </span>
+              <span>·</span>
+              <span>{calculatedTableCount} Tables Each Round</span>
+              <span>·</span>
+              <span>{totalAttendees} Members Seated</span>
+              <span>·</span>
+              <span>{captainsCount} Captains Assigned</span>
+            </div>
+          </div>
+        ) : (
+          /* State 3: Ready for Generation (Readiness Checklist) */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Seating Pool</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
+                  {activeOnly ? 'Active in Room' : 'All Registered'}
+                </strong>
+                <span className="text-[10px] font-semibold text-zinc-500">
+                  {totalAttendees} {activeOnly ? 'active members' : 'members'}
+                </span>
+              </div>
+              <span className={`p-1 rounded-full ${activeOnly && activeAttendees === 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {activeOnly && activeAttendees === 0 ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+              </span>
+            </div>
 
-                return (
-                  <tr key={roundNum} className="hover:bg-zinc-50/70 transition-colors">
-                    <td className="py-4 px-6 font-black text-zinc-950">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800">
-                          {roundNum}
-                        </span>
-                        <span>Round {roundNum}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider border ${isRoundCompleted
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : isRoundActive
-                          ? 'bg-red-50 text-brand-red border-red-200 animate-pulse'
-                          : 'bg-zinc-100 text-zinc-600 border-zinc-200/60'
-                        }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${isRoundCompleted ? 'bg-emerald-500' : isRoundActive ? 'bg-brand-red' : 'bg-zinc-400'}`} />
-                        {roundStatus}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 font-black text-zinc-900">{totalTables} Tables</td>
-                    <td className="py-4 px-4 font-black text-zinc-900">{totalMembers.toLocaleString()} Members</td>
-                    <td className="py-4 px-4 font-bold text-zinc-600">{stats ? stats.counts.captains : (selectedConclave?.captainCount || 0)} Captains</td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2.5 max-w-[160px]">
-                        <div className="flex-1 h-2 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${progress === 100 ? 100 : progress}%` }} />
-                        </div>
-                        <span className="text-[10px] font-black text-zinc-600">{progress === 100 ? '100%' : `${progress}%`}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      {onScheduleReady && progress === 100 ? (
-                        <button
-                          type="button"
-                          onClick={onScheduleReady}
-                          className="inline-flex items-center gap-1 text-xs font-black text-brand-red hover:text-red-750 cursor-pointer"
-                        >
-                          <span>Review</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <span className="text-zinc-400 text-xs font-semibold">Configured</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Table Captains</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
+                  {captainsCount} / {calculatedTableCount} Tables
+                </strong>
+                <span className="text-[10px] font-semibold text-zinc-500">
+                  {captainsCount >= calculatedTableCount ? 'Captains ready' : 'Need more captains'}
+                </span>
+              </div>
+              {captainsCount >= calculatedTableCount ? (
+                <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
+                  <Check className="w-4 h-4" />
+                </span>
+              ) : (
+                <span className="p-1 rounded-full bg-amber-100 text-amber-700">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+              )}
+            </div>
+
+            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Extra Seats Available</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
+                  {Math.max(0, (calculatedTableCount * personsPerTable) - totalAttendees)} Extra Seats
+                </strong>
+                <span className="text-[10px] font-semibold text-zinc-500">
+                  {calculatedTableCount * personsPerTable} total capacity
+                </span>
+              </div>
+              <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
+                <Check className="w-4 h-4" />
+              </span>
+            </div>
+
+            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Arrangement Rules</span>
+                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
+                  No repeat meetings
+                </strong>
+                <span className="text-[10px] font-semibold text-zinc-500">
+                  Balanced seating
+                </span>
+              </div>
+              <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
+                <Check className="w-4 h-4" />
+              </span>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Segmented Workspace Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-zinc-200 pb-2 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setActiveTab('planner')}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'planner'
+            ? 'bg-zinc-900 text-white shadow-xs'
+            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+            }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span>Table Setup</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('visual')}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'visual'
+            ? 'bg-zinc-900 text-white shadow-xs'
+            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+            }`}
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          <span>Room View</span>
+          {hasSchedule && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('blueprint')}
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'blueprint'
+            ? 'bg-zinc-900 text-white shadow-xs'
+            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+            }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Rounds List</span>
+          <span className="px-1.5 py-0.2 bg-zinc-200 text-zinc-700 rounded-full text-[9.5px]">
+            {roundCount}
+          </span>
+        </button>
+      </div>
+
+      {/* TAB CONTENT 1: Table Setup */}
+      {activeTab === 'planner' && (
+        <div className="space-y-4">
+          {/* Seating Cohort Banner */}
+          <div className="bg-white border border-zinc-200/90 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-brand-red shrink-0">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-xs uppercase tracking-wider text-zinc-950">Seating Pool</span>
+                  {activeOnly && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Active Only Mode
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
+                  {activeOnly
+                    ? 'Only seating attendees present in the room who checked in / opened their mobile app today.'
+                    : 'Seating all registered attendees enrolled in this conclave.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center bg-zinc-100 p-1 rounded-xl gap-1 shrink-0">
+              <button
+                type="button"
+                disabled={isConclaveRunningOrLocked}
+                onClick={() => setActiveOnly(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${!activeOnly
+                  ? 'bg-white text-zinc-950 shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-950'
+                  }`}
+              >
+                All Registered ({registeredAttendees})
+              </button>
+              <button
+                type="button"
+                disabled={isConclaveRunningOrLocked}
+                onClick={() => setActiveOnly(true)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${activeOnly
+                  ? 'bg-brand-red text-white shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-950'
+                  }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${activeAttendees > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-300'}`} />
+                <span>Active in Room ({activeAttendees})</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Card 1: Tables & Seats */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-brand-red" />
+                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Tables & Seats</h3>
+                </div>
+                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
+                  Room Size
+                </span>
+              </div>
+
+              {/* Stepper: Number of Tables */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-baseline">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Number of Tables</label>
+                  <span className="text-[10px] font-bold text-brand-red">
+                    {totalAttendees} {activeOnly ? 'active members to seat' : 'members registered'}
+                  </span>
+                </div>
+                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || calculatedTableCount <= 1}
+                    onClick={() => handleTableCountChange(calculatedTableCount - 1)}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="flex-1 text-center font-black text-base text-zinc-950">
+                    {calculatedTableCount} <span className="text-xs font-semibold text-zinc-400">Tables</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || calculatedTableCount >= 50}
+                    onClick={() => handleTableCountChange(calculatedTableCount + 1)}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {/* Quick Table Presets */}
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 pt-1">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(cnt => (
+                    <button
+                      key={cnt}
+                      type="button"
+                      disabled={isConclaveCompleted}
+                      onClick={() => handleTableCountChange(cnt)}
+                      className={`py-1 rounded-md text-[10.5px] font-bold border transition-smooth cursor-pointer text-center ${calculatedTableCount === cnt
+                        ? 'bg-brand-red text-white border-brand-red shadow-2xs'
+                        : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900'
+                        }`}
+                    >
+                      {cnt}T
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stepper: Seats Per Table */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between items-baseline">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Seats at Each Table</label>
+                  <span className="text-[10px] font-bold text-emerald-700">{Math.max(1, personsPerTable - 1)} Members + 1 Captain</span>
+                </div>
+                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || personsPerTable <= 2}
+                    onClick={() => {
+                      setTargetTableCount(null);
+                      setPersonsPerTable(prev => Math.max(2, prev - 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="flex-1 text-center font-black text-base text-zinc-950">
+                    {personsPerTable} <span className="text-xs font-semibold text-zinc-400">Seats</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || personsPerTable >= 12}
+                    onClick={() => {
+                      setTargetTableCount(null);
+                      setPersonsPerTable(prev => Math.min(12, prev + 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Visual Seat Dots */}
+                <div className="flex items-center justify-center gap-1.5 pt-1.5">
+                  {Array.from({ length: Math.min(12, personsPerTable) }).map((_, sIdx) => (
+                    <span
+                      key={sIdx}
+                      className={`w-2 h-2 rounded-full ${sIdx === 0 ? 'bg-brand-red ring-2 ring-red-200' : 'bg-zinc-300'}`}
+                      title={sIdx === 0 ? 'Table Captain' : `Member ${sIdx}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Capacity Reach Summary */}
+              <div className="bg-zinc-50 p-3 rounded-lg border border-zinc-200/80 text-[11px] text-zinc-600 space-y-1">
+                <p className="font-bold text-zinc-900">
+                  Total Seats: {calculatedTableCount * personsPerTable}
+                </p>
+                <p>
+                  You have {totalAttendees} registered members, leaving{' '}
+                  <strong className="text-emerald-700 font-bold">
+                    {Math.max(0, (calculatedTableCount * personsPerTable) - totalAttendees)} extra seats
+                  </strong>{' '}
+                  for guests or walk-ins.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Rounds & Timing */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-brand-red" />
+                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Rounds & Timing</h3>
+                </div>
+                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
+                  Schedule
+                </span>
+              </div>
+
+              {/* Total Rounds Stepper */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-baseline">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Total Rounds</label>
+                  <span className="text-[10px] font-bold text-zinc-400">Number of rounds</span>
+                </div>
+                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || roundCount <= 1}
+                    onClick={() => setRoundCount(prev => Math.max(1, prev - 1))}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="flex-1 text-center font-black text-base text-zinc-950">
+                    {roundCount} <span className="text-xs font-semibold text-zinc-400">Rounds</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isConclaveCompleted || roundCount >= 20}
+                    onClick={() => setRoundCount(prev => Math.min(20, prev + 1))}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Round Length (Fixed Formula) */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Round Time</label>
+                <div className="bg-zinc-50 border border-zinc-250 rounded-xl px-3.5 py-2.5">
+                  <p className="font-black text-base text-zinc-950">{Math.round(roundLengthSecs / 60 * 10) / 10} min per round</p>
+                  <p className="text-[10px] font-semibold text-zinc-500 mt-0.5">
+                    1 min introduction + 30s referral ask per member at the table.
+                  </p>
+                </div>
+              </div>
+
+              {/* Move Time Between Rounds */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Break Between Rounds (to change tables)</label>
+                <div className="flex gap-2">
+                  {[60, 120, 300].map(secs => (
+                    <button
+                      key={secs}
+                      type="button"
+                      disabled={isConclaveCompleted}
+                      onClick={() => saveMoveSeconds(secs)}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-smooth cursor-pointer disabled:opacity-40 ${moveSeconds === secs
+                        ? 'bg-brand-red border-brand-red text-white'
+                        : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
+                        }`}
+                    >
+                      {secs / 60} min
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] font-semibold text-zinc-400">Time allowed for members to walk to their next table.</p>
+              </div>
+            </div>
+
+            {/* Card 3: Arrangement Rules */}
+            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-brand-red" />
+                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Arrangement Rules</h3>
+                </div>
+                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
+                  Preferences
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
+                    <span>Avoid Meeting Same People</span>
+                    <span className="text-zinc-950 font-black">{overlapWeight}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={overlapWeight}
+                    onChange={(e) => setOverlapWeight(parseInt(e.target.value))}
+                    className="w-full accent-brand-red cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
+                    <span>Mix Different Chapters</span>
+                    <span className="text-zinc-950 font-black">{diversityWeight}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={diversityWeight}
+                    onChange={(e) => setDiversityWeight(parseInt(e.target.value))}
+                    className="w-full accent-brand-red cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
+                    <span>Separate Same-Chapter Members</span>
+                    <span className="text-zinc-950 font-black">{chapterWeight}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={chapterWeight}
+                    onChange={(e) => setChapterWeight(parseInt(e.target.value))}
+                    className="w-full accent-brand-red cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
+                    <span>Mix Different Regions</span>
+                    <span className="text-zinc-950 font-black">{regionWeight}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={regionWeight}
+                    onChange={(e) => setRegionWeight(parseInt(e.target.value))}
+                    className="w-full accent-brand-red cursor-pointer"
+                  />
+                </div>
+
+                {/* Seed & Override */}
+                <div className="pt-2 flex items-center justify-between border-t border-zinc-100">
+                  <span className="text-[10.5px] font-bold text-zinc-500">Order Code: {randomSeed}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.floor(10000 + Math.random() * 90000);
+                      setRandomSeed(next);
+                      showToast('Order Shuffled', `Member order shuffled (Code: ${next})`);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10.5px] font-black text-brand-red hover:underline cursor-pointer"
+                  >
+                    <Dices className="w-3.5 h-3.5" />
+                    <span>Shuffle Order</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10.5px] font-bold text-zinc-600">Allow Manual Table Changes</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualOverride(!manualOverride);
+                      showToast('Setting Changed', `Manual table changes: ${!manualOverride ? 'Allowed' : 'Not Allowed'}`);
+                    }}
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-smooth cursor-pointer ${manualOverride
+                      ? 'bg-red-50 text-brand-red border-red-200'
+                      : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                      }`}
+                  >
+                    {manualOverride ? 'Allowed' : 'Locked'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT 2: Room View */}
+      {activeTab === 'visual' && (
+        <div className="bg-white border border-zinc-200 rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs">
+          {/* Visual Bar Header with Round Switcher & Search */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
+            <div>
+              <h3 className="font-black text-base text-zinc-950">Table Seating View</h3>
+              <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                {hasSchedule
+                  ? `Table seating for Round ${visualRound}. Search by member name, business, or table number.`
+                  : `Room layout: ${calculatedTableCount} tables for ${totalAttendees} members.`}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Attendee & Table Search */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search member name, business, or table..."
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  className="w-full pl-8.5 pr-8 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-brand-red transition-smooth"
+                />
+                {tableSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTableSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {hasSchedule && (
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-700 mr-1">Round:</span>
+                  {Array.from({ length: roundCount }).map((_, rIdx) => {
+                    const rNum = rIdx + 1;
+                    return (
+                      <button
+                        key={rNum}
+                        type="button"
+                        onClick={() => setVisualRound(rNum)}
+                        className={`w-7 h-7 rounded-lg text-xs font-black transition-smooth cursor-pointer ${visualRound === rNum
+                          ? 'bg-brand-red text-white shadow-2xs'
+                          : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                          }`}
+                      >
+                        {rNum}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Visual Table Grid */}
+          {(() => {
+            const query = tableSearch.toLowerCase().trim();
+            const allTables = Array.from({ length: calculatedTableCount }).map((_, tblIdx) => {
+              const tableNum = tblIdx + 1;
+              const scheduledTable = currentVisualRoundData?.tables?.find(t => (t.tableNumber || t.number) === tableNum);
+
+              const captain = scheduledTable
+                ? (selectedConclave?.participants || []).find(p => p.id === scheduledTable.captainId) || { name: scheduledTable.captainName || `Captain ${tableNum}` }
+                : null;
+
+              const seatedMembers = scheduledTable && Array.isArray(scheduledTable.memberIds)
+                ? scheduledTable.memberIds.map(mId => (selectedConclave?.participants || []).find(p => p.id === mId) || { name: `Member ${mId}` })
+                : [];
+
+              const captainCat = captain?.category || captain?.businessCategory || '';
+              const allCats = [captainCat, ...seatedMembers.map(m => m.category || m.businessCategory || '')].filter(Boolean).map(c => c.trim().toLowerCase());
+              const hasCategoryConflict = allCats.length !== new Set(allCats).size;
+
+              const matches = !query ||
+                tableNum.toString() === query ||
+                `table ${tableNum}`.includes(query) ||
+                (captain?.name || '').toLowerCase().includes(query) ||
+                captainCat.toLowerCase().includes(query) ||
+                seatedMembers.some(m =>
+                  (m.name || '').toLowerCase().includes(query) ||
+                  (m.category || m.businessCategory || '').toLowerCase().includes(query)
+                );
+
+              return {
+                tableNum,
+                captain,
+                seatedMembers,
+                hasCategoryConflict,
+                matches
+              };
+            });
+
+            const visibleTables = allTables.filter(t => t.matches);
+
+            if (visibleTables.length === 0) {
+              return (
+                <div className="p-8 text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200 space-y-2">
+                  <p className="text-xs font-bold text-zinc-500">No tables matching "{tableSearch}" in Round {visualRound}.</p>
+                  <button
+                    type="button"
+                    onClick={() => setTableSearch('')}
+                    className="text-xs font-extrabold text-brand-red hover:underline cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {visibleTables.map(({ tableNum, captain, seatedMembers, hasCategoryConflict }) => (
+                  <div
+                    key={tableNum}
+                    className={`bg-zinc-50/60 border rounded-xl p-4 space-y-3 transition-smooth ${query && tableSearch ? 'border-brand-red/40 ring-2 ring-brand-red/10 bg-white' : 'border-zinc-200 hover:border-zinc-300'
+                      }`}
+                  >
+                    {/* Table Card Header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-md bg-zinc-900 text-white font-black text-xs flex items-center justify-center">
+                          {tableNum}
+                        </span>
+                        <strong className="text-xs font-black text-zinc-900">Table {tableNum}</strong>
+                        {hasCategoryConflict && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[8.5px] font-black uppercase">
+                            Same Business
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold text-zinc-500 bg-white px-2 py-0.5 rounded border border-zinc-200">
+                        {personsPerTable} Seats
+                      </span>
+                    </div>
+
+                    {/* Captain Slot */}
+                    <div className="bg-red-50/70 border border-brand-red/20 rounded-lg p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2 truncate">
+                        <Award className="w-4 h-4 text-brand-red shrink-0" />
+                        <div className="truncate">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-brand-red block leading-none">Table Captain</span>
+                          <span className="text-xs font-black text-zinc-900 truncate block mt-0.5">
+                            {captain?.name || `Assigned Captain ${tableNum}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Seated Members Preview */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider block">
+                        Members at this Table ({seatedMembers.length ? seatedMembers.length : Math.max(1, personsPerTable - 1)})
+                      </span>
+                      {seatedMembers.length > 0 ? (
+                        <div className="space-y-1">
+                          {seatedMembers.map((m, mIdx) => (
+                            <div key={mIdx} className="bg-white p-1.5 rounded-md border border-zinc-200/70 text-[11px] font-bold text-zinc-800 flex items-center justify-between truncate">
+                              <span className="truncate">{m.name || `Member ${mIdx + 1}`}</span>
+                              <span className="text-[9.5px] font-semibold text-zinc-400 truncate ml-1">{m.category || m.businessCategory || ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {Array.from({ length: Math.max(1, personsPerTable - 1) }).map((_, mIdx) => (
+                            <div key={mIdx} className="bg-white/80 p-1.5 rounded-md border border-dashed border-zinc-200 text-[10px] text-zinc-400 font-semibold text-center">
+                              Seat {mIdx + 2}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* TAB CONTENT 3: Rounds List */}
+      {activeTab === 'blueprint' && (
+        <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">
+          {/* Table Header */}
+          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-200 bg-zinc-50/50">
+            <div>
+              <h3 className="font-black text-zinc-950 text-base tracking-tight">Rounds Overview</h3>
+              <p className="text-xs text-zinc-400 font-semibold mt-0.5">Table count, seated members, and status for each round</p>
+            </div>
+            <span className="px-3 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-black uppercase tracking-wider text-zinc-700 shadow-2xs">
+              {roundCount} Rounds Created
+            </span>
+          </div>
+
+          {/* Clean, Dense Table Layout */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[10px] font-black uppercase tracking-wider text-zinc-700">
+                  <th className="py-3 px-5">Round</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Tables</th>
+                  <th className="py-3 px-4">Members</th>
+                  <th className="py-3 px-4">Captains</th>
+                  <th className="py-3 px-4">Seat Usage</th>
+                  <th className="py-3 px-5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 font-semibold text-zinc-700">
+                {Array.from({ length: roundCount }).map((_, idx) => {
+                  const roundNum = idx + 1;
+                  const currentRound = selectedConclave?.currentRound || 0;
+                  let roundStatus = 'SCHEDULED';
+                  let isRoundCompleted = false;
+                  let isRoundActive = false;
+
+                  if (progress < 100) {
+                    roundStatus = roundNum === 1 ? 'GENERATING...' : 'QUEUED';
+                  } else if (isConclaveCompleted) {
+                    roundStatus = 'COMPLETED';
+                    isRoundCompleted = true;
+                  } else if (currentRound === 0) {
+                    roundStatus = 'SCHEDULED';
+                  } else if (roundNum < currentRound) {
+                    roundStatus = 'COMPLETED';
+                    isRoundCompleted = true;
+                  } else if (roundNum === currentRound) {
+                    roundStatus = 'ACTIVE';
+                    isRoundActive = true;
+                  } else {
+                    roundStatus = 'SCHEDULED';
+                  }
+
+                  const totalTables = calculatedTableCount;
+                  const totalMembers = totalAttendees;
+
+                  return (
+                    <tr key={roundNum} className="hover:bg-zinc-50/70 transition-colors">
+                      <td className="py-3.5 px-5 font-black text-zinc-950">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800">
+                            {roundNum}
+                          </span>
+                          <span>Round {roundNum}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider border ${isRoundCompleted
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : isRoundActive
+                            ? 'bg-red-50 text-brand-red border-red-200 animate-pulse'
+                            : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                          }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isRoundCompleted ? 'bg-emerald-500' : isRoundActive ? 'bg-brand-red' : 'bg-zinc-400'}`} />
+                          {roundStatus}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-black text-zinc-900">{totalTables} Tables</td>
+                      <td className="py-3.5 px-4 font-black text-zinc-900">{totalMembers.toLocaleString()} Members</td>
+                      <td className="py-3.5 px-4 font-bold text-zinc-600">{captainsCount} Captains</td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5 max-w-[160px]">
+                          <div className="flex-1 h-2 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${progress === 100 ? 100 : progress}%` }} />
+                          </div>
+                          <span className="text-[10px] font-black text-zinc-600">{progress === 100 ? '100%' : `${progress}%`}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        {onScheduleReady && progress === 100 ? (
+                          <button
+                            type="button"
+                            onClick={onScheduleReady}
+                            className="inline-flex items-center gap-1 text-xs font-black text-brand-red hover:text-red-750 cursor-pointer"
+                          >
+                            <span>View Tables</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span className="text-zinc-400 text-xs font-semibold">Configured</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* CONFIRM LOCK MODAL OVERLAY */}
       {isModalOpen && createPortal(
@@ -1342,17 +1660,17 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
 
             <div className="p-5 border-b border-zinc-100 bg-zinc-50 flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-brand-red" />
-              <h3 className="font-extrabold text-zinc-955 text-body-sm">Confirm Administrative Lock</h3>
+              <h3 className="font-extrabold text-zinc-900 text-sm">Lock & Finalize Seating</h3>
             </div>
 
-            <div className="p-5 space-y-4 text-body-sm font-semibold text-zinc-655">
+            <div className="p-5 space-y-4 text-xs font-semibold text-zinc-600">
               <p className="leading-relaxed text-[12.5px]">
-                You are about to lock Seating assignments for <strong className="text-zinc-955 font-extrabold">{conclaveName}</strong>.
-                This action is irreversible and disables manual seating overrides.
+                You are about to lock the seating arrangement for <strong className="text-zinc-950 font-extrabold">{conclaveName}</strong>.
+                Once locked, the schedule is final and members will see their assigned tables in the mobile app.
               </p>
 
-              <div className="bg-red-50/20 border-l-4 border-brand-red p-3 text-[10px] text-zinc-700 italic">
-                "The schedule will be pushed to the mobile app and all captains will receive their final rosters."
+              <div className="bg-red-50/50 border-l-4 border-brand-red p-3 text-[11px] text-zinc-700 italic rounded-r-lg">
+                "Table assignments will be sent to the mobile app and table captains."
               </div>
 
               <div className="space-y-3 pt-2">
@@ -1361,9 +1679,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                     type="checkbox"
                     checked={checkedQuality}
                     onChange={(e) => setCheckedQuality(e.target.checked)}
-                    className="w-4.5 h-4.5 text-brand-red border-zinc-200 rounded focus:ring-brand-red cursor-pointer"
+                    className="w-4.5 h-4.5 text-brand-red border-zinc-300 rounded focus:ring-brand-red cursor-pointer accent-brand-red"
                   />
-                  <span className="text-[10px] text-zinc-500 font-bold">I have verified the schedule quality metrics (98%).</span>
+                  <span className="text-[11px] text-zinc-600 font-bold">I have reviewed the tables and seating arrangement.</span>
                 </label>
 
                 <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -1371,9 +1689,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                     type="checkbox"
                     checked={checkedEdits}
                     onChange={(e) => setCheckedEdits(e.target.checked)}
-                    className="w-4.5 h-4.5 text-brand-red border-zinc-200 rounded focus:ring-brand-red cursor-pointer"
+                    className="w-4.5 h-4.5 text-brand-red border-zinc-300 rounded focus:ring-brand-red cursor-pointer accent-brand-red"
                   />
-                  <span className="text-[10px] text-zinc-500 font-bold">I understand this will disable manual table overrides.</span>
+                  <span className="text-[11px] text-zinc-600 font-bold">I understand seating will be locked and cannot be changed.</span>
                 </label>
               </div>
             </div>
@@ -1386,7 +1704,7 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                   setCheckedQuality(false);
                   setCheckedEdits(false);
                 }}
-                className="px-4 py-2 border border-zinc-100 bg-white text-zinc-700 text-button rounded-lg hover:bg-zinc-50 transition-smooth cursor-pointer"
+                className="px-4 py-2 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-xl hover:bg-zinc-50 transition-smooth cursor-pointer"
               >
                 Cancel
               </button>
@@ -1394,9 +1712,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
                 type="button"
                 disabled={!(checkedQuality && checkedEdits)}
                 onClick={handleConfirmLock}
-                className="px-5 py-2 bg-brand-red hover:bg-red-700 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white text-button font-bold rounded-lg shadow-md transition-smooth cursor-pointer"
+                className="px-5 py-2 bg-brand-red hover:bg-red-750 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-sm transition-smooth cursor-pointer"
               >
-                Confirm & Lock
+                Lock Seating
               </button>
             </div>
           </div>
@@ -1411,8 +1729,8 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-zinc-100 pb-4 shrink-0">
               <div>
-                <h3 className="text-body-lg font-black text-zinc-900">Repeat Pairings Audit</h3>
-                <p className="text-[11px] text-zinc-400 font-medium">Members seated together more than once across rounds</p>
+                <h3 className="text-base font-black text-zinc-900">Repeat Meetings List</h3>
+                <p className="text-[11px] text-zinc-400 font-medium">Members sitting together at the same table more than once</p>
               </div>
               <button
                 type="button"
@@ -1428,29 +1746,29 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
               {repeatPairingDetails.length === 0 ? (
                 <div className="p-8 text-center bg-emerald-50/40 rounded-xl border border-emerald-100 space-y-2">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto font-black text-lg">✓</div>
-                  <h4 className="text-body-md font-extrabold text-emerald-900">Zero Repeat Pairings!</h4>
-                  <p className="text-[11px] text-emerald-700">Every member meets 100% unique partners in every single round of this conclave.</p>
+                  <h4 className="text-sm font-extrabold text-emerald-900">No Repeat Meetings!</h4>
+                  <p className="text-[11px] text-emerald-700">Every member will meet completely different people in every single round.</p>
                 </div>
               ) : (
                 repeatPairingDetails.map((pair, idx) => (
-                  <div key={idx} className="p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 space-y-2">
+                  <div key={idx} className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase text-brand-red bg-red-50 px-2 py-0.5 rounded border border-brand-red/10">
-                        {pair.occurrences.length} Times Paired
+                        Sitting Together {pair.occurrences.length} Times
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="bg-white p-3 rounded-lg border border-zinc-200/60 shadow-2xs">
-                        <p className="text-[12px] font-black text-zinc-850 truncate">{pair.member1.name}</p>
-                        <p className="text-[10px] text-zinc-450 truncate mt-0.5">{pair.member1.company || pair.member1.businessCategory || 'Member 1'}</p>
+                      <div className="bg-white p-3 rounded-lg border border-zinc-200 shadow-2xs">
+                        <p className="text-[12px] font-black text-zinc-800 truncate">{pair.member1.name}</p>
+                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">{pair.member1.company || pair.member1.businessCategory || 'Member 1'}</p>
                       </div>
-                      <div className="bg-white p-3 rounded-lg border border-zinc-200/60 shadow-2xs">
-                        <p className="text-[12px] font-black text-zinc-850 truncate">{pair.member2.name}</p>
-                        <p className="text-[10px] text-zinc-450 truncate mt-0.5">{pair.member2.company || pair.member2.businessCategory || 'Member 2'}</p>
+                      <div className="bg-white p-3 rounded-lg border border-zinc-200 shadow-2xs">
+                        <p className="text-[12px] font-black text-zinc-800 truncate">{pair.member2.name}</p>
+                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">{pair.member2.company || pair.member2.businessCategory || 'Member 2'}</p>
                       </div>
                     </div>
                     <div className="text-[10.5px] text-zinc-500 font-medium pt-1">
-                      <span className="font-bold text-zinc-700">Seated Together: </span>
+                      <span className="font-bold text-zinc-700">Tables: </span>
                       {pair.occurrences.map(o => `Round ${o.round} (Table ${o.tableNumber})`).join(' & ')}
                     </div>
                   </div>
@@ -1463,9 +1781,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
               <button
                 type="button"
                 onClick={() => setShowRepeatModal(false)}
-                className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-[12px] rounded-xl transition-smooth cursor-pointer"
+                className="px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-extrabold text-xs rounded-xl transition-smooth cursor-pointer"
               >
-                Close Audit
+                Close
               </button>
             </div>
           </div>
@@ -1473,10 +1791,9 @@ export default function ScheduleGen({ selectedConclaveId, showGenWarning, clearG
         document.body
       )}
 
-      {/* No Time for Table Movement Warning Modal */}
+      {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-5 right-5 z-[70] bg-zinc-900 text-white text-[11px] font-bold py-2.5 px-4 rounded-lg shadow-xl flex items-center gap-2 border border-zinc-800 animate-slide-up">
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span>
+        <div className="fixed bottom-5 right-5 z-[70] bg-zinc-900 text-white text-[11px] font-bold py-2.5 px-4 rounded-xl shadow-xl flex items-center gap-3 border border-zinc-800 animate-slide-up">
           <div>
             <p className="font-bold">{toast.title}</p>
             <p className="text-zinc-400 font-semibold mt-0.5">{toast.desc}</p>

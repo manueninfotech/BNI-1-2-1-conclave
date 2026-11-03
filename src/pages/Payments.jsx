@@ -11,7 +11,7 @@ import Avatar from '../components/Avatar';
  * Paid/pending come from registrations; failed attempts come from the webhook
  * ledger (members who tried to pay and couldn't, so never registered).
  */
-export default function Payments({ selectedConclaveId }) {
+export default function Payments({ selectedConclaveId, embedded = false }) {
   const [data, setData] = useState(null);
   const [conclaveName, setConclaveName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,12 +54,12 @@ export default function Payments({ selectedConclaveId }) {
   const failed = data?.failedAttempts || [];
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1200px] mx-auto w-full flex flex-col gap-6 animate-fade-in">
+    <div className={`${embedded ? 'p-0 pt-0' : 'p-3 sm:p-5'} max-w-[1200px] mx-auto w-full flex flex-col gap-4 animate-fade-in pb-8`}>
       {/* Header */}
-      <div className="border-b border-zinc-100 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+      <div className="border-b border-zinc-100 pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3">
         <div>
           <h2 className="text-dashboard-title text-zinc-950 font-extrabold tracking-tight">Payments</h2>
-          <p className="text-body-text text-zinc-500 mt-2">
+          <p className="text-body-text text-zinc-500 mt-1">
             Each member's registration payment for <span className="font-bold text-brand-red">{conclaveName || 'this conclave'}</span>.
           </p>
         </div>
@@ -72,16 +72,40 @@ export default function Payments({ selectedConclaveId }) {
 
       {error && <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-bold">{error}</div>}
 
-      {/* Counts */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {isFree ? (
-          <Count icon={<Gift className="w-4 h-4" />} label="Free entry" value={counts.free ?? 0} tone="emerald" />
-        ) : (
-          <Count icon={<CheckCircle2 className="w-4 h-4" />} label="Paid" value={counts.paid} tone="emerald" />
-        )}
-        <Count icon={<Clock className="w-4 h-4" />} label="Pending" value={counts.pending} tone="amber" />
-        <Count icon={<XCircle className="w-4 h-4" />} label="Failed" value={counts.failed} tone="red" />
-        <Count icon={<UsersIcon className="w-4 h-4" />} label="Registered" value={counts.total} tone="zinc" />
+      {/* Executive Counts Strip (Feedback UI & Typography) */}
+      <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">{isFree ? 'Free Entry' : 'Paid'}</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{isFree ? (counts.free ?? 0) : counts.paid}</span>
+            <span className="text-xs font-semibold text-zinc-400">members</span>
+          </div>
+          <div className="text-[10px] font-bold text-[#00875A]">Captured successfully</div>
+        </div>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Pending</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{counts.pending}</span>
+            <span className="text-xs font-semibold text-zinc-400">in-flight</span>
+          </div>
+          <div className="text-[10px] font-bold text-amber-600">Awaiting payment</div>
+        </div>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Failed</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{counts.failed}</span>
+            <span className="text-xs font-semibold text-zinc-400">attempts</span>
+          </div>
+          <div className="text-[10px] font-bold text-brand-red">Declined or dropped</div>
+        </div>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Registered</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{counts.total}</span>
+            <span className="text-xs font-semibold text-zinc-400">total</span>
+          </div>
+          <div className="text-[10px] font-bold text-zinc-500">All conclave members</div>
+        </div>
       </div>
 
       {/* Search */}
@@ -154,7 +178,7 @@ function Count({ icon, label, value, tone }) {
   const t = { emerald: 'text-emerald-600', amber: 'text-amber-600', red: 'text-red-600', zinc: 'text-zinc-700' }[tone];
   return (
     <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm">
-      <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1 flex items-center gap-1"><span className={t}>{icon}</span>{label}</p>
+      <p className="text-[10px] font-bold text-zinc-700 uppercase mb-1 flex items-center gap-1"><span className={t}>{icon}</span>{label}</p>
       <h4 className="text-headline-md font-extrabold text-zinc-900 mt-1">{value}</h4>
     </div>
   );

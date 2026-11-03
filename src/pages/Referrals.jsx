@@ -317,42 +317,33 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
         </div>
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs flex flex-col justify-between h-24">
-          <p className="text-[11px] font-bold text-zinc-450 uppercase tracking-wide">Referrals Given</p>
-          <div className="flex items-end justify-between mt-2">
-            <span className="text-2xl font-black text-zinc-900 leading-none">
-              {givenReferrals.length} <span className="text-zinc-400 text-xs font-semibold">Sent</span>
-            </span>
-            <span className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
-              <ArrowUpRight className="w-4 h-4" />
-            </span>
+      {/* KPI Stats Strip (Feedback UI & Typography) */}
+      <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-3 shadow-xs">
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Referrals Given</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{givenReferrals.length}</span>
+            <span className="text-xs font-semibold text-zinc-400">sent</span>
           </div>
+          <div className="text-[10px] font-bold text-[#00875A]">Passed to partners</div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs flex flex-col justify-between h-24">
-          <p className="text-[11px] font-bold text-zinc-450 uppercase tracking-wide">Referrals Received</p>
-          <div className="flex items-end justify-between mt-2">
-            <span className="text-2xl font-black text-zinc-900 leading-none">
-              {receivedReferrals.length} <span className="text-zinc-400 text-xs font-semibold">Received</span>
-            </span>
-            <span className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100">
-              <ArrowDownLeft className="w-4 h-4" />
-            </span>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Referrals Received</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{receivedReferrals.length}</span>
+            <span className="text-xs font-semibold text-zinc-400">received</span>
           </div>
+          <div className="text-[10px] font-bold text-sky-700">Received leads</div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs flex flex-col justify-between h-24">
-          <p className="text-[11px] font-bold text-zinc-450 uppercase tracking-wide">Connected / Closed</p>
-          <div className="flex items-end justify-between mt-2">
-            <span className="text-2xl font-black text-brand-red leading-none">
-              {connectedCount} <span className="text-zinc-400 text-xs font-semibold">Successful</span>
-            </span>
-            <span className="p-2 bg-red-50 text-brand-red rounded-lg border border-red-100">
-              <CheckCircle2 className="w-4 h-4" />
-            </span>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Connected / Closed</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-brand-red tabular-nums">{connectedCount}</span>
+            <span className="text-xs font-semibold text-zinc-400">deals</span>
           </div>
+          <div className="text-[10px] font-bold text-brand-red">Successful conversions</div>
         </div>
       </div>
 

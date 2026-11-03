@@ -161,7 +161,11 @@ export default function SuperadminAdmins({ searchQuery }) {
       setIsPasswordResetDone(true);
     } catch (err) {
       console.error("Failed to reset password:", err);
-      alert(err.message || "Failed to reset coordinator password.");
+      setConfirmModal({
+        title: "Password Reset Error",
+        message: err.message || "Failed to reset coordinator password.",
+        onConfirm: () => {}
+      });
     }
   };
 
@@ -331,10 +335,10 @@ export default function SuperadminAdmins({ searchQuery }) {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in font-sans pb-16 relative">
+    <div className="space-y-4 animate-fade-in font-sans pb-8 sm:pb-10 relative">
 
       {/* Header tabs */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Admins &amp; BNI Regions</h1>
           <p className="text-xs text-zinc-500 font-semibold">Manage regional administrator accounts and BNI regional network nodes.</p>
@@ -588,23 +592,23 @@ export default function SuperadminAdmins({ searchQuery }) {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
-                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Email Address</span>
+                        <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Email Address</span>
                         <span className="text-body-sm font-bold text-zinc-800 mt-1 block truncate select-all">{activeAdmin.email}</span>
                       </div>
                       <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs">
-                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Mobile Number</span>
+                        <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Mobile Number</span>
                         <span className="text-body-sm font-bold text-zinc-800 mt-1 block select-all">{adminMobile}</span>
                       </div>
                     </div>
 
                     {/* Region Metrics */}
                     <div className="space-y-3">
-                      <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Linked Region Summary</h4>
+                      <h4 className="text-[11px] font-black text-zinc-700 uppercase tracking-widest px-0.5">Linked Region Summary</h4>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
                           <CalendarRange className="w-4 h-4 text-brand-red shrink-0" />
                           <div>
-                            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
+                            <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Conclaves</span>
                             <span className="text-[13px] font-black text-zinc-900">
                               {conclaves.filter(c => (c.region || 'Guntur Region') === adminRegion).length} Created
                             </span>
@@ -613,7 +617,7 @@ export default function SuperadminAdmins({ searchQuery }) {
                         <div className="p-3.5 bg-zinc-50/50 border border-zinc-200 rounded-xl flex items-center gap-3">
                           <Users className="w-4 h-4 text-brand-red shrink-0" />
                           <div>
-                            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
+                            <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Members</span>
                             <span className="text-[13px] font-black text-zinc-900">
                               {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).length} Registered
                             </span>
@@ -624,7 +628,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
                     {/* Region Members List preview */}
                     <div className="space-y-3">
-                      <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Registered Members</h4>
+                      <h4 className="text-[11px] font-black text-zinc-700 uppercase tracking-widest px-0.5">Registered Members</h4>
                       <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200 max-h-[220px] overflow-y-auto">
                         {members.filter(m => (m.region ? (typeof m.region === 'object' ? m.region.place : m.region) : (m.location ? (typeof m.location === 'object' ? m.location.place : m.location) : 'Global')) === adminRegion).map(member => (
                           <div key={member.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
@@ -720,14 +724,14 @@ export default function SuperadminAdmins({ searchQuery }) {
                     <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
                       <CalendarRange className="w-4 h-4 text-brand-red shrink-0" />
                       <div>
-                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Conclaves</span>
+                        <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Conclaves</span>
                         <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.conclavesCount} total</span>
                       </div>
                     </div>
                     <div className="p-3.5 bg-white border border-zinc-200 rounded-xl shadow-2xs flex items-center gap-3">
                       <Users className="w-4 h-4 text-brand-red shrink-0" />
                       <div>
-                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider block">Members</span>
+                        <span className="text-[9px] font-black text-zinc-700 uppercase tracking-wider block">Members</span>
                         <span className="text-body-sm font-black text-zinc-800 mt-0.5 block">{activeRegion.membersCount} active</span>
                       </div>
                     </div>
@@ -735,7 +739,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
                   {/* Conclaves list under this region */}
                   <div className="space-y-3">
-                    <h4 className="text-[11px] font-black text-zinc-400 uppercase tracking-widest px-0.5">Created Conclaves</h4>
+                    <h4 className="text-[11px] font-black text-zinc-700 uppercase tracking-widest px-0.5">Created Conclaves</h4>
                     <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200 max-h-[260px] overflow-y-auto">
                       {conclaves.filter(c => (c.region || 'Guntur Region') === activeRegion.name).map(conclave => (
                         <div key={conclave.id} className="p-3 flex justify-between items-center text-body-sm bg-white hover:bg-zinc-50/50 transition-colors">
@@ -986,7 +990,7 @@ export default function SuperadminAdmins({ searchQuery }) {
             {!isPasswordResetDone ? (
               <div className="p-5 space-y-4">
                 <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-1">
-                  <p className="text-caption font-bold text-zinc-400 uppercase tracking-wide">Administrator</p>
+                  <p className="text-caption font-bold text-zinc-700 uppercase tracking-wide">Administrator</p>
                   <p className="text-[13px] font-black text-zinc-900 leading-none">{resetPasswordTarget.name}</p>
                   <p className="text-[10px] text-zinc-505 font-bold mt-1">{resetPasswordTarget.email} • {resetPasswordTarget.region}</p>
                 </div>
@@ -1047,8 +1051,8 @@ export default function SuperadminAdmins({ searchQuery }) {
 
                 <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 flex items-center justify-between gap-3">
                   <div className="text-left">
-                    <span className="text-[9px] font-black text-zinc-400 uppercase block tracking-wider">Access Token / Password</span>
-                    <span className="text-[14px] font-black text-brand-red font-mono leading-none select-all">{tempPassword}</span>
+                    <span className="text-[9px] font-black text-zinc-700 uppercase block tracking-wider">Access Token / Password</span>
+                    <span className="text-[14px] font-black text-brand-red leading-none select-all">{tempPassword}</span>
                   </div>
                   <button
                     onClick={handleCopyPassword}

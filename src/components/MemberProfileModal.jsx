@@ -63,11 +63,11 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
           {/* Key Quick Info */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-zinc-50 border border-zinc-200/80 p-3 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Chapter</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Chapter</p>
               <p className="text-[12px] font-bold text-zinc-800 mt-1 truncate">{chapter}</p>
             </div>
             <div className="bg-zinc-50 border border-zinc-200/80 p-3 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Table Seating</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Table Seating</p>
               <p className="text-[12px] font-bold text-brand-red mt-1">
                 {member.tableNumber ? `Table ${member.tableNumber}` : 'Assigned Table'}
               </p>
@@ -76,7 +76,7 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
 
           {/* Contact Details */}
           <div className="space-y-2.5">
-            <span className="text-[9.5px] font-black text-zinc-400 uppercase tracking-wider block">Contact Information</span>
+            <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Contact Information</span>
             
             <div className="space-y-2 text-[12px] font-semibold text-zinc-700">
               <a
@@ -105,7 +105,7 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
 
           {/* Business Overview */}
           <div className="space-y-1.5">
-            <span className="text-[9.5px] font-black text-zinc-400 uppercase tracking-wider block">Business Profile</span>
+            <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Business Profile</span>
             <div className="p-3.5 bg-zinc-50 border border-zinc-200/70 rounded-xl text-[11.5px] text-zinc-650 leading-relaxed font-semibold">
               Specialized in {category} solutions and high-quality services for BNI members and corporate clients. Seated for active business networking.
             </div>

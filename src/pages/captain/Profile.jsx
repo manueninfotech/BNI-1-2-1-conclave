@@ -147,13 +147,13 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
 
               <div className="grid grid-cols-2 gap-4 w-full mt-6 py-2">
                 <div>
-                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Role</p>
+                  <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Role</p>
                   <p className="font-black text-zinc-800 text-[12.5px] mt-0.5">
                     Table Captain
                   </p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Since</p>
+                  <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Since</p>
                   <p className="font-black text-zinc-800 text-[12.5px] mt-0.5">
                     {profileData.registrationDate || loggedInCaptain?.registrationDate || '2026'}
                   </p>
@@ -201,7 +201,7 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
               { label: "Status", value: "Verified" }
             ].map((kpi, idx) => (
               <div key={idx} className="bg-white border border-zinc-200 p-4 rounded-xl shadow-2xs">
-                <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider">{kpi.label}</p>
+                <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider">{kpi.label}</p>
                 <p className="text-lg font-black text-brand-red mt-1 leading-none">{kpi.value}</p>
               </div>
             ))}
@@ -265,7 +265,7 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
                 { label: "Registration Date", key: "registrationDate", type: "text", disabled: true }
               ].map((field) => (
                 <div key={field.key}>
-                  <label className="block text-[9.5px] font-black text-zinc-400 uppercase tracking-wider mb-1.5">{field.label}</label>
+                  <label className="block text-[9.5px] font-black text-zinc-700 uppercase tracking-wider mb-1.5">{field.label}</label>
                   {isEditing && !field.disabled ? (
                     <input
                       type={field.type}

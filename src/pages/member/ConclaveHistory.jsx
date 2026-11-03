@@ -231,7 +231,7 @@ export default function MemberConclaveHistory({ loggedInMember }) {
                 key={idx}
                 className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs flex flex-col items-center text-center justify-center min-h-[92px]"
               >
-                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block">{kpi.label}</span>
+                <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest block">{kpi.label}</span>
                 <span className="text-xl md:text-2xl font-black text-brand-red mt-1.5 leading-none">{kpi.value}</span>
               </div>
             ))}

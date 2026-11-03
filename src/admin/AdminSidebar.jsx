@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, CalendarRange, Users, Settings as SettingsIcon, Wallet, ShieldCheck, LogOut, X, History, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, CalendarRange, Users, Settings as SettingsIcon, Wallet, ShieldCheck, LogOut, X, History } from 'lucide-react';
 
 /**
  * The admin menu. Four places for an admin; a superadmin also gets Revenue
@@ -80,26 +80,7 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
 
       {/* Footer area */}
       <div className="mt-auto px-2 pt-3 border-t border-zinc-200 shrink-0 space-y-1">
-        {/* Desktop Collapse / Expand Toggle Button */}
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className={`hidden lg:flex w-full items-center ${isCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-colors cursor-pointer group relative`}
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          <div className="flex items-center gap-2.5">
-            {isCollapsed ? <PanelLeftOpen className="w-4 h-4 text-brand-red" /> : <PanelLeftClose className="w-4 h-4" />}
-            {!isCollapsed && <span>Collapse Sidebar</span>}
-          </div>
-          {!isCollapsed && <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-200/60 px-1.5 py-0.5 rounded">Ctrl+[</span>}
-          {isCollapsed && (
-            <div className="hidden group-hover:lg:block absolute left-full ml-3 px-2.5 py-1 bg-zinc-900 text-white text-xs font-bold rounded-md whitespace-nowrap shadow-lg z-50 pointer-events-none">
-              Expand Sidebar
-            </div>
-          )}
-        </button>
-
-        {/* Logout Button */}
+                {/* Logout Button */}
         <button
           onClick={onLogout}
           className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-semibold text-zinc-700 hover:bg-red-50 hover:text-brand-red cursor-pointer transition-colors group relative`}

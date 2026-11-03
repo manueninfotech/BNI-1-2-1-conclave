@@ -74,7 +74,7 @@ export default function CaptainLogin({ onLogin }) {
           </div>
           <div>
             <h1 className="text-xl font-black text-white tracking-wider leading-none">BNI CAPTAINS</h1>
-            <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-1">Table Attendance Portal</p>
+            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">Table Attendance Portal</p>
           </div>
         </div>
 

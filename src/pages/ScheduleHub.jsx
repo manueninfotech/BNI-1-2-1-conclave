@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp,
-  SlidersHorizontal,
+  LayoutGrid,
   Play,
   CheckCircle2,
 } from 'lucide-react';
 import ScheduleGen from './ScheduleGen';
-import ScheduleReview from './ScheduleReview';
 import RoundRunner from './RoundRunner';
 import { api } from '../services/api';
 
@@ -14,21 +12,16 @@ export default function ScheduleHub({
   selectedConclaveId,
   showGenWarning,
   clearGenWarning,
-  searchQuery,
   initialStage = 'auto',
   onStageChange,
 }) {
   const [conclave, setConclave] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   // Load selected conclave details to know status and schedule state
   useEffect(() => {
     let isMounted = true;
     async function fetchConclave() {
-      if (!selectedConclaveId) {
-        setIsLoading(false);
-        return;
-      }
+      if (!selectedConclaveId) return;
       try {
         const data = await api.get(`/admin/conclaves/${selectedConclaveId}`).catch(() => null);
         if (isMounted && data) {
@@ -36,8 +29,6 @@ export default function ScheduleHub({
         }
       } catch (err) {
         console.warn('Failed to load conclave in ScheduleHub:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
       }
     }
 
@@ -45,9 +36,10 @@ export default function ScheduleHub({
     return () => { isMounted = false; };
   }, [selectedConclaveId]);
 
-  // Determine stage: 'generate' | 'review' | 'runner'
+  // Determine stage: 'generate' | 'runner'
   const [stage, setStage] = useState(() => {
     if (initialStage && initialStage !== 'auto') {
+      if (initialStage === 'review') return 'generate';
       return initialStage;
     }
     return 'generate';
@@ -57,23 +49,23 @@ export default function ScheduleHub({
   useEffect(() => {
     if (!conclave || initialStage !== 'auto') return;
     const status = (conclave.status || '').toLowerCase();
-    const hasSchedule = Boolean(conclave.scheduleSummary || conclave.schedule || conclave.rounds?.length > 0 || conclave.isScheduleLocked);
 
     if (status === 'running') {
       setStage('runner');
-    } else if (hasSchedule || status === 'completed') {
-      setStage('review');
     } else {
       setStage('generate');
     }
-  }, [conclave?.id, conclave?.status, initialStage]);
+  }, [conclave, initialStage]);
 
   // Synchronize when initialStage prop changes externally (e.g., from URL navigation)
   useEffect(() => {
-    if (initialStage && initialStage !== 'auto' && initialStage !== stage) {
-      setStage(initialStage);
+    if (initialStage && initialStage !== 'auto') {
+      const normalized = initialStage === 'review' ? 'generate' : initialStage;
+      if (normalized !== stage) {
+        setStage(normalized);
+      }
     }
-  }, [initialStage]);
+  }, [initialStage, stage]);
 
   const conclaveStatus = (conclave?.status || '').toLowerCase();
   const isLive = conclaveStatus === 'running';
@@ -82,15 +74,9 @@ export default function ScheduleHub({
   const stages = [
     {
       id: 'generate',
-      title: 'Create Schedule',
-      Icon: TrendingUp,
+      title: 'Schedule & Seating',
+      Icon: LayoutGrid,
       isComplete: hasSchedule
-    },
-    {
-      id: 'review',
-      title: 'Review Tables',
-      Icon: SlidersHorizontal,
-      isComplete: isLive || conclaveStatus === 'completed'
     },
     {
       id: 'runner',
@@ -115,7 +101,7 @@ export default function ScheduleHub({
     const role = localStorage.getItem('bni_user_role') || 'admin';
     const tabUrlMap = {
       generate: 'schedule-gen',
-      review: 'schedule-review',
+      review: 'schedule-gen',
       runner: 'round-runner'
     };
     window.history.replaceState({}, '', `/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
@@ -140,37 +126,38 @@ export default function ScheduleHub({
             )}
           </div>
           <p className="text-xs text-zinc-500 font-semibold mt-0.5">
-            {conclave?.name || conclave?.title || 'Selected Conclave'} · {conclave?.region || 'All Regions'} · {isRunnerStage ? 'Live round execution and real-time seating analytics.' : 'Create schedules, inspect tables, and run rounds.'}
+            {conclave?.name || conclave?.title || 'Selected Conclave'} · {conclave?.region || 'All Regions'} · {isRunnerStage ? 'Manage live rounds and timer' : 'Set up tables, review seating, and start rounds'}
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto shrink-0 flex-wrap">
           {/* Modern Pill Switcher */}
           <div className="inline-flex items-center p-1 bg-zinc-200/70 rounded-xl border border-zinc-200/80 shadow-2xs shrink-0">
-          {stages.map((st) => {
-            const isActive = stage === st.id;
-            const IconComponent = st.Icon;
+            {stages.map((st) => {
+              const isActive = stage === st.id;
+              const IconComponent = st.Icon;
 
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => handleStageSelect(st.id)}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer ${isActive
-                    ? 'bg-white text-zinc-950 shadow-xs'
-                    : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => handleStageSelect(st.id)}
+                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-extrabold transition-all duration-200 cursor-pointer ${
+                    isActive
+                      ? 'bg-white text-zinc-950 shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
                   }`}
-              >
-                <IconComponent className={`w-3.5 h-3.5 ${isActive ? 'text-brand-red' : 'text-zinc-400'}`} />
-                <span>{st.title}</span>
-                {st.isLive ? (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                ) : st.isComplete ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                ) : null}
-              </button>
-            );
-          })}
+                >
+                  <IconComponent className={`w-3.5 h-3.5 ${isActive ? 'text-brand-red' : 'text-zinc-400'}`} />
+                  <span>{st.title}</span>
+                  {st.isLive ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  ) : st.isComplete ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -182,16 +169,6 @@ export default function ScheduleHub({
             selectedConclaveId={selectedConclaveId}
             showGenWarning={showGenWarning}
             clearGenWarning={clearGenWarning}
-            onScheduleReady={() => handleStageSelect('review')}
-            isHubMode={true}
-          />
-        )}
-
-        {stage === 'review' && (
-          <ScheduleReview
-            setActiveTab={handleStageSelect}
-            searchQuery={searchQuery}
-            selectedConclaveId={selectedConclaveId}
             onNavigateToRunner={() => handleStageSelect('runner')}
             isHubMode={true}
           />
@@ -200,7 +177,7 @@ export default function ScheduleHub({
         {stage === 'runner' && (
           <RoundRunner
             selectedConclaveId={selectedConclaveId}
-            onNavigateToReview={() => handleStageSelect('review')}
+            onNavigateToSchedule={() => handleStageSelect('generate')}
             isHubMode={true}
           />
         )}

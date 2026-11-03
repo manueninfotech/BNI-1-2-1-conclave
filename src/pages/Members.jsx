@@ -493,7 +493,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     try {
       const cached = localStorage.getItem('bni_categories_cache');
       if (cached) return JSON.parse(cached);
-    } catch {}
+    } catch { }
     return [
       'Advertising',
       'Architecture',
@@ -667,7 +667,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           if (editingMember.isCaptain !== formData.isCaptain) {
             await api.post(`/admin/conclaves/${targetConclaveId}/registrations/${editingMember.id}/role`, {
               role: formData.isCaptain ? 'captain' : 'member'
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
 
@@ -1085,16 +1085,14 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 aria-checked={!isScheduleLocked && allowAdminAddMembers}
                 disabled={isPermissionsLoading || isScheduleLocked}
                 onClick={handleToggleAdminPermission}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  !isScheduleLocked && allowAdminAddMembers ? 'bg-emerald-600' : 'bg-zinc-300'
-                } ${isPermissionsLoading || isScheduleLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!isScheduleLocked && allowAdminAddMembers ? 'bg-emerald-600' : 'bg-zinc-300'
+                  } ${isPermissionsLoading || isScheduleLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title={isScheduleLocked ? 'Schedule is locked' : allowAdminAddMembers ? 'Click to revoke Admin permission to add/manage members' : 'Click to grant Admin permission to add/manage members'}
               >
                 <span
                   aria-hidden="true"
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    !isScheduleLocked && allowAdminAddMembers ? 'translate-x-4' : 'translate-x-0'
-                  }`}
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!isScheduleLocked && allowAdminAddMembers ? 'translate-x-4' : 'translate-x-0'
+                    }`}
                 />
               </button>
             </div>
@@ -1148,58 +1146,62 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
       {/* Scope Navigation Tabs */}
       {allowedScopes.length > 1 && (
-      <div className="flex border-b border-zinc-200 -mt-2">
-        {allowedScopes.includes('conclave') && (
-        <button
-          onClick={() => setViewScope('conclave')}
-          className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'conclave'
-            ? 'border-brand-red text-brand-red font-extrabold'
-            : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-        >
-          This Conclave
-        </button>
-        )}
-        {allowedScopes.includes('region') && (
-        <button
-          onClick={() => setViewScope('region')}
-          className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'region'
-            ? 'border-brand-red text-brand-red font-extrabold'
-            : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-        >
-          My Region
-        </button>
-        )}
-        {allowedScopes.includes('global') && (
-        <button
-          onClick={() => setViewScope('global')}
-          className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'global'
-            ? 'border-brand-red text-brand-red font-extrabold'
-            : 'border-transparent text-zinc-500 hover:text-zinc-800'
-            }`}
-        >
-          Global Network
-        </button>
-        )}
-      </div>
+        <div className="flex border-b border-zinc-200 -mt-2">
+          {allowedScopes.includes('conclave') && (
+            <button
+              onClick={() => setViewScope('conclave')}
+              className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'conclave'
+                ? 'border-brand-red text-brand-red font-extrabold'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+                }`}
+            >
+              This Conclave
+            </button>
+          )}
+          {allowedScopes.includes('region') && (
+            <button
+              onClick={() => setViewScope('region')}
+              className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'region'
+                ? 'border-brand-red text-brand-red font-extrabold'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+                }`}
+            >
+              My Region
+            </button>
+          )}
+          {allowedScopes.includes('global') && (
+            <button
+              onClick={() => setViewScope('global')}
+              className={`px-4 py-2 text-body-sm font-black uppercase tracking-wider border-b-2 transition-smooth cursor-pointer -mb-px ${viewScope === 'global'
+                ? 'border-brand-red text-brand-red font-extrabold'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+                }`}
+            >
+              Global Network
+            </button>
+          )}
+        </div>
       )}
 
-      {/* Statistics KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Total Members</span>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{totalCount}</span>
-        </div>
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold" title="App open on their phone right now">Online now</span>
-          <div className="flex items-baseline justify-between mt-3">
-            <span className="text-display-sm font-extrabold text-zinc-900 leading-none">{activeCount}</span>
+      {/* Statistics KPI Strip (Feedback UI & Typography) */}
+      <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-3 shadow-xs">
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Members</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalCount}</span>
           </div>
         </div>
-        <div className="bg-white border border-zinc-200/80 p-5 rounded-xl flex flex-col justify-between shadow-sm hover:shadow-md transition-smooth">
-          <span className="text-label-md text-zinc-500 uppercase font-semibold">Captains</span>
-          <span className="text-display-sm font-extrabold text-zinc-900 leading-none mt-3">{captainCount}</span>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Online Now</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{activeCount}</span>
+          </div>
+        </div>
+        <div className="p-4 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Table Captains</span>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainCount}</span>
+          </div>
         </div>
       </div>
 
@@ -1563,86 +1565,85 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   </section>
 
                   {viewScope === 'conclave' && paymentByUid[selectedMember.id] && paymentByUid[selectedMember.id] !== 'free' && (
-                  <>
-                  {/* Payment Details */}
-                  <section className="space-y-3 bg-zinc-50/80 p-3.5 rounded-xl border border-zinc-200/80">
-                    <div className="flex items-center justify-between border-b border-zinc-200/70 pb-2">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
-                        Registration Payment
-                      </span>
-                      <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${
-                        (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus || 'Pending'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-body-sm">
-                      <div>
-                        <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Amount</span>
-                        <span className="font-extrabold text-zinc-800">
-                          ₹{Number(selectedMember.payment?.amount !== undefined ? selectedMember.payment.amount : (selectedMember.paymentAmount || 0)).toLocaleString()}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Method</span>
-                        <span className="font-bold text-zinc-800 uppercase text-[11px]">
-                          {selectedMember.payment?.method || selectedMember.paymentMethod || 'Admin Direct'}
-                        </span>
-                      </div>
-                      {(selectedMember.payment?.transactionId || selectedMember.transactionId) && (
-                        <div className="col-span-2 pt-1 border-t border-zinc-150">
-                          <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Transaction Ref / ID</span>
-                          <span className="font-mono text-[11px] font-bold text-zinc-700 select-all">
-                            {selectedMember.payment?.transactionId || selectedMember.transactionId}
+                    <>
+                      {/* Payment Details */}
+                      <section className="space-y-3 bg-zinc-50/80 p-3.5 rounded-xl border border-zinc-200/80">
+                        <div className="flex items-center justify-between border-b border-zinc-200/70 pb-2">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5 text-zinc-500" />
+                            Registration Payment
+                          </span>
+                          <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${(paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                            {paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus || 'Pending'}
                           </span>
                         </div>
-                      )}
-                    </div>
-                  </section>
-                  </>
+                        <div className="grid grid-cols-2 gap-2 text-body-sm">
+                          <div>
+                            <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Amount</span>
+                            <span className="font-extrabold text-zinc-800">
+                              ₹{Number(selectedMember.payment?.amount !== undefined ? selectedMember.payment.amount : (selectedMember.paymentAmount || 0)).toLocaleString()}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Method</span>
+                            <span className="font-bold text-zinc-800 uppercase text-[11px]">
+                              {selectedMember.payment?.method || selectedMember.paymentMethod || 'Admin Direct'}
+                            </span>
+                          </div>
+                          {(selectedMember.payment?.transactionId || selectedMember.transactionId) && (
+                            <div className="col-span-2 pt-1 border-t border-zinc-150">
+                              <span className="text-[9.5px] text-zinc-400 font-bold uppercase block">Transaction Ref / ID</span>
+                              <span className="font-mono text-[11px] font-bold text-zinc-700 select-all">
+                                {selectedMember.payment?.transactionId || selectedMember.transactionId}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    </>
                   )}
 
 
                   {viewScope === 'conclave' && (
-                  <>
-                  {/* Referral History */}
-                  <section className="space-y-3.5">
-                    <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Referral History</h5>
-                    <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200">
-                      {referrals.filter(r => r.fromMemberId === selectedMember.id || r.toMemberId === selectedMember.id).length === 0 ? (
-                        <p className="p-4 text-center text-[10.5px] text-zinc-400 font-semibold bg-white">No referrals logged for this member.</p>
-                      ) : (
-                        referrals.filter(r => r.fromMemberId === selectedMember.id || r.toMemberId === selectedMember.id).map(ref => {
-                          const isGiven = ref.fromMemberId === selectedMember.id;
-                          return (
-                            <div key={ref.id} className="p-3 bg-white hover:bg-zinc-50/50 transition-colors text-body-sm">
-                              <div className="flex justify-between items-start">
-                                <p className="font-black text-zinc-800 text-[11.5px]">
-                                  {isGiven ? `Given to: ${ref.toName}` : `Received from: ${ref.fromName}`}
-                                </p>
-                                <span className={`px-1.5 py-0.5 text-[8px] font-extrabold rounded border ${ref.status === 'Connected'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-150'
-                                  : ref.status === 'Closed'
-                                    ? 'bg-zinc-150 text-zinc-650 border-zinc-250'
-                                    : 'bg-amber-50 text-amber-700 border-amber-150'
-                                  }`}>
-                                  {ref.status}
-                                </span>
-                              </div>
-                              <p className="text-[11px] font-semibold text-zinc-500 mt-1 italic">"{ref.description}"</p>
-                              <span className="text-[8px] text-zinc-400 font-extrabold uppercase mt-1 block">{ref.date}</span>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
-                  </>
+                    <>
+                      {/* Referral History */}
+                      <section className="space-y-3.5">
+                        <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Referral History</h5>
+                        <div className="border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-200">
+                          {referrals.filter(r => r.fromMemberId === selectedMember.id || r.toMemberId === selectedMember.id).length === 0 ? (
+                            <p className="p-4 text-center text-[10.5px] text-zinc-400 font-semibold bg-white">No referrals logged for this member.</p>
+                          ) : (
+                            referrals.filter(r => r.fromMemberId === selectedMember.id || r.toMemberId === selectedMember.id).map(ref => {
+                              const isGiven = ref.fromMemberId === selectedMember.id;
+                              return (
+                                <div key={ref.id} className="p-3 bg-white hover:bg-zinc-50/50 transition-colors text-body-sm">
+                                  <div className="flex justify-between items-start">
+                                    <p className="font-black text-zinc-800 text-[11.5px]">
+                                      {isGiven ? `Given to: ${ref.toName}` : `Received from: ${ref.fromName}`}
+                                    </p>
+                                    <span className={`px-1.5 py-0.5 text-[8px] font-extrabold rounded border ${ref.status === 'Connected'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-150'
+                                      : ref.status === 'Closed'
+                                        ? 'bg-zinc-150 text-zinc-650 border-zinc-250'
+                                        : 'bg-amber-50 text-amber-700 border-amber-150'
+                                      }`}>
+                                      {ref.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] font-semibold text-zinc-500 mt-1 italic">"{ref.description}"</p>
+                                  <span className="text-[8px] text-zinc-400 font-extrabold uppercase mt-1 block">{ref.date}</span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </section>
+                    </>
                   )}
                 </div>
 

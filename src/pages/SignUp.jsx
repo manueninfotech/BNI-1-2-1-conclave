@@ -177,7 +177,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
             <h1 className="text-xl font-black text-white tracking-wider leading-none">
               BNI CONCLAVE PORTAL
             </h1>
-            <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-1">
+            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">
               High-Performance Networking Platform
             </p>
           </div>

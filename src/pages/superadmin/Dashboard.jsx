@@ -128,44 +128,38 @@ export default function SuperadminDashboard({ setActiveTab }) {
 
 
   return (
-    <div className="space-y-8 animate-fade-in font-sans pb-16">
+    <div className="space-y-4 sm:space-y-5 animate-fade-in font-sans pb-8 sm:pb-10">
 
       {/* Welcome Banner */}
       <div>
         <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Superadmin Dashboard</h1>
-        <p className="text-xs text-zinc-500 font-semibold mt-1">Global BNI Conclave directory network oversight &amp; regional admin statistics.</p>
+        <p className="text-xs text-zinc-500 font-semibold mt-0.5">Global BNI Conclave directory network oversight &amp; regional admin statistics.</p>
       </div>
 
-      {/* KPI Cards Grid */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* KPI Strip (Feedback UI & Typography) */}
+      <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
         {[
-          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", Icon: Layers, tab: "admins" },
-          { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", Icon: Award, tab: "admins" },
-          { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", Icon: CalendarRange, tab: "conclaves" },
-          { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", Icon: Users, tab: "members" }
-        ].map((kpi, idx) => {
-          const Icon = kpi.Icon;
-          return (
-            <div
-              key={idx}
-              onClick={() => setActiveTab && setActiveTab(kpi.tab)}
-              className="bg-white p-5 rounded-xl border border-zinc-200 shadow-2xs hover:shadow-md hover:border-zinc-300 transition-smooth cursor-pointer flex flex-col justify-between min-h-[110px]"
-            >
-              <div className="flex justify-between items-start">
-                <span className="text-[9.5px] font-black text-zinc-400 uppercase tracking-wider">{kpi.label}</span>
-                <Icon className="w-4.5 h-4.5 text-zinc-450 shrink-0" />
-              </div>
-              <div className="mt-3">
-                <span className="text-2xl font-black text-brand-red leading-none">{kpi.value}</span>
-                <span className="text-[10px] text-zinc-450 font-semibold block mt-1">{kpi.sub}</span>
-              </div>
+          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]" },
+          { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", tab: "admins", color: "text-zinc-600" },
+          { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", tab: "conclaves", color: "text-[#00875A]" },
+          { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", tab: "members", color: "text-brand-red" }
+        ].map((kpi, idx) => (
+          <div
+            key={idx}
+            onClick={() => setActiveTab && setActiveTab(kpi.tab)}
+            className="p-4 flex flex-col justify-between cursor-pointer hover:bg-zinc-50/50 transition-smooth"
+          >
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">{kpi.label}</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpi.value}</span>
             </div>
-          );
-        })}
-      </section>
+            <div className={`text-[10px] font-bold ${kpi.color}`}>{kpi.sub}</div>
+          </div>
+        ))}
+      </div>
 
       {/* Distributions & Lists Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
 
         {/* Conclaves distribution list */}
         <section className="lg:col-span-6 bg-white border border-zinc-200 rounded-xl shadow-2xs p-5 flex flex-col justify-between">

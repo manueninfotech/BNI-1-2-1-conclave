@@ -395,7 +395,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest block">My Registered Events</span>
+              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-widest block">My Registered Events</span>
               <span className="text-xl font-black text-zinc-900 leading-tight mt-0.5 block">{registeredEventsCount} Events</span>
             </div>
           </div>
@@ -405,7 +405,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
               <Activity className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest block">Referrals Exchanged</span>
+              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-widest block">Referrals Exchanged</span>
               <span className="text-xl font-black text-zinc-900 leading-tight mt-0.5 block">{sentCount + recvCount} Total</span>
             </div>
           </div>
@@ -415,7 +415,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest block">Chapter</span>
+              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-widest block">Chapter</span>
               <span className="text-sm font-black text-zinc-900 leading-tight mt-0.5 block truncate max-w-[140px]">{memberChapter}</span>
             </div>
           </div>
@@ -425,7 +425,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest block">Niche / Category</span>
+              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-widest block">Niche / Category</span>
               <span className="text-xs font-black text-brand-red leading-tight mt-0.5 block truncate max-w-[140px]">{memberCategory}</span>
             </div>
           </div>
@@ -573,26 +573,26 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
 
                 <div className="flex flex-wrap gap-6 items-center pt-2">
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Active Session</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Active Session</span>
                     <span className="text-lg font-black text-zinc-900 mt-0.5">
                       {isConclaveCompleted ? 'All Rounds Finished' : `Round ${conclaveSyncData?.conclaveStatus?.currentRound || 0} of ${conclaveSyncData?.mySchedule?.length || 6}`}
                     </span>
                   </div>
                   <div className="w-px h-8 bg-zinc-200"></div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Assigned Table</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Assigned Table</span>
                     <span className="text-lg font-black text-zinc-900 mt-0.5">Table {conclaveSyncData?.tableNumber || 'N/A'}</span>
                   </div>
                   <div className="w-px h-8 bg-zinc-200"></div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Niche / Category</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Niche / Category</span>
                     <span className="px-2 py-0.5 bg-red-50 border border-red-100 text-brand-red text-[9px] font-black rounded uppercase mt-1">
                       {memberCategory}
                     </span>
                   </div>
                   <div className="w-px h-8 bg-zinc-200"></div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">Referral Exchange</span>
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Referral Exchange</span>
                     {(() => {
                       const myUid = loggedInMember?.uid || loggedInMember?.id;
                       const myName = (loggedInMember?.name || '').toLowerCase();
@@ -632,7 +632,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                   <div className="flex justify-between items-end mb-2">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest">
+                        <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">
                           {isConclaveCompleted
                             ? 'Conclave Status'
                             : timingState.isPaused
@@ -784,7 +784,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
             </div>
 
             <div className="mt-5">
-              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-2.5">Networking In Progress</span>
+              <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest block mb-2.5">Networking In Progress</span>
               <div className="flex -space-x-2.5 overflow-hidden">
                 {(conclaveSyncData?.tableOccupants || []).map((m, idx) => {
                   const initials = m.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';

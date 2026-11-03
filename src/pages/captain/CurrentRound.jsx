@@ -151,19 +151,19 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto pt-4">
             <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider">Total Rounds</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider">Total Rounds</p>
               <p className="text-lg font-black text-zinc-850 mt-0.5">{conclaveSyncData?.conclaveStatus?.totalRounds || 4} Completed</p>
             </div>
             <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider">Table Occupancy</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider">Table Occupancy</p>
               <p className="text-lg font-black text-zinc-850 mt-0.5">{participants.length} Members</p>
             </div>
             <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider">Categories</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider">Categories</p>
               <p className="text-lg font-black text-zinc-850 mt-0.5">{categories.length} Represented</p>
             </div>
             <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl">
-              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider">Status</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider">Status</p>
               <p className="text-lg font-black text-emerald-600 mt-0.5">Archived</p>
             </div>
           </div>
@@ -337,7 +337,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
 
             {/* Total time small display */}
             <div className="mt-3 bg-zinc-50 border border-zinc-200 rounded-lg py-1 px-3 text-center shadow-2xs flex items-center justify-between gap-3 min-w-[170px]">
-              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Total Round Time</span>
+              <span className="text-[9px] font-bold text-zinc-700 uppercase tracking-wider">Total Round Time</span>
               <span className="text-[11.5px] font-mono font-black text-zinc-800">{formatTime(timeLeft)}</span>
             </div>
           </div>
@@ -720,11 +720,11 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                   {/* Round Meta info */}
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
-                      <span className="text-[9px] font-extrabold uppercase text-zinc-400 block tracking-wider">Assigned Table</span>
+                      <span className="text-[9px] font-extrabold uppercase text-zinc-700 block tracking-wider">Assigned Table</span>
                       <span className="text-body-sm font-black text-zinc-900 mt-0.5 block">{targetRound?.table || 'Table TBD'}</span>
                     </div>
                     <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg">
-                      <span className="text-[9px] font-extrabold uppercase text-zinc-400 block tracking-wider">Scheduled Time</span>
+                      <span className="text-[9px] font-extrabold uppercase text-zinc-700 block tracking-wider">Scheduled Time</span>
                       <span className="text-body-sm font-black text-zinc-900 mt-0.5 block">
                         {formatUpcomingRoundStartTime(targetRound?.time) || 'Upcoming'}
                       </span>

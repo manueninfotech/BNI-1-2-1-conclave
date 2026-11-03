@@ -92,17 +92,45 @@ export default function Revenue() {
 
       {data && (
         <>
-          {/* KPI row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <Kpi icon={<IndianRupee className="w-4 h-4" />} label="Total revenue" value={inr(data.totalRevenue)}
-              sub={data.refundedTotal ? `${inr(data.refundedTotal)} refunded` : 'net of refunds'} accent="brand" />
-            <Kpi icon={<CheckCircle2 className="w-4 h-4" />} label="Captured" value={data.capturedCount}
-              sub="successful payments" accent="emerald" />
-            <Kpi icon={<XCircle className="w-4 h-4" />} label="Failed" value={data.failedCount}
-              sub="failed attempts" accent="red" />
-            <Kpi icon={<TrendingUp className="w-4 h-4" />} label="Success rate"
-              value={data.successRate != null ? `${Math.round(data.successRate * 100)}%` : '—'}
-              sub="captured ÷ attempts" accent="zinc" />
+          {/* KPI Strip (Feedback UI & Typography) */}
+          <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
+            <div className="p-4 flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Revenue</span>
+              <div className="my-1.5 flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-zinc-950 tabular-nums">{inr(data.totalRevenue)}</span>
+              </div>
+              <div className="text-[10px] font-bold text-brand-red">
+                {data.refundedTotal ? `${inr(data.refundedTotal)} refunded` : 'net of refunds'}
+              </div>
+            </div>
+
+            <div className="p-4 flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Captured</span>
+              <div className="my-1.5 flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-zinc-950 tabular-nums">{data.capturedCount}</span>
+                <span className="text-xs font-semibold text-zinc-400">payments</span>
+              </div>
+              <div className="text-[10px] font-bold text-[#00875A]">Successful payments</div>
+            </div>
+
+            <div className="p-4 flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Failed</span>
+              <div className="my-1.5 flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-zinc-950 tabular-nums">{data.failedCount}</span>
+                <span className="text-xs font-semibold text-zinc-400">attempts</span>
+              </div>
+              <div className="text-[10px] font-bold text-brand-red">Failed attempts</div>
+            </div>
+
+            <div className="p-4 flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Success Rate</span>
+              <div className="my-1.5 flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-zinc-950 tabular-nums">
+                  {data.successRate != null ? `${Math.round(data.successRate * 100)}%` : '—'}
+                </span>
+              </div>
+              <div className="text-[10px] font-bold text-zinc-500">Captured ÷ attempts</div>
+            </div>
           </div>
 
           {/* Charts */}
@@ -227,7 +255,7 @@ function Kpi({ icon, label, value, sub, accent }) {
   }[accent] || 'text-zinc-700';
   return (
     <div className="bg-white border border-zinc-200/80 p-4 rounded-xl shadow-sm">
-      <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1 flex items-center gap-1">
+      <p className="text-[10px] font-bold text-zinc-700 uppercase mb-1 flex items-center gap-1">
         <span className={tone}>{icon}</span> {label}
       </p>
       <h4 className="text-headline-md font-extrabold text-zinc-900 mt-1">{value}</h4>

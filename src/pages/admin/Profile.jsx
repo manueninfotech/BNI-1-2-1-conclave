@@ -234,11 +234,11 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
 
               <div className="grid grid-cols-2 gap-4 w-full mt-6 py-2">
                 <div>
-                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Admin ID</p>
+                  <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Admin ID</p>
                   <p className="font-black text-zinc-800 text-[12.5px] mt-0.5">{displayId}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Joined</p>
+                  <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">Joined</p>
                   <p className="font-black text-zinc-800 text-[12.5px] mt-0.5">{profileData.joinedDate}</p>
                 </div>
               </div>
@@ -279,7 +279,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           <section className="grid grid-cols-2 gap-3">
             {kpis.map((kpi, idx) => (
               <div key={idx} className="bg-white border border-zinc-200 p-4 rounded-xl shadow-2xs">
-                <p className="text-[9px] font-black text-zinc-400 uppercase tracking-wider leading-none">{kpi.label}</p>
+                <p className="text-[9px] font-black text-zinc-700 uppercase tracking-wider leading-none">{kpi.label}</p>
                 <p className="text-lg font-black text-brand-red mt-2.5 leading-none">{kpi.value}</p>
               </div>
             ))}
@@ -341,7 +341,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
                 { label: "Assigned Region / Scope", key: "region", type: "text", disabled: true }
               ].map((field) => (
                 <div key={field.key}>
-                  <label className="block text-[9.5px] font-black text-zinc-400 uppercase tracking-wider mb-1.5">{field.label}</label>
+                  <label className="block text-[9.5px] font-black text-zinc-700 uppercase tracking-wider mb-1.5">{field.label}</label>
                   {isEditing && !field.disabled ? (
                     <input
                       type={field.type}
