@@ -68,7 +68,7 @@ export default function Home({ base, loggedInAdmin }) {
       return;
     }
     let isMounted = true;
-    const targetConclaves = conclaves.slice(0, 10);
+    const targetConclaves = conclaves.slice(0, 25);
     Promise.all(
       targetConclaves.map((c) =>
         api.get(`/admin/conclaves/${c.id}/stats`)
@@ -153,9 +153,9 @@ export default function Home({ base, loggedInAdmin }) {
     };
   }, [conclaves, currentStats, conclaveStatsMap, current?.id]);
 
-  // Real conclave data for analytics charts (up to 6 conclaves)
+  // Real conclave data for analytics charts (all conclaves with smooth horizontal scroll)
   const conclaveChartData = useMemo(() => {
-    return conclaves.slice(0, 6).map((c) => {
+    return conclaves.map((c) => {
       const count = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
       const conclaveStat = conclaveStatsMap[c.id];
       let refs = Number(c.referralCount ?? c.referralsCount ?? 0);
@@ -164,10 +164,12 @@ export default function Home({ base, loggedInAdmin }) {
       } else if (c.id === current?.id && currentStats?.counts?.referrals !== undefined) {
         refs = Math.max(refs, Number(currentStats.counts.referrals));
       }
+      const rawName = c.name || 'Conclave';
+      const shortName = rawName.length > 14 ? `${rawName.slice(0, 14)}…` : rawName;
       return {
         id: c.id,
-        name: c.name || 'Conclave',
-        fullName: c.name || 'Conclave',
+        name: shortName,
+        fullName: rawName,
         members: count,
         referrals: refs,
       };
@@ -285,38 +287,43 @@ export default function Home({ base, loggedInAdmin }) {
               </span>
             </div>
 
-            <div className="w-full h-44 pt-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis
-                    dataKey="name"
-                    tickLine={false}
-                    axisLine={false}
-                    interval={0}
-                    tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 10, fill: '#71717a' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }}
-                    formatter={(value) => [`${value} registered`, 'Attendees']}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      borderColor: '#e4e4e7',
-                      borderRadius: '0.75rem',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                    }}
-                  />
-                  <Bar dataKey="members" fill="#CF2030" radius={[6, 6, 0, 0]} barSize={26} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full overflow-x-auto custom-scrollbar pt-1 pb-1">
+              <div
+                className="h-44"
+                style={{ minWidth: `${Math.max(340, conclaveChartData.length * 85)}px`, width: '100%' }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis
+                      dataKey="name"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 10, fill: '#71717a' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }}
+                      formatter={(value) => [`${value} registered`, 'Attendees']}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e4e4e7',
+                        borderRadius: '0.75rem',
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                      }}
+                    />
+                    <Bar dataKey="members" fill="#CF2030" radius={[6, 6, 0, 0]} barSize={26} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
 
@@ -335,38 +342,43 @@ export default function Home({ base, loggedInAdmin }) {
               </span>
             </div>
 
-            <div className="w-full h-44 pt-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis
-                    dataKey="name"
-                    tickLine={false}
-                    axisLine={false}
-                    interval={0}
-                    tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 10, fill: '#71717a' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }}
-                    formatter={(value) => [`${value} slips`, 'Referrals']}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      borderColor: '#e4e4e7',
-                      borderRadius: '0.75rem',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                    }}
-                  />
-                  <Bar dataKey="referrals" fill="#00875A" radius={[6, 6, 0, 0]} barSize={26} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full overflow-x-auto custom-scrollbar pt-1 pb-1">
+              <div
+                className="h-44"
+                style={{ minWidth: `${Math.max(340, conclaveChartData.length * 85)}px`, width: '100%' }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis
+                      dataKey="name"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 10, fill: '#71717a' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }}
+                      formatter={(value) => [`${value} slips`, 'Referrals']}
+                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e4e4e7',
+                        borderRadius: '0.75rem',
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                      }}
+                    />
+                    <Bar dataKey="referrals" fill="#00875A" radius={[6, 6, 0, 0]} barSize={26} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </section>
@@ -402,7 +414,7 @@ export default function Home({ base, loggedInAdmin }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 text-table-text">
-                {conclaves.slice(0, 5).map((c) => {
+                {conclaves.slice(0, 4).map((c) => {
                   const stage = stageOf(c);
                   const isLive = stage === 'live';
                   const isDone = stage === 'done';
@@ -621,9 +633,6 @@ function ActiveConclaveHero({ c, base, stats, loggedInAdmin }) {
         <div className="lg:col-span-7 flex flex-col justify-between gap-2.5">
           <div className="flex flex-col gap-1.5">
             <h2 className="text-dashboard-title text-zinc-950 tracking-tight leading-tight">{c.name}</h2>
-            <p className="text-body-text text-zinc-500 font-medium leading-relaxed">
-              {c.description || 'Structured 1-to-1 Networking & Cross-Chapter Business Referral Program'}
-            </p>
 
             <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 py-1.5 px-3 bg-zinc-50 border border-zinc-200/80 rounded-xl text-caption font-semibold text-zinc-700 mt-0.5 self-start">
               <div className="flex items-center gap-1.5">
