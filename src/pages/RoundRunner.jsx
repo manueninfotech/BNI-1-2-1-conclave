@@ -7,8 +7,7 @@ import {
   BellOff,
   Play,
   Pause,
-  Square,
-  Clock,
+  BarChart3,
   Award,
   ArrowRight,
   Zap,
@@ -493,26 +492,34 @@ export default function RoundRunner({
     }
   }, [timingState.phase, timingState.referralSecs, timingState.transitionSecs, timerRunning, playBellSound]);
 
-  // Top 3 referrals leaderboard derived from real referral slips
+  // Top 5 referrals leaderboard derived from real referral slips
   const leaderboard = useMemo(() => {
     const counts = {};
     filteredReferrals.forEach(r => {
       const giverId = r.fromMemberId || r.fromUserId || r.fromName || r.giverId || r.giverName;
       if (!giverId) return;
       if (!counts[giverId]) {
-        const participant = selectedConclave?.participants?.find(p =>
-          p.id === r.fromMemberId ||
-          p.uid === r.fromMemberId ||
-          p.id === r.fromUserId ||
-          p.uid === r.fromUserId ||
-          (p.name && r.fromName && p.name.toLowerCase().trim() === r.fromName.toLowerCase().trim())
-        );
+        const giverUid = r.fromMemberId || r.fromUserId || r.giverId;
+        const giverName = (r.fromName || r.giverName || '').trim().toLowerCase();
+
+        const participant = selectedConclave?.participants?.find(p => {
+          const pUid = p._originalUid || p.uid || p.userId;
+          if (giverUid && (pUid === giverUid || String(p.id) === String(giverUid))) return true;
+          if (giverName && p.name && p.name.trim().toLowerCase() === giverName) return true;
+          return false;
+        });
+
         const resolvedName = (r.fromName && r.fromName !== 'Unknown' && r.fromName !== 'Unknown Member')
           ? r.fromName
           : (participant?.name || r.giverName || 'Member');
+
+        const resolvedCategory = (r.fromCategory && r.fromCategory !== 'BNI Member' && r.fromCategory !== 'Uncategorized')
+          ? r.fromCategory
+          : (participant?.businessCategory || participant?.category || r.fromCategory || 'BNI Member');
+
         counts[giverId] = {
           name: resolvedName,
-          category: participant?.businessCategory || participant?.category || r.fromCategory || 'BNI Member',
+          category: resolvedCategory,
           count: 0,
           totalAmount: 0,
         };
@@ -522,7 +529,7 @@ export default function RoundRunner({
         counts[giverId].totalAmount += Number(r.closedAmount);
       }
     });
-    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 3);
+    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [filteredReferrals, selectedConclave]);
 
   const formatTime = (seconds) => {
@@ -702,44 +709,6 @@ export default function RoundRunner({
     }
   };
 
-  const executeCloseRound = async () => {
-    const now = Date.now();
-    setConclaves(prev => prev.map(c => {
-      if (c.id === selectedConclaveId) {
-        return {
-          ...c,
-          currentRoundStartedAt: new Date(now - 3600 * 1000),
-          isRoundPaused: false,
-          roundPausedAt: null,
-          roundElapsedMsBeforePause: null
-        };
-      }
-      return c;
-    }));
-    setTimerRunning(false);
-    setTimeLeft(0);
-
-    try {
-      await api.post(`/admin/conclaves/${selectedConclaveId}/close-round`);
-      const data = await api.get('/admin/conclaves');
-      if (Array.isArray(data)) setConclaves(data);
-      playBellSound('double');
-      showToast('Round Concluded', `Round ${activeRound} finished.`);
-    } catch (err) {
-      console.error("Failed to close round:", err);
-      showToast('Close Round Failed', err.message || "Could not close round.");
-    }
-  };
-
-  const handleCloseRound = () => {
-    setConfirmModal({
-      title: `Close Round ${activeRound || 1}?`,
-      message: `Are you sure you want to finish Round ${activeRound || 1}? This will conclude the current round timers across all tables.`,
-      confirmText: `Yes, End Round ${activeRound || 1}`,
-      onConfirm: executeCloseRound
-    });
-  };
-
   // Speaker beads dynamic mapping
   const speakerBeads = useMemo(() => {
     const count = timingState.personsPerTable || 6;
@@ -801,16 +770,10 @@ export default function RoundRunner({
   const currentTotalBlock = Math.max(1, timingState.totalBlockSecs || ROUND_BLOCK_DURATION_SECS);
   const roundElapsedRatio = Math.max(0, Math.min(1, (currentTotalBlock - (timeLeft || 0)) / currentTotalBlock));
 
-  // Time structure donut SVG segments (Circumference = 2 * PI * 48 = 301.59)
-  const donutCircumference = 301.59;
   const talkingSecs = timingState.activeSecs || (personsPerTable * 60);
   const referralSecs = timingState.referralSecs || (personsPerTable * 30);
   const transitionSecs = timingState.transitionSecs || conclaveMoveSeconds;
   const totalTimingSecs = Math.max(1, talkingSecs + referralSecs + transitionSecs);
-
-  const talkingLen = (talkingSecs / totalTimingSecs) * donutCircumference;
-  const referralLen = (referralSecs / totalTimingSecs) * donutCircumference;
-  const transitionLen = Math.max(0, donutCircumference - talkingLen - referralLen);
 
   const speakerTurnRatio = timingState.phase === 'active' && timingState.bioSecs > 0
     ? Math.max(0, Math.min(1, 1 - (timingState.speakerTimeLeft / timingState.bioSecs)))
@@ -1204,15 +1167,15 @@ export default function RoundRunner({
               <span className="text-label-md font-bold text-zinc-500 uppercase tracking-wider">Round Controls</span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {/* Pause / Resume */}
               {isRoundPaused ? (
                 <button
                   type="button"
                   onClick={handleResumeRound}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-button shadow-xs transition-all cursor-pointer"
+                  className="h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
                 >
-                  <Play className="w-4 h-4 fill-white text-white" />
+                  <Play className="w-4 h-4 fill-white text-white shrink-0" />
                   <span>Resume</span>
                 </button>
               ) : (
@@ -1220,9 +1183,9 @@ export default function RoundRunner({
                   type="button"
                   onClick={handlePauseRound}
                   disabled={isUpcoming || isCompleted || activeRound === 0}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-button shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Pause className="w-4 h-4 fill-white text-white" />
+                  <Pause className="w-4 h-4 fill-white text-white shrink-0" />
                   <span>Pause</span>
                 </button>
               )}
@@ -1232,9 +1195,9 @@ export default function RoundRunner({
                 type="button"
                 onClick={() => handleStartNextRound()}
                 disabled={isCompleted || (activeRound >= totalRounds && !isUpcoming)}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-button shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Play className="w-4 h-4" />
+                <Play className="w-4 h-4 fill-white text-white shrink-0" />
                 <span>
                   {activeRound === 0
                     ? 'Start Round 1'
@@ -1244,25 +1207,14 @@ export default function RoundRunner({
                 </span>
               </button>
 
-              {/* End Round */}
-              <button
-                type="button"
-                onClick={handleCloseRound}
-                disabled={isUpcoming || isCompleted || activeRound === 0}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-button transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-zinc-200"
-              >
-                <Square className="w-3.5 h-3.5 fill-zinc-500 text-zinc-500" />
-                <span>End Round {activeRound || 1}</span>
-              </button>
-
               {/* Finish Conclave (Brand Red) */}
               <button
                 type="button"
                 onClick={handleFinishConclave}
                 disabled={isCompleted}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-brand-red hover:bg-[#b51c2a] text-white text-button shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-11 px-4 rounded-xl bg-brand-red hover:bg-[#b51c2a] text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-md flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <CheckCircle2 className="w-4 h-4 text-white" />
+                <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
                 <span>Finish Conclave</span>
               </button>
             </div>
@@ -1323,300 +1275,33 @@ export default function RoundRunner({
           </div>
         </div>
 
-        {/* COLUMN 2: TIME & SEATING (lg:col-span-4) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
+        {/* RIGHT WING: EXTENDED REFERRALS & REAL-TIME ACTIVITY (lg:col-span-7) */}
+        <div className="lg:col-span-7 flex flex-col gap-4">
 
-          {/* Top Card: Round Time Breakdown Donut */}
+          {/* Top Card: Extended Referrals by Table Dynamic Chart */}
           <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 sm:p-5 flex flex-col gap-3 font-sans">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-brand-red" />
-                <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Time Breakdown</span>
-              </div>
-              <span className="text-label-xs font-bold text-[#00875A] uppercase bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                {isCompleted
-                  ? 'Concluded'
-                  : isRoundEnded
-                    ? 'Round Done'
-                    : isUpcoming || activeRound === 0
-                      ? 'Ready'
-                      : timingState.phase === 'active'
-                        ? 'Step 1 of 3'
-                        : timingState.phase === 'referral'
-                          ? 'Step 2 of 3'
-                          : 'Step 3 of 3'}
-              </span>
-            </div>
-
-            {/* Clean Donut Chart (SVG) */}
-            <div className="relative w-44 h-44 mx-auto my-1 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
-                {/* Segment 1: Speaking (Green #00875A) */}
-                <circle
-                  cx="60"
-                  cy="60"
-                  fill="transparent"
-                  r="48"
-                  stroke="#00875A"
-                  strokeDasharray={`${talkingLen} ${donutCircumference}`}
-                  strokeDashoffset="0"
-                  strokeWidth="12"
-                />
-                {/* Segment 2: Referral (Blue #0284C7) */}
-                <circle
-                  cx="60"
-                  cy="60"
-                  fill="transparent"
-                  r="48"
-                  stroke="#0284C7"
-                  strokeDasharray={`${referralLen} ${donutCircumference}`}
-                  strokeDashoffset={-talkingLen}
-                  strokeWidth="12"
-                />
-                {/* Segment 3: Rotation (Amber #D97706) */}
-                <circle
-                  cx="60"
-                  cy="60"
-                  fill="transparent"
-                  r="48"
-                  stroke="#D97706"
-                  strokeDasharray={`${transitionLen} ${donutCircumference}`}
-                  strokeDashoffset={-(talkingLen + referralLen)}
-                  strokeWidth="12"
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center text-center pointer-events-none">
-                <span className="text-display-sm font-extrabold text-zinc-950 tabular-nums">{Math.round(roundElapsedRatio * 100)}%</span>
-                <span className="text-label-xs font-bold text-zinc-700 uppercase tracking-wider">Time Done</span>
-                <span className="text-caption font-sans tabular-nums text-zinc-500 font-bold mt-0.5">
-                  {formatTime(Math.max(0, currentTotalBlock - (timeLeft || 0)))} / {formatDurationText(currentTotalBlock)}
-                </span>
-              </div>
-            </div>
-
-            {/* Interactive Legend List */}
-            <div className="flex flex-col gap-2 pt-1 font-sans">
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 border border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#00875A] shrink-0" />
-                  <span className="text-body-text font-semibold text-zinc-800">Speaking Time ({formatDurationText(talkingSecs)})</span>
-                </div>
-                <span className={`text-label-xs font-bold ${!isCompleted && !isRoundEnded && timingState.phase === 'active'
-                  ? 'text-[#00875A] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200'
-                  : 'text-zinc-500'
-                  }`}>
-                  {isCompleted || isRoundEnded || timingState.phase === 'referral' || timingState.phase === 'transition'
-                    ? 'Done'
-                    : timingState.phase === 'active'
-                      ? 'In Progress'
-                      : 'Up Next'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 border border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-sky-600 shrink-0" />
-                  <span className="text-body-text font-semibold text-zinc-800">Referral Time ({formatDurationText(referralSecs)})</span>
-                </div>
-                <span className={`text-label-xs font-bold ${!isCompleted && !isRoundEnded && timingState.phase === 'referral'
-                  ? 'text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200'
-                  : 'text-zinc-500'
-                  }`}>
-                  {isCompleted || isRoundEnded || timingState.phase === 'transition'
-                    ? 'Done'
-                    : timingState.phase === 'referral'
-                      ? 'In Progress'
-                      : timingState.phase === 'active'
-                        ? 'Up Next'
-                        : 'Upcoming'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 border border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-                  <span className="text-body-text font-semibold text-zinc-800">Move to Next Table ({formatDurationText(conclaveMoveSeconds)})</span>
-                </div>
-                <span className={`text-label-xs font-bold ${!isCompleted && !isRoundEnded && timingState.phase === 'transition'
-                  ? 'text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200'
-                  : 'text-zinc-500'
-                  }`}>
-                  {isCompleted || isRoundEnded
-                    ? 'Done'
-                    : timingState.phase === 'transition'
-                      ? 'In Progress'
-                      : 'Upcoming'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Card: Table Seating Attendance (Strictly Real Backend Data) */}
-          <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 sm:p-5 flex flex-col gap-3 flex-1 font-sans">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <UserCheck className="w-4 h-4 text-brand-red" />
-                <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Table Seating</span>
-              </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSeatingViewMode('bars')}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'bars' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                  >
-                    Bars
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSeatingViewMode('grid')}
-                    className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'grid' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                  >
-                    Grid
-                  </button>
-                </div>
-                <span className="text-label-xs font-bold bg-emerald-50 text-[#00875A] border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                  {tables.length > 0 ? `${tables.length} Tables Active` : 'Schedule Pending'}
+                <BarChart3 className="w-4 h-4 text-brand-red" />
+                <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Referrals by Table</span>
+                <span className="text-label-xs font-bold bg-red-50 text-brand-red border border-red-200/80 px-2.5 py-0.5 rounded-full font-sans tabular-nums">
+                  {totalReferrals} Logged
                 </span>
               </div>
-            </div>
 
-            <p className="text-caption text-zinc-500 font-medium">
-              Round {activeRound || 1} seating. {personsPerTable} members at each table.
-            </p>
-
-            {/* If tables are scheduled, show the vertical bar visualizer or grid */}
-            {tables.length > 0 ? (
-              seatingViewMode === 'bars' ? (
-                <div className="flex items-stretch gap-1.5 sm:gap-2 pt-2 overflow-x-auto pb-1.5 custom-scrollbar h-44">
-                  {tables.map((t) => {
-                    const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
-                    const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));
-                    const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
-                    return (
-                      <div
-                        key={t.tableNumber}
-                        className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
-                        title={`Table ${t.tableNumber}: ${captainFullName} (${seatedCount}/${personsPerTable} seated)`}
-                      >
-                        {/* Hover Tooltip Popup */}
-                        <div className="absolute -top-9 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
-                          <span>{captainFullName}</span>
-                          <span className="text-zinc-400 font-normal">({seatedCount}/{personsPerTable})</span>
-                        </div>
-
-                        {/* Seated count tag */}
-                        <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                          <span className="font-sans tabular-nums text-caption text-brand-red font-bold leading-none">
-                            {seatedCount}/{personsPerTable}
-                          </span>
-                        </div>
-
-                        {/* Vertical Bar: rounded top shoulders, flat bottom (like image 2) */}
-                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[44px]">
-                          <div
-                            className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
-                            style={{ height: `${heightPercent}%`, minHeight: '6px' }}
-                          />
-                        </div>
-
-                        {/* Bottom Label: clean T1, T2 without overlapping names */}
-                        <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
-                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
-                            T{t.tableNumber}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Grid view: Shows all 10 tables cleanly in a 2-column matrix with full names and badges */
-                <div className="grid grid-cols-2 gap-2 pt-1 max-h-[180px] overflow-y-auto custom-scrollbar">
-                  {tables.map((t) => {
-                    const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
-                    const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
-                    const isFull = seatedCount >= personsPerTable;
-                    return (
-                      <div
-                        key={t.tableNumber}
-                        className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-between gap-2 shadow-2xs hover:bg-white transition-all"
-                      >
-                        <div className="min-w-0 flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white font-black text-xs flex items-center justify-center shrink-0">
-                            T{t.tableNumber}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-zinc-900 truncate" title={captainFullName}>
-                              {captainFullName}
-                            </p>
-                            <p className="text-[10px] text-zinc-500 font-medium truncate">
-                              {t.captain?.category || 'Table Lead'}
-                            </p>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isFull ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-brand-red border border-red-200'
-                          }`}>
-                          {seatedCount}/{personsPerTable}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/50">
-                <div className="w-10 h-10 rounded-full bg-red-50 text-brand-red flex items-center justify-center mb-2">
-                  <Users className="w-5 h-5" />
-                </div>
-                <h4 className="text-card-title font-bold text-zinc-800">Tables Not Created Yet</h4>
-                <p className="text-caption text-zinc-500 max-w-xs mt-0.5">
-                  Tables and seating will appear here once created in the schedule.
-                </p>
-                {navigateToSchedule && (
-                  <button
-                    onClick={navigateToSchedule}
-                    type="button"
-                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-red hover:bg-[#b51c2a] text-white text-button rounded-xl transition-smooth cursor-pointer shadow-2xs"
-                  >
-                    <span>View Tables Schedule</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Bottom Captain Tag */}
-            <div className="mt-auto pt-2 flex items-center justify-between text-caption text-zinc-600 bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
-              <span className="flex items-center gap-1.5 font-medium">
-                <CheckCircle2 className="w-4 h-4 text-brand-red" />
-                <span>All {activeTablesCount} Table Captains Present</span>
-              </span>
-              <span className="font-sans tabular-nums font-bold text-zinc-900">{verifiedAttendanceCount} Members Checked In</span>
-            </div>
-          </div>
-        </div>
-
-        {/* COLUMN 3: LIVE REFERRALS & LEADERBOARD (lg:col-span-3) */}
-        <div className="lg:col-span-3 flex flex-col gap-4">
-
-          {/* Top Card: Referrals by Table Dynamic Strip */}
-          <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 flex flex-col gap-3 flex-1 min-h-0 font-sans">
-            <div className="flex items-center justify-between">
-              <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Referrals by Table</span>
               {/* Segmented Pill Toggle */}
               <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
                 <button
                   type="button"
                   onClick={() => setReferralChartMode('table')}
-                  className={`px-2.5 py-0.5 rounded-md transition-all cursor-pointer ${referralChartMode === 'table' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'table' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
                 >
                   By Table
                 </button>
                 <button
                   type="button"
                   onClick={() => setReferralChartMode('status')}
-                  className={`px-2.5 py-0.5 rounded-md transition-all cursor-pointer ${referralChartMode === 'status' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'status' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
                 >
                   Status
                 </button>
@@ -1625,16 +1310,16 @@ export default function RoundRunner({
 
             {/* Content: By Table (Vertical Bars) or By Status (Vertical Bars) */}
             {referralChartMode === 'table' ? (
-              <div className="flex-1 w-full flex flex-col justify-end min-h-[160px] pt-2">
-                <div className="flex items-stretch gap-1.5 sm:gap-2 overflow-x-auto pb-1 h-full custom-scrollbar">
+              <div className="flex-1 w-full flex flex-col justify-end min-h-[200px] sm:min-h-[220px] pt-3">
+                <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto pb-2 h-full custom-scrollbar">
                   {tableReferralsChartData.map((t) => {
                     const heightPercent = maxTableReferrals > 0 && t.referrals > 0
-                      ? Math.min(100, Math.max(15, Math.round((t.referrals / maxTableReferrals) * 100)))
+                      ? Math.min(100, Math.max(14, Math.round((t.referrals / maxTableReferrals) * 100)))
                       : 0;
                     return (
                       <div
                         key={t.tableNumber}
-                        className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
+                        className="group relative flex flex-col items-center h-full flex-1 min-w-[36px] sm:min-w-[48px] max-w-[64px] cursor-pointer"
                         title={`Table ${t.tableNumber}: ${t.referrals} referrals`}
                       >
                         {/* Hover Tooltip Popup */}
@@ -1644,23 +1329,23 @@ export default function RoundRunner({
                         </div>
 
                         {/* Referral count on top: fixed height */}
-                        <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                          <span className="font-sans tabular-nums text-caption font-bold text-brand-red leading-none">
+                        <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
+                          <span className="font-sans tabular-nums text-xs sm:text-sm font-black text-brand-red leading-none">
                             {t.referrals}
                           </span>
                         </div>
 
-                        {/* Vertical Bar: rounded top shoulders, flat bottom (like image 2) */}
-                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
+                        {/* Vertical Bar: rounded top shoulders, flat bottom */}
+                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
                           <div
-                            className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
+                            className="w-5 sm:w-7 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
                             style={{ height: `${heightPercent > 0 ? heightPercent : 6}%`, minHeight: '6px' }}
                           />
                         </div>
 
                         {/* Bottom Label: fixed height */}
-                        <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
-                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
+                        <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
+                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans bg-zinc-100 px-1.5 py-0.5 rounded">
                             T{t.tableNumber}
                           </span>
                         </div>
@@ -1670,25 +1355,25 @@ export default function RoundRunner({
                 </div>
               </div>
             ) : (
-              <div className="flex-1 w-full flex flex-col justify-end min-h-[160px] pt-2">
-                <div className="grid grid-cols-3 gap-3 h-full items-stretch">
+              <div className="flex-1 w-full flex flex-col justify-end min-h-[200px] sm:min-h-[220px] pt-3">
+                <div className="grid grid-cols-3 gap-4 sm:gap-8 h-full items-stretch max-w-xl mx-auto w-full">
                   {/* Connected Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-caption font-bold text-[#00875A] leading-none">
+                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
+                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-[#00875A] leading-none">
                         {connectedReferrals}
                       </span>
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
                       <div
-                        className="w-6 sm:w-7 bg-[#00875A] rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
+                        className="w-10 sm:w-14 bg-[#00875A] rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((connectedReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
                         }}
                       />
                     </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Connected
                       </span>
@@ -1697,21 +1382,21 @@ export default function RoundRunner({
 
                   {/* Pending Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-caption font-bold text-amber-600 leading-none">
+                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
+                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-amber-600 leading-none">
                         {pendingReferrals}
                       </span>
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
                       <div
-                        className="w-6 sm:w-7 bg-amber-500 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
+                        className="w-10 sm:w-14 bg-amber-500 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((pendingReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
                         }}
                       />
                     </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Pending
                       </span>
@@ -1720,21 +1405,21 @@ export default function RoundRunner({
 
                   {/* Closed Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-caption font-bold text-zinc-600 leading-none">
+                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
+                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-zinc-600 leading-none">
                         {closedReferrals}
                       </span>
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[90px]">
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
                       <div
-                        className="w-6 sm:w-7 bg-zinc-600 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
+                        className="w-10 sm:w-14 bg-zinc-600 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
                         style={{
                           height: `${totalReferrals > 0 ? Math.max(8, Math.round((closedReferrals / totalReferrals) * 100)) : 6}%`,
                           minHeight: '6px',
                         }}
                       />
                     </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Closed
                       </span>
@@ -1745,89 +1430,244 @@ export default function RoundRunner({
             )}
 
             {/* Bottom Breakdown Status Strip */}
-            <div className="mt-auto pt-2 border-t border-zinc-100 flex items-center justify-between text-caption text-zinc-600 font-sans">
-              <span className="flex items-center gap-1 text-label-xs">
-                <span className="w-2 h-2 rounded-full bg-[#00875A]" />
-                <span>Connected: {connectedReferrals}</span>
-              </span>
-              <span className="flex items-center gap-1 text-label-xs">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span>Pending: {pendingReferrals}</span>
-              </span>
-              <span className="flex items-center gap-1 text-label-xs">
-                <span className="w-2 h-2 rounded-full bg-zinc-400" />
-                <span>Closed: {closedReferrals}</span>
+            <div className="mt-auto pt-2.5 border-t border-zinc-100 flex flex-wrap items-center justify-between text-caption text-zinc-600 font-sans gap-2">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5 text-label-xs">
+                  <span className="w-2 h-2 rounded-full bg-[#00875A]" />
+                  <span>Connected: <strong className="text-zinc-900">{connectedReferrals}</strong></span>
+                </span>
+                <span className="flex items-center gap-1.5 text-label-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Pending: <strong className="text-zinc-900">{pendingReferrals}</strong></span>
+                </span>
+                <span className="flex items-center gap-1.5 text-label-xs">
+                  <span className="w-2 h-2 rounded-full bg-zinc-500" />
+                  <span>Closed: <strong className="text-zinc-900">{closedReferrals}</strong></span>
+                </span>
+              </div>
+              <span className="text-label-xs font-semibold text-zinc-500">
+                Avg {(totalReferrals / Math.max(1, activeTablesCount)).toFixed(1)} / table
               </span>
             </div>
           </div>
 
-          {/* Bottom Card: Top Referrals Leaderboard */}
-          <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 flex flex-col gap-3 flex-1 min-h-0 font-sans">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-brand-red" />
-                <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Top Referrals</span>
+          {/* Bottom Dual-Card Grid: Seating Attendance & Top Referrals */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+            {/* Left Card: Table Seating Attendance (Strictly Real Backend Data) */}
+            <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 sm:p-5 flex flex-col gap-3 font-sans">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-brand-red" />
+                  <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Table Seating</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSeatingViewMode('bars')}
+                      className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'bars' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                    >
+                      Bars
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSeatingViewMode('grid')}
+                      className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'grid' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                    >
+                      Grid
+                    </button>
+                  </div>
+                  <span className="text-label-xs font-bold bg-emerald-50 text-[#00875A] border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                    {tables.length > 0 ? `${tables.length} Tables` : 'Pending'}
+                  </span>
+                </div>
               </div>
-              <span className="flex items-center gap-1 text-label-xs text-[#00875A] font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-sans tabular-nums">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live ({totalReferrals})
-              </span>
-            </div>
 
-            <div className="flex flex-col gap-2 mt-1 font-sans flex-1 min-h-0">
-              {leaderboard.length > 0 ? (
-                <div className="flex flex-col gap-2 overflow-y-auto pr-0.5">
-                  {leaderboard.map((item, idx) => {
-                    const badgeClass = idx === 0
-                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 ring-1 ring-amber-300'
-                      : idx === 1
-                        ? 'bg-gradient-to-r from-slate-200 to-slate-300 text-slate-800 ring-1 ring-slate-300'
-                        : 'bg-gradient-to-r from-amber-700/30 to-amber-800/30 text-amber-900 ring-1 ring-amber-700/20';
-                    return (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 transition-all flex items-center justify-between gap-2 border border-zinc-100 shadow-2xs font-sans"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-caption shrink-0 shadow-2xs ${badgeClass}`}>
-                            {idx + 1}
-                          </span>
-                          <div className="flex flex-col min-w-0 text-left">
-                            <span className="text-card-title font-bold text-zinc-900 truncate">{item.name}</span>
-                            <span className="text-caption text-zinc-500 truncate">{item.category}</span>
+              <p className="text-caption text-zinc-500 font-medium">
+                Round {activeRound || 1} seating · {personsPerTable} members/table
+              </p>
+
+              {/* If tables are scheduled, show the vertical bar visualizer or grid */}
+              {tables.length > 0 ? (
+                seatingViewMode === 'bars' ? (
+                  <div className="flex items-stretch gap-1.5 sm:gap-2 pt-2 overflow-x-auto pb-1.5 custom-scrollbar h-44">
+                    {tables.map((t) => {
+                      const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
+                      const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));
+                      const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
+                      return (
+                        <div
+                          key={t.tableNumber}
+                          className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
+                          title={`Table ${t.tableNumber}: ${captainFullName} (${seatedCount}/${personsPerTable} seated)`}
+                        >
+                          {/* Hover Tooltip Popup */}
+                          <div className="absolute -top-9 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
+                            <span>{captainFullName}</span>
+                            <span className="text-zinc-400 font-normal">({seatedCount}/{personsPerTable})</span>
+                          </div>
+
+                          {/* Seated count tag */}
+                          <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
+                            <span className="font-sans tabular-nums text-caption text-brand-red font-bold leading-none">
+                              {seatedCount}/{personsPerTable}
+                            </span>
+                          </div>
+
+                          {/* Vertical Bar */}
+                          <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[44px]">
+                            <div
+                              className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
+                              style={{ height: `${heightPercent}%`, minHeight: '6px' }}
+                            />
+                          </div>
+
+                          {/* Bottom Label */}
+                          <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                            <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
+                              T{t.tableNumber}
+                            </span>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-caption font-bold text-brand-red tabular-nums">{item.count} Referrals</span>
-                          {item.totalAmount > 0 ? (
-                            <div className="text-label-xs text-[#00875A] font-bold tabular-nums">
-                              ₹{(item.totalAmount / 1000).toFixed(0)}K
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Grid view */
+                  <div className="grid grid-cols-2 gap-2 pt-1 max-h-[180px] overflow-y-auto custom-scrollbar">
+                    {tables.map((t) => {
+                      const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
+                      const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
+                      const isFull = seatedCount >= personsPerTable;
+                      return (
+                        <div
+                          key={t.tableNumber}
+                          className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-between gap-2 shadow-2xs hover:bg-white transition-all"
+                        >
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white font-black text-xs flex items-center justify-center shrink-0">
+                              T{t.tableNumber}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-zinc-900 truncate" title={captainFullName}>
+                                {captainFullName}
+                              </p>
+                              <p className="text-[10px] text-zinc-500 font-medium truncate">
+                                {t.captain?.category || 'Table Lead'}
+                              </p>
                             </div>
-                          ) : (
-                            <div className="text-label-xs text-zinc-400">Given</div>
-                          )}
+                          </div>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isFull ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-brand-red border border-red-200'
+                            }`}>
+                            {seatedCount}/{personsPerTable}
+                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )
               ) : (
-                <div className="p-4 my-auto text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200 text-zinc-500 text-caption font-medium">
-                  No referrals given yet this round. When members give referrals on their phones, they will appear here.
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/50">
+                  <div className="w-10 h-10 rounded-full bg-red-50 text-brand-red flex items-center justify-center mb-2">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <h4 className="text-card-title font-bold text-zinc-800">Tables Not Created Yet</h4>
+                  <p className="text-caption text-zinc-500 max-w-xs mt-0.5">
+                    Tables and seating will appear here once created in the schedule.
+                  </p>
+                  {navigateToSchedule && (
+                    <button
+                      onClick={navigateToSchedule}
+                      type="button"
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-red hover:bg-[#b51c2a] text-white text-button rounded-xl transition-smooth cursor-pointer shadow-2xs"
+                    >
+                      <span>View Tables Schedule</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               )}
+
+              {/* Bottom Captain Tag */}
+              <div className="mt-auto pt-2 flex items-center justify-between text-caption text-zinc-600 bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-brand-red" />
+                  <span>Captains: {activeTablesCount}</span>
+                </span>
+                <span className="font-sans tabular-nums font-bold text-zinc-900">{verifiedAttendanceCount} In</span>
+              </div>
             </div>
 
-            {navigateToSchedule ? (
-              <button
-                type="button"
-                onClick={navigateToSchedule}
-                className="mt-auto pt-1 text-center text-button text-brand-red hover:text-[#b51c2a] transition-colors flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <span>View All {totalParticipantsSeated} Members</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            ) : null}
+            {/* Right Card: Top Referrals Leaderboard (Top 5) */}
+            <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 sm:p-5 flex flex-col gap-3 font-sans">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-brand-red" />
+                  <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Top Referrals</span>
+                </div>
+                <span className="flex items-center gap-1 text-label-xs text-[#00875A] font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 font-sans tabular-nums">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live ({totalReferrals})
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-1 font-sans flex-1 min-h-0">
+                {leaderboard.length > 0 ? (
+                  <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-0.5 custom-scrollbar">
+                    {leaderboard.map((item, idx) => {
+                      const badgeClass = idx === 0
+                        ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 ring-1 ring-amber-300'
+                        : idx === 1
+                          ? 'bg-gradient-to-r from-slate-200 to-slate-300 text-slate-800 ring-1 ring-slate-300'
+                          : idx === 2
+                            ? 'bg-gradient-to-r from-amber-700/30 to-amber-800/30 text-amber-900 ring-1 ring-amber-700/20'
+                            : 'bg-zinc-200 text-zinc-700 ring-1 ring-zinc-300';
+                      return (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 transition-all flex items-center justify-between gap-2 border border-zinc-100 shadow-2xs font-sans"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-caption shrink-0 shadow-2xs ${badgeClass}`}>
+                              {idx + 1}
+                            </span>
+                            <div className="flex flex-col min-w-0 text-left">
+                              <span className="text-card-title font-bold text-zinc-900 truncate">{item.name}</span>
+                              <span className="text-caption text-zinc-500 truncate">{item.category}</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-caption font-bold text-brand-red tabular-nums">{item.count} Referrals</span>
+                            {item.totalAmount > 0 ? (
+                              <div className="text-label-xs text-[#00875A] font-bold tabular-nums">
+                                ₹{(item.totalAmount / 1000).toFixed(0)}K
+                              </div>
+                            ) : (
+                              <div className="text-label-xs text-zinc-400">Given</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 my-auto text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200 text-zinc-500 text-caption font-medium">
+                    No referrals given yet this round. When members give referrals on their phones, they will appear here.
+                  </div>
+                )}
+              </div>
+
+              {navigateToSchedule ? (
+                <button
+                  type="button"
+                  onClick={navigateToSchedule}
+                  className="mt-auto pt-1 text-center text-button text-brand-red hover:text-[#b51c2a] transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>View All {totalParticipantsSeated} Members</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
