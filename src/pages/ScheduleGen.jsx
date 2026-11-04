@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -236,19 +236,26 @@ export default function ScheduleGen({
     setPersonsPerTable(newCapacity);
   };
 
-  // Sync parameters with conclave
+  // Track previous conclave ID so we only initialize parameters when changing conclaves
+  const prevConclaveIdRef = useRef(null);
+
+  // Sync parameters only when selecting a different conclave
   useEffect(() => {
+    if (!selectedConclave) return;
+
     const isRunning = Boolean(
-      selectedConclave && (
-        ['running', 'completed', 'locked'].includes((selectedConclave.status || '').toLowerCase()) ||
-        Boolean(selectedConclave.scheduleSummary) ||
-        Boolean(selectedConclave.schedule)
-      )
+      ['running', 'completed', 'locked'].includes((selectedConclave.status || '').toLowerCase()) ||
+      Boolean(selectedConclave.scheduleSummary) ||
+      Boolean(selectedConclave.schedule)
     );
     setProgress(isRunning ? 100 : 0);
     setElapsed(isRunning ? 42 : 0);
     setProcessed(isRunning ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
-    if (selectedConclave) {
+
+    // Only populate input parameters when switching to a different conclave or on first load
+    if (prevConclaveIdRef.current !== selectedConclave.id) {
+      prevConclaveIdRef.current = selectedConclave.id;
+      setTargetTableCount(null);
       if (typeof selectedConclave.personsPerTable === 'number') {
         setPersonsPerTable(selectedConclave.personsPerTable);
       } else if (conclaveDefaults.personsPerTable) {
@@ -263,7 +270,7 @@ export default function ScheduleGen({
         setMoveSecondsState(selectedConclave.moveSeconds);
       }
     }
-  }, [selectedConclave, stats, conclaveDefaults]);
+  }, [selectedConclave?.id, conclaveDefaults]);
 
   // Round Timing
   const [roundTiming, setRoundTiming] = useState({ bioSeconds: 60, referralSeconds: 30, bufferSeconds: 120 });
@@ -693,8 +700,14 @@ export default function ScheduleGen({
                   type="button"
                   onClick={handleStartGeneration}
                   disabled={isLocked || isConclaveCompleted}
-                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-40"
-                  title="Create the schedule again"
+                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={
+                    isConclaveCompleted
+                      ? 'Conclave is completed. Seating is archived and cannot be regenerated.'
+                      : isLocked
+                        ? 'Schedule is locked. Cannot recreate schedule.'
+                        : 'Re-run the seating algorithm to create a new schedule'
+                  }
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-zinc-500" />
                   <span>Create Again</span>
