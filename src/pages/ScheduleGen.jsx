@@ -12,12 +12,10 @@ import {
   SlidersHorizontal,
   Plus,
   Minus,
-  Dices,
   ChevronRight,
   Building2,
   AlertTriangle,
   RotateCcw,
-  Sparkles,
   LayoutGrid,
   Layers,
   Clock,
@@ -196,8 +194,6 @@ export default function ScheduleGen({
   const [personsPerTable, setPersonsPerTable] = useState(() => conclaveDefaults.personsPerTable || 7);
   const [roundCount, setRoundCount] = useState(() => conclaveDefaults.roundCount || 6);
   const [moveSeconds, setMoveSecondsState] = useState(() => selectedConclave?.moveSeconds || 120);
-  const [randomSeed, setRandomSeed] = useState(92843);
-  const [manualOverride, setManualOverride] = useState(false);
 
   // Active sub-tab inside Schedule Generation
   const [activeTab, setActiveTab] = useState('planner'); // 'planner' | 'visual' | 'blueprint'
@@ -304,12 +300,6 @@ export default function ScheduleGen({
     setToast({ title, desc });
     setTimeout(() => setToast(null), 3000);
   };
-
-  // Algorithm weights
-  const [overlapWeight, setOverlapWeight] = useState(80);
-  const [chapterWeight, setChapterWeight] = useState(90);
-  const [diversityWeight, setDiversityWeight] = useState(70);
-  const [regionWeight, setRegionWeight] = useState(50);
 
   const roundLengthSecs = Math.min(8, personsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
 
@@ -578,7 +568,7 @@ export default function ScheduleGen({
 
   const uniqueMeetingsVal = selectedConclave?.scheduleSummary?.coverage !== undefined
     ? Math.round(selectedConclave.scheduleSummary.coverage * 100)
-    : Math.min(100, Math.round(90 + (overlapWeight * 0.1) - (progress === 100 ? 0 : 2.5)));
+    : Math.min(100, Math.round(98 - (progress === 100 ? 0 : 2.5)));
 
   const hasSchedule = Boolean(selectedConclave?.schedule?.rounds?.length);
   const repeatedPairingsVal = hasSchedule
@@ -589,7 +579,7 @@ export default function ScheduleGen({
 
   const diversityVal = selectedConclave?.scheduleSummary?.coverage !== undefined
     ? Math.min(100, Math.round((selectedConclave.scheduleSummary.coverage * 100) - (selectedConclave.scheduleSummary.repeatPairings || 0)))
-    : Math.min(100, Math.round(85 + (diversityWeight * 0.1) - (progress === 100 ? 0 : 3.5)));
+    : Math.min(100, Math.round(92 - (progress === 100 ? 0 : 3.5)));
 
   const isConclaveCompleted = Boolean(
     selectedConclave && (
@@ -1047,7 +1037,7 @@ export default function ScheduleGen({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Card 1: Tables & Seats */}
             <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
               <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
@@ -1241,115 +1231,6 @@ export default function ScheduleGen({
                   ))}
                 </div>
                 <p className="text-[10px] font-semibold text-zinc-400">Time allowed for members to walk to their next table.</p>
-              </div>
-            </div>
-
-            {/* Card 3: Arrangement Rules */}
-            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-brand-red" />
-                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Arrangement Rules</h3>
-                </div>
-                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                  Preferences
-                </span>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
-                    <span>Avoid Meeting Same People</span>
-                    <span className="text-zinc-950 font-black">{overlapWeight}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={overlapWeight}
-                    onChange={(e) => setOverlapWeight(parseInt(e.target.value))}
-                    className="w-full accent-brand-red cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
-                    <span>Mix Different Chapters</span>
-                    <span className="text-zinc-950 font-black">{diversityWeight}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={diversityWeight}
-                    onChange={(e) => setDiversityWeight(parseInt(e.target.value))}
-                    className="w-full accent-brand-red cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
-                    <span>Separate Same-Chapter Members</span>
-                    <span className="text-zinc-950 font-black">{chapterWeight}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={chapterWeight}
-                    onChange={(e) => setChapterWeight(parseInt(e.target.value))}
-                    className="w-full accent-brand-red cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between font-bold text-zinc-600 mb-1">
-                    <span>Mix Different Regions</span>
-                    <span className="text-zinc-950 font-black">{regionWeight}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={regionWeight}
-                    onChange={(e) => setRegionWeight(parseInt(e.target.value))}
-                    className="w-full accent-brand-red cursor-pointer"
-                  />
-                </div>
-
-                {/* Seed & Override */}
-                <div className="pt-2 flex items-center justify-between border-t border-zinc-100">
-                  <span className="text-[10.5px] font-bold text-zinc-500">Order Code: {randomSeed}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = Math.floor(10000 + Math.random() * 90000);
-                      setRandomSeed(next);
-                      showToast('Order Shuffled', `Member order shuffled (Code: ${next})`);
-                    }}
-                    className="inline-flex items-center gap-1 text-[10.5px] font-black text-brand-red hover:underline cursor-pointer"
-                  >
-                    <Dices className="w-3.5 h-3.5" />
-                    <span>Shuffle Order</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10.5px] font-bold text-zinc-600">Allow Manual Table Changes</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualOverride(!manualOverride);
-                      showToast('Setting Changed', `Manual table changes: ${!manualOverride ? 'Allowed' : 'Not Allowed'}`);
-                    }}
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border transition-smooth cursor-pointer ${manualOverride
-                      ? 'bg-red-50 text-brand-red border-red-200'
-                      : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                      }`}
-                  >
-                    {manualOverride ? 'Allowed' : 'Locked'}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
