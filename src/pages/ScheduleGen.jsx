@@ -152,6 +152,7 @@ export default function ScheduleGen({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [checkedQuality, setCheckedQuality] = useState(false);
   const [checkedEdits, setCheckedEdits] = useState(false);
+  const [isLocking, setIsLocking] = useState(false);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -433,6 +434,8 @@ export default function ScheduleGen({
   };
 
   const handleConfirmLock = async () => {
+    if (isLocking) return;
+    setIsLocking(true);
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/lock-schedule`);
       const updatedConclaves = conclaves.map(c =>
@@ -454,16 +457,18 @@ export default function ScheduleGen({
       } catch { }
       setIsModalOpen(false);
       showToast('Seating Finalized & Locked', 'Table assignments are now locked and visible in the mobile app.');
+
+      confetti({
+        particleCount: 120,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
     } catch (err) {
       console.error('Backend conclave lock failed:', err.message);
       showToast('Error', err.message || 'Failed to lock seating. Please try again.');
+    } finally {
+      setIsLocking(false);
     }
-
-    confetti({
-      particleCount: 120,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
   };
 
   const handleStartRound = async (roundNumber = 1) => {
@@ -1593,22 +1598,31 @@ export default function ScheduleGen({
             <div className="p-4 border-t border-zinc-100 bg-zinc-50/50 flex justify-end gap-2.5">
               <button
                 type="button"
+                disabled={isLocking}
                 onClick={() => {
+                  if (isLocking) return;
                   setIsModalOpen(false);
                   setCheckedQuality(false);
                   setCheckedEdits(false);
                 }}
-                className="px-4 py-2 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-xl hover:bg-zinc-50 transition-smooth cursor-pointer"
+                className="px-4 py-2 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-xl hover:bg-zinc-50 transition-smooth cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={!(checkedQuality && checkedEdits)}
+                disabled={isLocking || !(checkedQuality && checkedEdits)}
                 onClick={handleConfirmLock}
-                className="px-5 py-2 bg-brand-red hover:bg-red-750 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-sm transition-smooth cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-brand-red hover:bg-red-750 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-sm transition-smooth cursor-pointer"
               >
-                Lock Seating
+                {isLocking ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Locking Seating...</span>
+                  </>
+                ) : (
+                  <span>Lock Seating</span>
+                )}
               </button>
             </div>
           </div>
