@@ -10,7 +10,8 @@ import {
   MapPin,
   Send,
   Shield,
-  CheckCircle2
+  CheckCircle2,
+  Handshake
 } from 'lucide-react';
 
 import { api } from '../services/api';
@@ -337,55 +338,75 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
       {/* Executive KPI Metric Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
         {/* KPI 1: Members */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Total Members
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalMembers}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Total Members
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalMembers}</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
         {/* KPI 2: Table Captains */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Table Captains
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalCaptains}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Table Captains
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalCaptains}</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <Award className="w-5 h-5" />
           </div>
         </div>
 
         {/* KPI 3: Referrals Exchanged */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Referrals Exchanged
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-brand-red tabular-nums">{totalReferrals}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Referrals Exchanged
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-brand-red tabular-nums">{totalReferrals}</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+            <Handshake className="w-5 h-5" />
           </div>
         </div>
 
         {/* KPI 4: Rounds */}
-        <div className="p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-              Rounds
-            </span>
-            <span className="text-[10px] font-bold uppercase text-zinc-600 tracking-wider">
-              {(selectedConclave.status || '').toLowerCase() === 'completed'
-                ? 'Finished'
-                : totalRounds > 0 ? `Round ${roundsRun} of ${totalRounds}` : 'Not started'}
-            </span>
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex-1 min-w-0 pr-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
+                Rounds
+              </span>
+              <span className="text-[10px] font-bold uppercase text-zinc-600 tracking-wider">
+                {(selectedConclave.status || '').toLowerCase() === 'completed'
+                  ? 'Finished'
+                  : totalRounds > 0 ? `Round ${roundsRun} of ${totalRounds}` : 'Not started'}
+              </span>
+            </div>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{conclaveProgress}%</span>
+            </div>
+            <div className="w-full h-1.5 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/70">
+              <div
+                className="h-full rounded-full bg-brand-red transition-all duration-700"
+                style={{ width: `${Math.max(conclaveProgress, 2)}%` }}
+              />
+            </div>
           </div>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{conclaveProgress}%</span>
-          </div>
-          <div className="w-full h-1.5 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200/70">
-            <div
-              className="h-full rounded-full bg-brand-red transition-all duration-700"
-              style={{ width: `${Math.max(conclaveProgress, 2)}%` }}
-            />
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
           </div>
         </div>
       </div>

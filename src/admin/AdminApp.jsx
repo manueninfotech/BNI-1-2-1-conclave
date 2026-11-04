@@ -142,7 +142,8 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
               <Route path="captains" element={<CurrentConclaveRedirect base={base} tab="captains" />} />
               <Route path="payments" element={<CurrentConclaveRedirect base={base} tab="payments" />} />
               <Route path="feedback" element={<CurrentConclaveRedirect base={base} tab="feedback" />} />
-              {['schedule-hub', 'schedule-gen', 'schedule-review', 'round-runner'].map((p) => (
+              <Route path="round-runner" element={<CurrentConclaveRedirect base={base} tab="round-runner" />} />
+              {['schedule-hub', 'schedule-gen', 'schedule-review'].map((p) => (
                 <Route key={p} path={p} element={<CurrentConclaveRedirect base={base} tab="schedule" />} />
               ))}
               <Route path="*" element={<Navigate to={base} replace />} />

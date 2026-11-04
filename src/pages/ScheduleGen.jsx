@@ -22,6 +22,7 @@ import {
   Check,
   Zap,
   Search,
+  UserCheck,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
@@ -626,38 +627,56 @@ export default function ScheduleGen({
       {/* Executive 4-Metric KPI Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 sm:grid-cols-4">
         {/* Metric 1: Total Members */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Members</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">
-              {totalAttendees.toLocaleString()}
-            </span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Total Members</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">
+                {totalAttendees.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 2: Table Captains */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Table Captains</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainsCount}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Table Captains</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainsCount}</span>
+            </div>
           </div>
-          <div className="text-[10px] font-bold truncate">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <Award className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 3: Total Seats */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Seats</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{calculatedTableCount * personsPerTable}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Total Seats</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{calculatedTableCount * personsPerTable}</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <LayoutGrid className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 4: People You Meet */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">People You Meet</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{Math.max(1, personsPerTable - 1) * roundCount}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">People You Meet</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{Math.max(1, personsPerTable - 1) * roundCount}</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+            <UserCheck className="w-5 h-5" />
           </div>
         </div>
       </div>

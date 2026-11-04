@@ -67,7 +67,8 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
 
   // Captains are members with a role now: old links open the filtered list.
   if (tab === 'captains') return <Navigate to={`${base}/conclaves/${id}/members?role=captain`} replace />;
-  if (!CONCLAVE_TABS.some((t) => t.id === tab)) return <Navigate to={`${base}/conclaves/${id}`} replace />;
+  const isValidTab = CONCLAVE_TABS.some((t) => t.id === tab) || tab === 'round-runner' || tab === 'schedule-gen';
+  if (!isValidTab) return <Navigate to={`${base}/conclaves/${id}`} replace />;
   const tabs = CONCLAVE_TABS.filter((t) => !t.paidOnly || !conclave || isPaid(conclave) || tab === t.id);
 
   const tabPath = (t) => `${base}/conclaves/${id}${t === 'overview' ? '' : `/${t}`}`;
@@ -117,25 +118,28 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
         )}
 
         <nav className="flex gap-1 overflow-x-auto border-b border-zinc-200 -mx-1 px-1 pt-1.5 sm:pt-2" aria-label="Conclave sections">
-          {tabs.map((t) => (
-            <NavLink
-              key={t.id}
-              to={tabPath(t.id)}
-              end
-              className={() =>
-                `px-3.5 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-smooth ${
-                  tab === t.id ? 'border-brand-red text-brand-red' : 'border-transparent text-zinc-500 hover:text-zinc-900'
-                }`
-              }
-            >
-              {t.label}
-            </NavLink>
-          ))}
+          {tabs.map((t) => {
+            const isTabActive = tab === t.id || (t.id === 'schedule' && (tab === 'round-runner' || tab === 'schedule-gen'));
+            return (
+              <NavLink
+                key={t.id}
+                to={tabPath(t.id)}
+                end
+                className={() =>
+                  `px-3.5 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-smooth ${
+                    isTabActive ? 'border-brand-red text-brand-red' : 'border-transparent text-zinc-500 hover:text-zinc-900'
+                  }`
+                }
+              >
+                {t.label}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
 
       {/* Each tab is an existing page, pointed at this conclave. */}
-      <div key={`${id}:${tab}`} className="pt-0.5">
+      <div key={`${id}:${tab === 'round-runner' || tab === 'schedule-gen' ? 'schedule' : tab}`} className="pt-0.5">
         {tab === 'overview' && <Dashboard selectedConclaveId={id} loggedInAdmin={loggedInAdmin} embedded />}
         {tab === 'members' && (
           <Members
@@ -147,15 +151,23 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
             embedded
           />
         )}
-        {tab === 'schedule' && (
-          <ScheduleHub selectedConclaveId={id} showGenWarning={showGenWarning} clearGenWarning={clearGenWarning} searchQuery={searchQuery} initialStage="auto" />
+        {(tab === 'schedule' || tab === 'round-runner' || tab === 'schedule-gen') && (
+          <ScheduleHub
+            selectedConclaveId={id}
+            showGenWarning={showGenWarning}
+            clearGenWarning={clearGenWarning}
+            searchQuery={searchQuery}
+            initialStage={tab === 'round-runner' ? 'runner' : (tab === 'schedule-gen' ? 'generate' : 'auto')}
+          />
         )}
         {tab === 'payments' && <Payments selectedConclaveId={id} embedded />}
         {tab === 'feedback' && <Feedback selectedConclaveId={id} embedded />}
         {tab === 'activity' && <Activity conclaveId={id} embedded />}
       </div>
 
-      {tab === 'schedule' && <GenWarningBanner genWarning={genWarning} onClose={clearGenWarning} />}
+      {(tab === 'schedule' || tab === 'round-runner' || tab === 'schedule-gen') && (
+        <GenWarningBanner genWarning={genWarning} onClose={clearGenWarning} />
+      )}
     </div>
   );
 }

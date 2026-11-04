@@ -17,6 +17,7 @@ import {
   ArrowUpDown,
   X,
   AlertCircle,
+  Handshake,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -269,60 +270,75 @@ export default function Feedback({ selectedConclaveId, embedded = false }) {
           {/* 2. Executive KPI Metric Strip (Clean 3-Metric Layout) */}
           <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-3 shadow-xs">
             {/* KPI 1: Overall Satisfaction */}
-            <div className="p-4 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-                Average Rating
-              </span>
-              <div className="my-1.5 flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-zinc-950 tabular-nums">
-                  {avgRatingValue > 0 ? avgRatingValue.toFixed(1) : '—'}
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+                  Average Rating
                 </span>
-                <span className="text-xs font-bold text-zinc-400">/ 5.0</span>
+                <div className="my-1.5 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black text-zinc-950 tabular-nums">
+                    {avgRatingValue > 0 ? avgRatingValue.toFixed(1) : '—'}
+                  </span>
+                  <span className="text-xs font-bold text-zinc-400">/ 5.0</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={`w-3 h-3 ${
+                        s <= Math.round(avgRatingValue)
+                          ? 'text-amber-400 fill-amber-400'
+                          : 'text-zinc-200 fill-zinc-100'
+                      }`}
+                    />
+                  ))}
+                  <span className="text-[10px] font-bold text-[#00875A] ml-1">
+                    {avgRatingValue >= 4.5 ? 'World Class' : avgRatingValue >= 4.0 ? 'High' : 'Good'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Star
-                    key={s}
-                    className={`w-3 h-3 ${
-                      s <= Math.round(avgRatingValue)
-                        ? 'text-amber-400 fill-amber-400'
-                        : 'text-zinc-200 fill-zinc-100'
-                    }`}
-                  />
-                ))}
-                <span className="text-[10px] font-bold text-[#00875A] ml-1">
-                  {avgRatingValue >= 4.5 ? 'World Class' : avgRatingValue >= 4.0 ? 'High' : 'Good'}
-                </span>
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center shrink-0">
+                <Star className="w-5 h-5 fill-amber-400" />
               </div>
             </div>
 
             {/* KPI 2: Response Rate */}
-            <div className="p-4 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-                Response Turnout
-              </span>
-              <div className="my-1.5 flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalReviews}</span>
-                {totalParticipants > 0 && (
-                  <span className="text-xs font-semibold text-zinc-400">/ {totalParticipants}</span>
-                )}
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+                  Response Turnout
+                </span>
+                <div className="my-1.5 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalReviews}</span>
+                  {totalParticipants > 0 && (
+                    <span className="text-xs font-semibold text-zinc-400">/ {totalParticipants}</span>
+                  )}
+                </div>
+                <div className="text-[10px] font-bold text-[#00875A]">
+                  {responseRate != null ? `${responseRate}% response rate` : 'Logged'}
+                </div>
               </div>
-              <div className="text-[10px] font-bold text-[#00875A]">
-                {responseRate != null ? `${responseRate}% response rate` : 'Logged'}
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5" />
               </div>
             </div>
 
             {/* KPI 3: Referrals Passed */}
-            <div className="p-4 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-                Referrals Passed
-              </span>
-              <div className="my-1.5 flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-zinc-950 tabular-nums">{referralsTotal}</span>
-                <span className="text-xs font-bold text-zinc-400">leads</span>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+                  Referrals Passed
+                </span>
+                <div className="my-1.5 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black text-zinc-950 tabular-nums">{referralsTotal}</span>
+                  <span className="text-xs font-bold text-zinc-400">leads</span>
+                </div>
+                <div className="text-[10px] font-bold text-brand-red">
+                  {referralsAvg} avg per attendee
+                </div>
               </div>
-              <div className="text-[10px] font-bold text-brand-red">
-                {referralsAvg} avg per attendee
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+                <Handshake className="w-5 h-5" />
               </div>
             </div>
           </div>

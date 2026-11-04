@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Mic,
   AlertCircle,
+  LayoutGrid,
 } from 'lucide-react';
 import { api } from '../services/api';
 import confetti from 'canvas-confetti';
@@ -205,7 +206,6 @@ export default function RoundRunner({
 
   // View mode for Referrals card: 'table' (by table T1..Tn) or 'status' (Connected/Pending/Closed)
   const [referralChartMode, setReferralChartMode] = useState('table');
-  const [seatingViewMode, setSeatingViewMode] = useState('bars'); // 'bars' | 'grid'
 
   // Calculate referrals per table from real data
   const tableReferralsChartData = useMemo(() => {
@@ -753,16 +753,6 @@ export default function RoundRunner({
     });
   }, [timingState.personsPerTable, timingState.speakerNumber, timingState.phase, isCompleted, isUpcoming, activeRound, isRoundEnded]);
 
-  const refsBeadState = useMemo(() => {
-    if (isCompleted || isRoundEnded || timingState.phase === 'transition' || timingState.phase === 'ended') {
-      return 'done';
-    }
-    if (!isCompleted && !isUpcoming && activeRound > 0 && timingState.phase === 'referral') {
-      return 'active';
-    }
-    return 'upcoming';
-  }, [isCompleted, isRoundEnded, isUpcoming, activeRound, timingState.phase]);
-
   // Total seated members count from backend stats & participants
   const totalParticipantsSeated = useMemo(() => {
     if (stats?.counts?.members !== undefined) {
@@ -821,8 +811,6 @@ export default function RoundRunner({
         icon: <CheckCircle2 className="w-5 h-5 text-white" />,
         iconBg: 'bg-[#00875A]',
         title: 'Conclave Concluded',
-        badge: 'Finished',
-        badgeStyle: 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30',
         subtitle: 'All rounds and referral exchanges are completed',
         timeText: '00:00',
         timeSub: 'Status',
@@ -835,8 +823,6 @@ export default function RoundRunner({
         icon: <CheckCircle2 className="w-5 h-5 text-white" />,
         iconBg: 'bg-amber-600',
         title: `Round ${activeRound} Finished`,
-        badge: 'Round Ended',
-        badgeStyle: 'bg-amber-500/25 text-amber-300 border border-amber-500/30',
         subtitle: activeRound < totalRounds ? `Ready for Round ${activeRound + 1}` : 'Ready to conclude conclave',
         timeText: '00:00',
         timeSub: 'Time Left',
@@ -849,8 +835,6 @@ export default function RoundRunner({
         icon: <Play className="w-5 h-5 text-white fill-white ml-0.5" />,
         iconBg: 'bg-zinc-700',
         title: `Ready for Round ${activeRound || 1}`,
-        badge: 'Ready',
-        badgeStyle: 'bg-zinc-500/25 text-zinc-300 border border-zinc-500/30',
         subtitle: 'Waiting for coordinator to start the round',
         timeText: formatTime(currentTotalBlock),
         timeSub: 'Round Time',
@@ -864,8 +848,6 @@ export default function RoundRunner({
         icon: <Pause className="w-5 h-5 text-white" />,
         iconBg: 'bg-gradient-to-br from-amber-500 to-amber-700',
         title: `Speaker ${sNum}`,
-        badge: 'Paused',
-        badgeStyle: 'bg-amber-500/25 text-amber-300 border border-amber-500/30',
         subtitle: `Round ${activeRound || 1} • All Tables Paused`,
         timeText: formatTime(timeLeft),
         timeSub: 'Paused',
@@ -878,8 +860,6 @@ export default function RoundRunner({
         icon: <Handshake className="w-5 h-5 text-white" />,
         iconBg: 'bg-gradient-to-br from-blue-600 to-blue-700',
         title: 'Referral Exchange',
-        badge: 'Referrals',
-        badgeStyle: 'bg-blue-500/25 text-blue-300 border border-blue-500/30',
         subtitle: 'Give referrals and log them on your phone',
         timeText: formatTime(timingState.phaseRemaining || 0),
         timeSub: 'Time Left',
@@ -892,8 +872,6 @@ export default function RoundRunner({
         icon: <RotateCcw className="w-5 h-5 text-white" />,
         iconBg: 'bg-gradient-to-br from-amber-500 to-amber-700',
         title: 'Move to Next Table',
-        badge: 'Move Tables',
-        badgeStyle: 'bg-amber-500/25 text-amber-300 border border-amber-500/30',
         subtitle: 'Please move to your next table',
         timeText: formatTime(timingState.phaseRemaining || 0),
         timeSub: 'Time Left',
@@ -907,8 +885,6 @@ export default function RoundRunner({
       icon: <Mic className="w-5 h-5 text-white" />,
       iconBg: 'bg-gradient-to-br from-brand-red to-red-700',
       title: `Speaker ${sNum}`,
-      badge: 'Talking',
-      badgeStyle: 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/30',
       subtitle: `Round ${activeRound || 1} • All Tables`,
       timeText: `${timingState.speakerTimeLeft || 0}s Left`,
       timeSub: 'Time Left',
@@ -1108,18 +1084,10 @@ export default function RoundRunner({
                     <div className={`w-11 h-11 rounded-full ${spotlightInfo.iconBg} text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg ring-2 ring-white/15`}>
                       {spotlightInfo.icon}
                     </div>
-                    <div className="flex flex-col justify-center min-w-0 text-left gap-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-black text-white tracking-tight leading-tight font-sans">
-                          {spotlightInfo.title}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded-full shadow-2xs font-sans leading-none ${spotlightInfo.badgeStyle}`}>
-                          {timingState.phase === 'active' && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                          )}
-                          {spotlightInfo.badge}
-                        </span>
-                      </div>
+                    <div className="flex flex-col justify-center min-w-0 text-left gap-1">
+                      <span className="text-[15px] font-black text-white tracking-tight leading-tight font-sans">
+                        {spotlightInfo.title}
+                      </span>
                       <span className="text-xs font-semibold text-zinc-300 tracking-wide truncate font-sans leading-none">
                         {spotlightInfo.subtitle}
                       </span>
@@ -1162,17 +1130,6 @@ export default function RoundRunner({
                     <span>S{num}</span>
                   </div>
                 ))}
-                {/* Referral Bead */}
-                <div
-                  className={`flex-1 min-w-0 h-8 rounded-xl font-bold text-caption flex items-center justify-center px-1 text-center border transition-all ${refsBeadState === 'active'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md ring-2 ring-blue-400 animate-pulse scale-105 border-blue-400'
-                    : refsBeadState === 'done'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs'
-                      : 'bg-white/[0.06] text-zinc-400 border border-white/10'
-                    }`}
-                >
-                  <span className="truncate">REFS {formatBeadText(timingState.referralSecs)}</span>
-                </div>
               </div>
 
               {/* Official Conclave Formula Caption */}
@@ -1245,7 +1202,10 @@ export default function RoundRunner({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-sans">
             {/* Stat 1: Round Run */}
             <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-zinc-200/90 flex flex-col justify-between">
-              <span className="text-label-xs uppercase font-semibold text-zinc-700">Round</span>
+              <div className="flex items-center justify-between">
+                <span className="text-label-xs uppercase font-semibold text-zinc-700">Round</span>
+                <Timer className="w-3.5 h-3.5 text-brand-red" />
+              </div>
               <div className="flex items-baseline gap-1 my-1">
                 <span className="text-display-sm font-extrabold text-zinc-950">{isCompleted ? totalRounds : activeRound}</span>
                 <span className="text-caption font-semibold text-zinc-400">/ {totalRounds}</span>
@@ -1260,7 +1220,10 @@ export default function RoundRunner({
 
             {/* Stat 2: Active Tables */}
             <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-zinc-200/90 flex flex-col justify-between">
-              <span className="text-label-xs uppercase font-semibold text-zinc-700">Tables</span>
+              <div className="flex items-center justify-between">
+                <span className="text-label-xs uppercase font-semibold text-zinc-700">Tables</span>
+                <LayoutGrid className="w-3.5 h-3.5 text-[#00875A]" />
+              </div>
               <div className="flex items-baseline gap-1 my-1">
                 <span className="text-display-sm font-extrabold text-zinc-950">{activeTablesCount}</span>
                 <span className="text-caption font-bold text-emerald-600 ml-1">Active</span>
@@ -1272,7 +1235,10 @@ export default function RoundRunner({
 
             {/* Stat 3: Members Seated */}
             <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-zinc-200/90 flex flex-col justify-between">
-              <span className="text-label-xs uppercase font-semibold text-zinc-700">Members</span>
+              <div className="flex items-center justify-between">
+                <span className="text-label-xs uppercase font-semibold text-zinc-700">Members</span>
+                <Users className="w-3.5 h-3.5 text-zinc-500" />
+              </div>
               <div className="flex items-baseline gap-1 my-1">
                 <span className="text-display-sm font-extrabold text-zinc-950">{totalParticipantsSeated}</span>
                 <span className="text-caption font-semibold text-zinc-400 ml-1">Seated</span>
@@ -1284,7 +1250,10 @@ export default function RoundRunner({
 
             {/* Stat 4: Referrals Logged */}
             <div className="bg-white p-3.5 rounded-2xl shadow-xs border border-zinc-200/90 flex flex-col justify-between">
-              <span className="text-label-xs uppercase font-semibold text-zinc-700">Referrals</span>
+              <div className="flex items-center justify-between">
+                <span className="text-label-xs uppercase font-semibold text-zinc-700">Referrals</span>
+                <Handshake className="w-3.5 h-3.5 text-emerald-600" />
+              </div>
               <div className="flex items-baseline gap-1 my-1">
                 <span className="text-display-sm font-extrabold text-brand-red">{totalReferrals}</span>
                 <span className="text-caption font-bold text-emerald-600 ml-1">+{totalReferrals} R{activeRound || 1}</span>
@@ -1331,22 +1300,38 @@ export default function RoundRunner({
 
             {/* Content: By Table (Vertical Bars) or By Status (Vertical Bars) */}
             {referralChartMode === 'table' ? (
-              <div className="flex-1 w-full flex flex-col justify-end min-h-[200px] sm:min-h-[220px] pt-3">
-                <div className="flex items-stretch justify-around gap-2 sm:gap-4 overflow-x-auto pb-2 h-full custom-scrollbar">
-                  {tableReferralsChartData.map((t) => {
+              <div className="flex-1 w-full flex flex-col justify-end min-h-[220px] sm:min-h-[240px] pt-2">
+                <div className="flex items-stretch justify-around gap-2 sm:gap-4 overflow-x-auto pt-14 pb-2 px-3 h-full custom-scrollbar">
+                  {tableReferralsChartData.map((t, idx) => {
                     const heightPercent = maxTableReferrals > 0 && t.referrals > 0
                       ? Math.min(100, Math.max(22, Math.round((t.referrals / maxTableReferrals) * 100)))
                       : 0;
+                    const isFirst = idx === 0;
+                    const isLast = idx === tableReferralsChartData.length - 1;
                     return (
                       <div
                         key={t.tableNumber}
                         className="group relative flex flex-col items-center h-full flex-1 min-w-[40px] sm:min-w-[50px] max-w-[80px] cursor-pointer"
-                        title={`Table ${t.tableNumber}: ${t.referrals} referrals`}
                       >
-                        {/* Hover Tooltip Popup */}
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
-                          <span>Table {t.tableNumber}</span>
-                          <span className="text-zinc-400 font-normal">({t.referrals} referrals)</span>
+                        {/* Hover Tooltip Popup (Home.jsx Chart Card Style) */}
+                        <div className={`absolute -top-12 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-white border border-zinc-200/90 rounded-xl shadow-md px-3 py-1.5 flex flex-col gap-0.5 text-left font-sans ${isFirst
+                          ? 'left-0'
+                          : isLast
+                            ? 'right-0'
+                            : 'left-1/2 -translate-x-1/2'
+                          }`}>
+                          <p className="text-[11px] font-black text-zinc-900 leading-tight">Table {t.tableNumber}</p>
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600">
+                            <span className="w-2 h-2 rounded-full bg-brand-red shrink-0" />
+                            <span>Referrals:</span>
+                            <strong className="text-zinc-950 font-black tabular-nums">{t.referrals} slips</strong>
+                          </div>
+                          <div className={`absolute -bottom-1 w-2 h-2 bg-white border-r border-b border-zinc-200/90 rotate-45 ${isFirst
+                            ? 'left-4'
+                            : isLast
+                              ? 'right-4'
+                              : 'left-1/2 -translate-x-1/2'
+                            }`} />
                         </div>
 
                         {/* Bar area: dynamically sized according to number, shows NOTHING if 0 */}
@@ -1379,10 +1364,21 @@ export default function RoundRunner({
                 </div>
               </div>
             ) : (
-              <div className="flex-1 w-full flex flex-col justify-end min-h-[200px] sm:min-h-[220px] pt-3">
-                <div className="grid grid-cols-3 gap-4 sm:gap-8 h-full items-stretch max-w-xl mx-auto w-full">
+              <div className="flex-1 w-full flex flex-col justify-end min-h-[220px] sm:min-h-[240px] pt-2">
+                <div className="grid grid-cols-3 gap-4 sm:gap-8 h-full items-stretch max-w-xl mx-auto w-full pt-14">
                   {/* Connected Bar */}
-                  <div className="flex flex-col items-center h-full flex-1 min-w-0">
+                  <div className="group relative flex flex-col items-center h-full flex-1 min-w-0 cursor-pointer">
+                    {/* Hover Tooltip Popup */}
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-white border border-zinc-200/90 rounded-xl shadow-md px-3 py-1.5 flex flex-col gap-0.5 text-left font-sans">
+                      <p className="text-[11px] font-black text-zinc-900 leading-tight">Connected Referrals</p>
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600">
+                        <span className="w-2 h-2 rounded-full bg-[#00875A] shrink-0" />
+                        <span>Status:</span>
+                        <strong className="text-zinc-950 font-black tabular-nums">{connectedReferrals} slips</strong>
+                      </div>
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-zinc-200/90 rotate-45" />
+                    </div>
+
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
                       {connectedReferrals > 0 ? (
                         <div
@@ -1394,7 +1390,7 @@ export default function RoundRunner({
                           <span className="font-sans tabular-nums text-sm sm:text-base font-black text-[#00875A] leading-none mb-1.5 shrink-0">
                             {connectedReferrals}
                           </span>
-                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-[#00875A] rounded-t-md shadow-2xs" />
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-[#00875A] rounded-t-md shadow-2xs group-hover:brightness-110" />
                         </div>
                       ) : null}
                     </div>
@@ -1407,7 +1403,18 @@ export default function RoundRunner({
                   </div>
 
                   {/* Pending Bar */}
-                  <div className="flex flex-col items-center h-full flex-1 min-w-0">
+                  <div className="group relative flex flex-col items-center h-full flex-1 min-w-0 cursor-pointer">
+                    {/* Hover Tooltip Popup */}
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-white border border-zinc-200/90 rounded-xl shadow-md px-3 py-1.5 flex flex-col gap-0.5 text-left font-sans">
+                      <p className="text-[11px] font-black text-zinc-900 leading-tight">Pending Referrals</p>
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                        <span>Status:</span>
+                        <strong className="text-zinc-950 font-black tabular-nums">{pendingReferrals} slips</strong>
+                      </div>
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-zinc-200/90 rotate-45" />
+                    </div>
+
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
                       {pendingReferrals > 0 ? (
                         <div
@@ -1419,7 +1426,7 @@ export default function RoundRunner({
                           <span className="font-sans tabular-nums text-sm sm:text-base font-black text-amber-600 leading-none mb-1.5 shrink-0">
                             {pendingReferrals}
                           </span>
-                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-amber-500 rounded-t-md shadow-2xs" />
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-amber-500 rounded-t-md shadow-2xs group-hover:brightness-110" />
                         </div>
                       ) : null}
                     </div>
@@ -1432,7 +1439,18 @@ export default function RoundRunner({
                   </div>
 
                   {/* Closed Bar */}
-                  <div className="flex flex-col items-center h-full flex-1 min-w-0">
+                  <div className="group relative flex flex-col items-center h-full flex-1 min-w-0 cursor-pointer">
+                    {/* Hover Tooltip Popup */}
+                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-white border border-zinc-200/90 rounded-xl shadow-md px-3 py-1.5 flex flex-col gap-0.5 text-left font-sans">
+                      <p className="text-[11px] font-black text-zinc-900 leading-tight">Closed Referrals</p>
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600">
+                        <span className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
+                        <span>Status:</span>
+                        <strong className="text-zinc-950 font-black tabular-nums">{closedReferrals} slips</strong>
+                      </div>
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-zinc-200/90 rotate-45" />
+                    </div>
+
                     <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
                       {closedReferrals > 0 ? (
                         <div
@@ -1444,7 +1462,7 @@ export default function RoundRunner({
                           <span className="font-sans tabular-nums text-sm sm:text-base font-black text-zinc-600 leading-none mb-1.5 shrink-0">
                             {closedReferrals}
                           </span>
-                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-zinc-600 rounded-t-md shadow-2xs" />
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-zinc-600 rounded-t-md shadow-2xs group-hover:brightness-110" />
                         </div>
                       ) : null}
                     </div>
@@ -1490,112 +1508,75 @@ export default function RoundRunner({
                   <UserCheck className="w-4 h-4 text-brand-red" />
                   <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Table Seating</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
-                    <button
-                      type="button"
-                      onClick={() => setSeatingViewMode('bars')}
-                      className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'bars' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                    >
-                      Bars
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSeatingViewMode('grid')}
-                      className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${seatingViewMode === 'grid' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                    >
-                      Grid
-                    </button>
-                  </div>
-                  <span className="text-label-xs font-bold bg-emerald-50 text-[#00875A] border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                    {tables.length > 0 ? `${tables.length} Tables` : 'Pending'}
-                  </span>
-                </div>
+                <span className="text-label-xs font-bold bg-emerald-50 text-[#00875A] border border-emerald-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                  {tables.length > 0 ? `${tables.length} Tables` : 'Pending'}
+                </span>
               </div>
 
               <p className="text-caption text-zinc-500 font-medium">
                 Round {activeRound || 1} seating · {personsPerTable} members/table
               </p>
 
-              {/* If tables are scheduled, show the vertical bar visualizer or grid */}
+              {/* If tables are scheduled, show the vertical bar visualizer */}
               {tables.length > 0 ? (
-                seatingViewMode === 'bars' ? (
-                  <div className="flex items-stretch gap-1.5 sm:gap-2 pt-2 overflow-x-auto pb-1.5 custom-scrollbar h-44">
-                    {tables.map((t) => {
-                      const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
-                      const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));
-                      const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
-                      return (
-                        <div
-                          key={t.tableNumber}
-                          className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
-                          title={`Table ${t.tableNumber}: ${captainFullName} (${seatedCount}/${personsPerTable} seated)`}
-                        >
-                          {/* Hover Tooltip Popup */}
-                          <div className="absolute -top-9 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-zinc-900 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-lg flex items-center gap-1">
-                            <span>{captainFullName}</span>
-                            <span className="text-zinc-400 font-normal">({seatedCount}/{personsPerTable})</span>
+                <div className="flex items-stretch gap-1.5 sm:gap-2 pt-14 px-3 overflow-x-auto pb-1.5 custom-scrollbar h-52">
+                  {tables.map((t, idx) => {
+                    const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
+                    const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));
+                    const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
+                    const isFirst = idx === 0;
+                    const isLast = idx === tables.length - 1;
+                    return (
+                      <div
+                        key={t.tableNumber}
+                        className="group relative flex flex-col items-center h-full flex-1 min-w-[32px] sm:min-w-[40px] max-w-[54px] cursor-pointer"
+                      >
+                        {/* Hover Tooltip Popup (Home.jsx Chart Card Style) */}
+                        <div className={`absolute -top-12 opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-30 whitespace-nowrap bg-white border border-zinc-200/90 rounded-xl shadow-md px-3 py-1.5 flex flex-col gap-0.5 text-left font-sans ${isFirst
+                          ? 'left-0'
+                          : isLast
+                            ? 'right-0'
+                            : 'left-1/2 -translate-x-1/2'
+                          }`}>
+                          <p className="text-[11px] font-black text-zinc-900 leading-tight">{captainFullName}</p>
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-600">
+                            <span className="w-2 h-2 rounded-full bg-brand-red shrink-0" />
+                            <span>Seated:</span>
+                            <strong className="text-zinc-950 font-black tabular-nums">{seatedCount} / {personsPerTable} members</strong>
                           </div>
-
-                          {/* Seated count tag */}
-                          <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
-                            <span className="font-sans tabular-nums text-caption text-brand-red font-bold leading-none">
-                              {seatedCount}/{personsPerTable}
-                            </span>
-                          </div>
-
-                          {/* Vertical Bar */}
-                          <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[44px]">
-                            <div
-                              className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
-                              style={{ height: `${heightPercent}%`, minHeight: '6px' }}
-                            />
-                          </div>
-
-                          {/* Bottom Label */}
-                          <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
-                            <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
-                              T{t.tableNumber}
-                            </span>
-                          </div>
+                          <div className={`absolute -bottom-1 w-2 h-2 bg-white border-r border-b border-zinc-200/90 rotate-45 ${isFirst
+                            ? 'left-4'
+                            : isLast
+                              ? 'right-4'
+                              : 'left-1/2 -translate-x-1/2'
+                            }`} />
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* Grid view */
-                  <div className="grid grid-cols-2 gap-2 pt-1 max-h-[180px] overflow-y-auto custom-scrollbar">
-                    {tables.map((t) => {
-                      const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
-                      const captainFullName = t.captain?.name?.trim() || `Table ${t.tableNumber}`;
-                      const isFull = seatedCount >= personsPerTable;
-                      return (
-                        <div
-                          key={t.tableNumber}
-                          className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center justify-between gap-2 shadow-2xs hover:bg-white transition-all"
-                        >
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span className="w-7 h-7 rounded-lg bg-zinc-900 text-white font-black text-xs flex items-center justify-center shrink-0">
-                              T{t.tableNumber}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-zinc-900 truncate" title={captainFullName}>
-                                {captainFullName}
-                              </p>
-                              <p className="text-[10px] text-zinc-500 font-medium truncate">
-                                {t.captain?.category || 'Table Lead'}
-                              </p>
-                            </div>
-                          </div>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isFull ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-brand-red border border-red-200'
-                            }`}>
+
+                        {/* Seated count tag */}
+                        <div className="h-4 flex items-center justify-center shrink-0 mb-1 w-full">
+                          <span className="font-sans tabular-nums text-caption text-brand-red font-bold leading-none">
                             {seatedCount}/{personsPerTable}
                           </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )
+
+                        {/* Vertical Bar */}
+                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[44px]">
+                          <div
+                            className="w-5 sm:w-6 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
+                            style={{ height: `${heightPercent}%`, minHeight: '6px' }}
+                          />
+                        </div>
+
+                        {/* Bottom Label */}
+                        <div className="h-6 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans">
+                            T{t.tableNumber}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/50">
                   <div className="w-10 h-10 rounded-full bg-red-50 text-brand-red flex items-center justify-center mb-2">

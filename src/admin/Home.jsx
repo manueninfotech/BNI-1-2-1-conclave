@@ -239,32 +239,47 @@ export default function Home({ base, loggedInAdmin }) {
       {/* 3. Core KPI Metric Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-3 shadow-xs">
         {/* KPI 1: Total Conclaves */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Total Conclaves
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpis.totalConclaves}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Total Conclaves
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpis.totalConclaves}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <CalendarRange className="w-5 h-5" />
           </div>
         </div>
 
         {/* KPI 2: Registered Members & Attendance */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Registered Members
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpis.totalRegistered}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Registered Members
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpis.totalRegistered}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
         {/* KPI 3: Referrals Exchanged */}
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">
-            Referrals Exchanged
-          </span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-brand-red tabular-nums">{kpis.totalReferrals}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
+              Referrals Exchanged
+            </span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-brand-red tabular-nums">{kpis.totalReferrals}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+            <Handshake className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -459,7 +474,7 @@ export default function Home({ base, loggedInAdmin }) {
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <Link
-                          to={isLive ? `${base}/conclaves/${c.id}/schedule` : `${base}/conclaves/${c.id}`}
+                          to={isLive ? `${base}/conclaves/${c.id}/round-runner` : `${base}/conclaves/${c.id}`}
                           className="inline-flex items-center gap-1 text-button text-brand-red hover:text-[#B01B29] hover:underline"
                         >
                           {isLive ? 'Cockpit' : isDone ? 'Report' : isDraft ? 'Edit' : 'Manage'}
@@ -619,7 +634,7 @@ function ActiveConclaveHero({ c, base, stats, loggedInAdmin }) {
         </div>
 
         <Link
-          to={isLive ? `${base}/conclaves/${c.id}/schedule` : `${base}/conclaves/${c.id}`}
+          to={isLive ? `${base}/conclaves/${c.id}/round-runner` : `${base}/conclaves/${c.id}`}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-brand-red hover:bg-[#B01B29] text-white font-bold text-button shadow-xs hover:shadow transition-smooth self-start sm:self-auto group cursor-pointer"
         >
           <span>{isLive ? 'Enter Live Cockpit' : step.action || 'Open Conclave'}</span>
@@ -733,22 +748,12 @@ function ActiveConclaveHero({ c, base, stats, loggedInAdmin }) {
                       dataKey="value"
                     >
                       {heroDonutData.map((entry, idx) => (
-                        <Cell key={`hero-donut-${idx}`} fill={entry.fill} />
+                        <Cell key={`hero-donut-${idx}`} fill={entry.fill} className="cursor-default outline-none" />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(val, name) => [`${val} attendees`, name]}
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        borderColor: '#e4e4e7',
-                        borderRadius: '0.5rem',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                      }}
-                    />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
                   <span className="text-title-lg font-black text-zinc-950 leading-none">{registeredCount}</span>
                   <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-wider mt-0.5">Members</span>
                 </div>

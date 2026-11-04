@@ -13,6 +13,9 @@ import {
   Edit3,
   CreditCard,
   Lock,
+  CalendarRange,
+  Radio,
+  CheckCircle2,
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import { ResponsiveContainer, BarChart, Bar, XAxis } from 'recharts';
@@ -1050,40 +1053,60 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
 
       {/* KPI Overview Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">All Conclaves</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{conclaves.length}</span>
-            <span className="text-xs font-semibold text-zinc-400">total</span>
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">All Conclaves</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{conclaves.length}</span>
+              <span className="text-xs font-semibold text-zinc-400">total</span>
+            </div>
+            <div className="text-[10px] font-bold text-zinc-500">In directory</div>
           </div>
-          <div className="text-[10px] font-bold text-zinc-500">In directory</div>
+          <div className="w-11 h-11 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <CalendarRange className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Live Now</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-brand-red tabular-nums">{runningCount}</span>
-            <span className="text-xs font-semibold text-zinc-400">active</span>
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Live Now</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-brand-red tabular-nums">{runningCount}</span>
+              <span className="text-xs font-semibold text-zinc-400">active</span>
+            </div>
+            <div className="text-[10px] font-bold text-brand-red">In progress</div>
           </div>
-          <div className="text-[10px] font-bold text-brand-red">In progress</div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Radio className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Coming Up</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{upcomingCount}</span>
-            <span className="text-xs font-semibold text-zinc-400">scheduled</span>
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Coming Up</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{upcomingCount}</span>
+              <span className="text-xs font-semibold text-zinc-400">scheduled</span>
+            </div>
+            <div className="text-[10px] font-bold text-emerald-700">Registration & prep</div>
           </div>
-          <div className="text-[10px] font-bold text-emerald-700">Registration & prep</div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Finished</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{completedCount}</span>
-            <span className="text-xs font-semibold text-zinc-400">concluded</span>
+        <div className="p-4 flex items-center justify-between gap-3">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Finished</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{completedCount}</span>
+              <span className="text-xs font-semibold text-zinc-400">concluded</span>
+            </div>
+            <div className="text-[10px] font-bold text-zinc-500">Archived conclaves</div>
           </div>
-          <div className="text-[10px] font-bold text-zinc-500">Archived conclaves</div>
+          <div className="w-11 h-11 rounded-xl bg-zinc-100 text-zinc-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
         </div>
       </div>
 

@@ -15,7 +15,10 @@ import {
   Trash2,
   Edit,
   Lock,
-  CreditCard
+  CreditCard,
+  Users,
+  Radio,
+  Award
 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
@@ -1185,22 +1188,37 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
       {/* Statistics KPI Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-3 shadow-xs">
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Members</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalCount}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Total Members</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{totalCount}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5" />
           </div>
         </div>
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Online Now</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{activeCount}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Online Now</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{activeCount}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+            <Radio className="w-5 h-5 animate-pulse" />
           </div>
         </div>
-        <div className="p-4 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Table Captains</span>
-          <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainCount}</span>
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Table Captains</span>
+            <div className="my-1.5 flex items-baseline gap-1.5">
+              <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainCount}</span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <Award className="w-5 h-5" />
           </div>
         </div>
       </div>

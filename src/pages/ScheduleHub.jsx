@@ -52,10 +52,14 @@ export default function ScheduleHub({
 
     if (status === 'running') {
       setStage('runner');
+      if (selectedConclaveId) {
+        const role = localStorage.getItem('bni_user_role') || 'admin';
+        window.history.replaceState({}, '', `/${role}/conclaves/${selectedConclaveId}/round-runner`);
+      }
     } else {
       setStage('generate');
     }
-  }, [conclave, initialStage]);
+  }, [conclave, initialStage, selectedConclaveId]);
 
   // Synchronize when initialStage prop changes externally (e.g., from URL navigation)
   useEffect(() => {
@@ -97,14 +101,19 @@ export default function ScheduleHub({
     if (typeof onStageChange === 'function') {
       onStageChange(stageId);
     }
-    // Update browser URL gently without full page reload
+    // Update browser URL gently without full page reload, keeping conclave ID in URL
     const role = localStorage.getItem('bni_user_role') || 'admin';
-    const tabUrlMap = {
-      generate: 'schedule-gen',
-      review: 'schedule-gen',
-      runner: 'round-runner'
-    };
-    window.history.replaceState({}, '', `/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
+    if (selectedConclaveId) {
+      const conclaveTab = stageId === 'runner' ? 'round-runner' : 'schedule';
+      window.history.replaceState({}, '', `/${role}/conclaves/${selectedConclaveId}/${conclaveTab}`);
+    } else {
+      const tabUrlMap = {
+        generate: 'schedule-gen',
+        review: 'schedule-gen',
+        runner: 'round-runner'
+      };
+      window.history.replaceState({}, '', `/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
+    }
   };
 
   const isRunnerStage = stage === 'runner';

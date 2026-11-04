@@ -21,6 +21,7 @@ import {
   Globe,
   AlertTriangle,
   Zap,
+  Handshake,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -154,34 +155,59 @@ export default function Activity({ conclaveId, embedded = false }) {
 
       {/* 2. Executive KPI Metric Strip (Flat - NO CARDS) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 md:grid-cols-5 shadow-xs">
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Actions</span>
-          <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.total}</div>
-          <span className="text-[10px] font-bold text-zinc-500">Recorded in log</span>
+        <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Total Actions</span>
+            <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.total}</div>
+            <span className="text-[10px] font-bold text-zinc-500">Recorded in log</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-zinc-100 text-zinc-700 flex items-center justify-center shrink-0">
+            <History className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Rounds & Sessions</span>
-          <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.roundsCount}</div>
-          <span className="text-[10px] font-bold text-[#00875A]">Stage transitions</span>
+        <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Rounds & Sessions</span>
+            <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.roundsCount}</div>
+            <span className="text-[10px] font-bold text-[#00875A]">Stage transitions</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
+            <PlayCircle className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Referrals Logged</span>
-          <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.referralsCount}</div>
-          <span className="text-[10px] font-bold text-brand-red">Exchanged by members</span>
+        <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Referrals Logged</span>
+            <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.referralsCount}</div>
+            <span className="text-[10px] font-bold text-brand-red">Exchanged by members</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+            <Handshake className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Registrations</span>
-          <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.registrationsCount}</div>
-          <span className="text-[10px] font-bold text-sky-700">Check-ins & signups</span>
+        <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Registrations</span>
+            <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.registrationsCount}</div>
+            <span className="text-[10px] font-bold text-sky-700">Check-ins & signups</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+            <UserCheck className="w-5 h-5" />
+          </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 flex flex-col justify-between col-span-2 md:col-span-1">
-          <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Member Actions</span>
-          <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.memberActions}</div>
-          <span className="text-[10px] font-bold text-purple-700">App interactions</span>
+        <div className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5 col-span-2 md:col-span-1">
+          <div className="flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Member Actions</span>
+            <div className="my-1 text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">{stats.memberActions}</div>
+            <span className="text-[10px] font-bold text-purple-700">App interactions</span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5" />
+          </div>
         </div>
       </div>
 

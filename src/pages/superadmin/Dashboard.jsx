@@ -7,6 +7,8 @@ import {
   Clock,
   ChevronRight,
   ShieldAlert,
+  Globe,
+  ShieldCheck,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import RecentActivity from '../../admin/RecentActivity';
@@ -139,23 +141,31 @@ export default function SuperadminDashboard({ setActiveTab }) {
       {/* KPI Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
         {[
-          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]" },
-          { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", tab: "admins", color: "text-zinc-600" },
-          { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", tab: "conclaves", color: "text-[#00875A]" },
-          { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", tab: "members", color: "text-brand-red" }
-        ].map((kpi, idx) => (
-          <div
-            key={idx}
-            onClick={() => setActiveTab && setActiveTab(kpi.tab)}
-            className="p-4 flex flex-col justify-between cursor-pointer hover:bg-zinc-50/50 transition-smooth"
-          >
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">{kpi.label}</span>
-            <div className="my-1.5 flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpi.value}</span>
+          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]", icon: Globe, iconBg: "bg-emerald-50 text-[#00875A]" },
+          { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", tab: "admins", color: "text-zinc-600", icon: ShieldCheck, iconBg: "bg-zinc-100 text-zinc-700" },
+          { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", tab: "conclaves", color: "text-[#00875A]", icon: CalendarRange, iconBg: "bg-red-50 text-brand-red" },
+          { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", tab: "members", color: "text-brand-red", icon: Users, iconBg: "bg-blue-50 text-blue-600" }
+        ].map((kpi, idx) => {
+          const IconComp = kpi.icon;
+          return (
+            <div
+              key={idx}
+              onClick={() => setActiveTab && setActiveTab(kpi.tab)}
+              className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-50/50 transition-smooth"
+            >
+              <div>
+                <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">{kpi.label}</span>
+                <div className="my-1.5 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black text-zinc-950 tabular-nums">{kpi.value}</span>
+                </div>
+                <div className={`text-[10px] font-bold ${kpi.color}`}>{kpi.sub}</div>
+              </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${kpi.iconBg}`}>
+                <IconComp className="w-5 h-5" />
+              </div>
             </div>
-            <div className={`text-[10px] font-bold ${kpi.color}`}>{kpi.sub}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Distributions & Lists Grid */}
