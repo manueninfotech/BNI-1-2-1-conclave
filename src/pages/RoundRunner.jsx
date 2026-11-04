@@ -558,6 +558,12 @@ export default function RoundRunner({
   }, [selectedConclave?.id, selectedConclave?.roundProgressionMode]);
 
   const handleToggleAutoAdvance = async () => {
+    if (isCompleted) {
+      showToast('Conclave Concluded', 'Round progression mode cannot be changed on a concluded conclave.');
+      return;
+    }
+
+    const previousVal = autoAdvanceEnabled;
     const nextVal = !autoAdvanceEnabled;
     setAutoAdvanceEnabled(nextVal);
     try {
@@ -578,6 +584,18 @@ export default function RoundRunner({
         showToast('Progression Mode', `Auto progression set to ${nextVal ? 'ON' : 'OFF'}.`);
       } catch (err) {
         console.warn("Failed to update progression mode on server:", err);
+        // Rollback state immediately if server rejects
+        setAutoAdvanceEnabled(previousVal);
+        try {
+          localStorage.setItem('bni_auto_advance_enabled', String(previousVal));
+        } catch { }
+        setConclaves(prev => prev.map(c => {
+          if (c.id === selectedConclaveId) {
+            return { ...c, roundProgressionMode: previousVal ? 'automatic' : 'manual' };
+          }
+          return c;
+        }));
+        showToast('Progression Mode Failed', err.message || 'Cannot update progression mode.');
       }
     }
   };
@@ -970,11 +988,14 @@ export default function RoundRunner({
           <button
             type="button"
             onClick={handleToggleAutoAdvance}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer shadow-2xs ${autoAdvanceEnabled
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-              : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
+            disabled={isCompleted}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shadow-2xs ${isCompleted
+              ? 'opacity-50 cursor-not-allowed bg-zinc-100 text-zinc-400 border-zinc-200'
+              : autoAdvanceEnabled
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 cursor-pointer'
+                : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200 cursor-pointer'
               }`}
-            title="Switch between automatic and manual round changes"
+            title={isCompleted ? "Conclave has concluded — progression mode cannot be changed" : "Switch between automatic and manual round changes"}
           >
             {autoAdvanceEnabled ? (
               <Zap className="w-3.5 h-3.5 text-emerald-600" />
