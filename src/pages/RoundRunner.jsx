@@ -1311,15 +1311,15 @@ export default function RoundRunner({
             {/* Content: By Table (Vertical Bars) or By Status (Vertical Bars) */}
             {referralChartMode === 'table' ? (
               <div className="flex-1 w-full flex flex-col justify-end min-h-[200px] sm:min-h-[220px] pt-3">
-                <div className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto pb-2 h-full custom-scrollbar">
+                <div className="flex items-stretch justify-around gap-2 sm:gap-4 overflow-x-auto pb-2 h-full custom-scrollbar">
                   {tableReferralsChartData.map((t) => {
                     const heightPercent = maxTableReferrals > 0 && t.referrals > 0
-                      ? Math.min(100, Math.max(14, Math.round((t.referrals / maxTableReferrals) * 100)))
+                      ? Math.min(100, Math.max(22, Math.round((t.referrals / maxTableReferrals) * 100)))
                       : 0;
                     return (
                       <div
                         key={t.tableNumber}
-                        className="group relative flex flex-col items-center h-full flex-1 min-w-[36px] sm:min-w-[48px] max-w-[64px] cursor-pointer"
+                        className="group relative flex flex-col items-center h-full flex-1 min-w-[40px] sm:min-w-[50px] max-w-[80px] cursor-pointer"
                         title={`Table ${t.tableNumber}: ${t.referrals} referrals`}
                       >
                         {/* Hover Tooltip Popup */}
@@ -1328,24 +1328,27 @@ export default function RoundRunner({
                           <span className="text-zinc-400 font-normal">({t.referrals} referrals)</span>
                         </div>
 
-                        {/* Referral count on top: fixed height */}
-                        <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
-                          <span className="font-sans tabular-nums text-xs sm:text-sm font-black text-brand-red leading-none">
-                            {t.referrals}
-                          </span>
+                        {/* Bar area: dynamically sized according to number, shows NOTHING if 0 */}
+                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
+                          {t.referrals > 0 ? (
+                            <div
+                              className="w-full flex flex-col items-center justify-end transition-all duration-300"
+                              style={{ height: `${heightPercent}%` }}
+                            >
+                              {/* Referral count on top of bar */}
+                              <span className="font-sans tabular-nums text-xs sm:text-sm font-black text-brand-red leading-none mb-1.5 shrink-0">
+                                {t.referrals}
+                              </span>
+                              {/* Vertical Bar */}
+                              <div className="w-6 sm:w-8 w-full max-w-[32px] flex-1 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none shadow-2xs group-hover:brightness-110" />
+                            </div>
+                          ) : null}
                         </div>
 
-                        {/* Vertical Bar: rounded top shoulders, flat bottom */}
-                        <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
-                          <div
-                            className="w-5 sm:w-7 bg-gradient-to-t from-red-700 to-brand-red rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs group-hover:brightness-110"
-                            style={{ height: `${heightPercent > 0 ? heightPercent : 6}%`, minHeight: '6px' }}
-                          />
-                        </div>
-
-                        {/* Bottom Label: fixed height */}
-                        <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
-                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans bg-zinc-100 px-1.5 py-0.5 rounded">
+                        {/* Grounded Table Baseline & Label */}
+                        <div className="w-full h-px bg-zinc-200/90 shrink-0 mt-1" />
+                        <div className="h-7 flex items-center justify-center shrink-0 mt-1.5 w-full">
+                          <span className="text-caption font-bold text-zinc-800 leading-tight font-sans bg-zinc-100 group-hover:bg-zinc-200 px-2.5 py-0.5 rounded transition-colors">
                             T{t.tableNumber}
                           </span>
                         </div>
@@ -1359,21 +1362,23 @@ export default function RoundRunner({
                 <div className="grid grid-cols-3 gap-4 sm:gap-8 h-full items-stretch max-w-xl mx-auto w-full">
                   {/* Connected Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-[#00875A] leading-none">
-                        {connectedReferrals}
-                      </span>
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
+                      {connectedReferrals > 0 ? (
+                        <div
+                          className="w-full flex flex-col items-center justify-end transition-all duration-300"
+                          style={{
+                            height: `${totalReferrals > 0 ? Math.min(100, Math.max(22, Math.round((connectedReferrals / totalReferrals) * 100))) : 0}%`,
+                          }}
+                        >
+                          <span className="font-sans tabular-nums text-sm sm:text-base font-black text-[#00875A] leading-none mb-1.5 shrink-0">
+                            {connectedReferrals}
+                          </span>
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-[#00875A] rounded-t-md shadow-2xs" />
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
-                      <div
-                        className="w-10 sm:w-14 bg-[#00875A] rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
-                        style={{
-                          height: `${totalReferrals > 0 ? Math.max(8, Math.round((connectedReferrals / totalReferrals) * 100)) : 6}%`,
-                          minHeight: '6px',
-                        }}
-                      />
-                    </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
+                    <div className="w-full h-px bg-zinc-200/90 shrink-0 mt-1" />
+                    <div className="h-7 flex items-center justify-center shrink-0 mt-1.5 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Connected
                       </span>
@@ -1382,21 +1387,23 @@ export default function RoundRunner({
 
                   {/* Pending Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-amber-600 leading-none">
-                        {pendingReferrals}
-                      </span>
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
+                      {pendingReferrals > 0 ? (
+                        <div
+                          className="w-full flex flex-col items-center justify-end transition-all duration-300"
+                          style={{
+                            height: `${totalReferrals > 0 ? Math.min(100, Math.max(22, Math.round((pendingReferrals / totalReferrals) * 100))) : 0}%`,
+                          }}
+                        >
+                          <span className="font-sans tabular-nums text-sm sm:text-base font-black text-amber-600 leading-none mb-1.5 shrink-0">
+                            {pendingReferrals}
+                          </span>
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-amber-500 rounded-t-md shadow-2xs" />
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
-                      <div
-                        className="w-10 sm:w-14 bg-amber-500 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
-                        style={{
-                          height: `${totalReferrals > 0 ? Math.max(8, Math.round((pendingReferrals / totalReferrals) * 100)) : 6}%`,
-                          minHeight: '6px',
-                        }}
-                      />
-                    </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
+                    <div className="w-full h-px bg-zinc-200/90 shrink-0 mt-1" />
+                    <div className="h-7 flex items-center justify-center shrink-0 mt-1.5 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Pending
                       </span>
@@ -1405,21 +1412,23 @@ export default function RoundRunner({
 
                   {/* Closed Bar */}
                   <div className="flex flex-col items-center h-full flex-1 min-w-0">
-                    <div className="h-5 flex items-center justify-center shrink-0 mb-1 w-full">
-                      <span className="font-sans tabular-nums text-sm sm:text-base font-black text-zinc-600 leading-none">
-                        {closedReferrals}
-                      </span>
+                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[130px] sm:min-h-[150px]">
+                      {closedReferrals > 0 ? (
+                        <div
+                          className="w-full flex flex-col items-center justify-end transition-all duration-300"
+                          style={{
+                            height: `${totalReferrals > 0 ? Math.min(100, Math.max(22, Math.round((closedReferrals / totalReferrals) * 100))) : 0}%`,
+                          }}
+                        >
+                          <span className="font-sans tabular-nums text-sm sm:text-base font-black text-zinc-600 leading-none mb-1.5 shrink-0">
+                            {closedReferrals}
+                          </span>
+                          <div className="w-10 sm:w-14 w-full max-w-[56px] flex-1 bg-zinc-600 rounded-t-md shadow-2xs" />
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="flex-1 w-full flex flex-col justify-end items-center min-h-[120px] sm:min-h-[140px]">
-                      <div
-                        className="w-10 sm:w-14 bg-zinc-600 rounded-t-md rounded-b-none transition-all duration-300 shadow-2xs"
-                        style={{
-                          height: `${totalReferrals > 0 ? Math.max(8, Math.round((closedReferrals / totalReferrals) * 100)) : 6}%`,
-                          minHeight: '6px',
-                        }}
-                      />
-                    </div>
-                    <div className="h-6 flex items-center justify-center shrink-0 mt-2 w-full">
+                    <div className="w-full h-px bg-zinc-200/90 shrink-0 mt-1" />
+                    <div className="h-7 flex items-center justify-center shrink-0 mt-1.5 w-full">
                       <span className="text-caption font-bold text-zinc-700 leading-tight font-sans truncate max-w-full">
                         Closed
                       </span>
