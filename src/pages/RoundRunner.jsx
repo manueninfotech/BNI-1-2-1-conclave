@@ -538,6 +538,10 @@ export default function RoundRunner({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  // Guard against double-click re-firing start-round (which would restart the
+  // move timer / double-advance). See post-test bug #12.
+  const [isStartingRound, setIsStartingRound] = useState(false);
+
   // Automatic Round Progression State
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(() => {
     try {
@@ -601,6 +605,8 @@ export default function RoundRunner({
   };
 
   const handleStartNextRound = async (customRoundNum = null) => {
+    if (isStartingRound) return; // ignore rapid double-clicks (bug #12)
+    setIsStartingRound(true);
     const nextRoundVal = customRoundNum !== null ? customRoundNum : (activeRound + 1);
     const now = new Date();
 
@@ -629,6 +635,8 @@ export default function RoundRunner({
     } catch (err) {
       console.error("Failed to start round:", err);
       showToast('Start Round Failed', err.message || "Could not start next round.");
+    } finally {
+      setIsStartingRound(false);
     }
   };
 
@@ -1172,7 +1180,7 @@ export default function RoundRunner({
               <button
                 type="button"
                 onClick={() => handleStartNextRound()}
-                disabled={isCompleted || (activeRound >= totalRounds && !isUpcoming)}
+                disabled={isStartingRound || isCompleted || (activeRound >= totalRounds && !isUpcoming)}
                 className="h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play className="w-4 h-4 fill-white text-white shrink-0" />
