@@ -88,6 +88,9 @@ export default function ReferModal({
           timestamp: new Date().toISOString()
         }]
       });
+      try {
+        window.dispatchEvent(new CustomEvent('bni_referral_sent', { detail: newReferral }));
+      } catch {}
     } catch (err) {
       console.warn("Backend sync failed for referral (stored locally):", err.message);
     }

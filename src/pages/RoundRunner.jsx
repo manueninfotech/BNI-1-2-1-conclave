@@ -74,38 +74,97 @@ export default function RoundRunner({
     loadConclaves();
   }, []);
 
-  // Real-time backend synchronization polling every 4 seconds
+  // Real-time backend synchronization (fast 1.5s cadence for live referrals, 4s for general stats)
   useEffect(() => {
     if (!selectedConclaveId) return;
     let isMounted = true;
+    let isFetchingRefs = false;
+    let isFetchingMeta = false;
 
-    async function syncBackendData() {
+    // Fast-path referrals sync for instantaneous chart & stats updates
+    const fetchReferralsOnly = async () => {
+      if (isFetchingRefs || !isMounted) return;
+      isFetchingRefs = true;
       try {
-        const [statsData, freshConclave, refData, attData] = await Promise.all([
+        const refData = await api.get(`/admin/conclaves/${selectedConclaveId}/referrals`).catch(() => null);
+        if (isMounted && Array.isArray(refData)) {
+          setFilteredReferrals(prev => {
+            if (prev.length === refData.length && JSON.stringify(prev) === JSON.stringify(refData)) {
+              return prev;
+            }
+            return refData;
+          });
+        }
+      } catch (err) {
+        console.warn("Live referrals sync error:", err);
+      } finally {
+        isFetchingRefs = false;
+      }
+    };
+
+    // Metadata & stats sync (attendance, counts, conclave status)
+    const syncConclaveMetadata = async () => {
+      if (isFetchingMeta || !isMounted) return;
+      isFetchingMeta = true;
+      try {
+        const [statsData, freshConclave, attData] = await Promise.all([
           api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
           api.get(`/admin/conclaves/${selectedConclaveId}`).catch(() => null),
-          api.get(`/admin/conclaves/${selectedConclaveId}/referrals`).catch(() => []),
-          api.get(`/admin/conclaves/${selectedConclaveId}/attendance`).catch(() => []),
+          api.get(`/admin/conclaves/${selectedConclaveId}/attendance`).catch(() => null),
         ]);
 
         if (isMounted) {
           if (statsData) setStats(statsData);
-          if (Array.isArray(refData)) setFilteredReferrals(refData);
           if (Array.isArray(attData)) setAttendanceRecords(attData);
           if (freshConclave && freshConclave.id) {
             setConclaves(prev => prev.map(c => c.id === freshConclave.id ? { ...c, ...freshConclave } : c));
           }
         }
       } catch (err) {
-        console.warn("Conclave live sync error:", err);
+        console.warn("Conclave metadata sync error:", err);
+      } finally {
+        isFetchingMeta = false;
       }
-    }
+    };
 
-    syncBackendData();
-    const interval = setInterval(syncBackendData, 4000);
+    // Initial immediate fetch
+    fetchReferralsOnly();
+    syncConclaveMetadata();
+
+    // Referrals poll on a rapid 1.5s interval so slips appear almost instantly
+    const refInterval = setInterval(fetchReferralsOnly, 1500);
+    // General metadata polls every 4s
+    const metaInterval = setInterval(syncConclaveMetadata, 4000);
+
+    // Event listeners for instant 0ms update when referrals are submitted locally or in another tab
+    const handleInstantReferral = () => {
+      fetchReferralsOnly();
+    };
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'bni_referrals') {
+        fetchReferralsOnly();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchReferralsOnly();
+        syncConclaveMetadata();
+      }
+    };
+
+    window.addEventListener('bni_referral_sent', handleInstantReferral);
+    window.addEventListener('storage', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      clearInterval(refInterval);
+      clearInterval(metaInterval);
+      window.removeEventListener('bni_referral_sent', handleInstantReferral);
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [selectedConclaveId]);
 
@@ -182,23 +241,50 @@ export default function RoundRunner({
     return [];
   }, [selectedConclave, activeRound, isCompleted, selectedConclaveId]);
 
-  // Genuine Referrals Analytics
-  const totalReferrals = filteredReferrals.length;
-  const connectedReferrals = useMemo(() => {
+  // Selected round filter for referrals stats: 'current' (dynamic) | 'all' | number (1, 2, ...)
+  const [referralRoundFilter, setReferralRoundFilter] = useState('current');
+
+  const effectiveReferralRound = useMemo(() => {
+    if (referralRoundFilter === 'all') return 'all';
+    if (referralRoundFilter === 'current') return activeRound > 0 ? activeRound : 1;
+    return Number(referralRoundFilter);
+  }, [referralRoundFilter, activeRound]);
+
+  // Overall conclave referrals count for mini-stats
+  const allReferralsCount = filteredReferrals.length;
+  const currentRoundReferralsCount = useMemo(() => {
+    const curR = activeRound > 0 ? activeRound : 1;
+    return filteredReferrals.filter(r => Number(r.roundNumber || r.round_number || r.round) === curR).length;
+  }, [filteredReferrals, activeRound]);
+
+  // Scoped referrals filtered strictly by the chosen round scope
+  const scopedReferrals = useMemo(() => {
+    if (effectiveReferralRound === 'all') {
+      return filteredReferrals;
+    }
     return filteredReferrals.filter(r => {
+      const rNum = Number(r.roundNumber || r.round_number || r.round);
+      return rNum === effectiveReferralRound;
+    });
+  }, [filteredReferrals, effectiveReferralRound]);
+
+  // Genuine Referrals Analytics for active scope
+  const totalReferrals = scopedReferrals.length;
+  const connectedReferrals = useMemo(() => {
+    return scopedReferrals.filter(r => {
       const st = (r.status || '').toLowerCase();
       const out = (r.outcome || '').toLowerCase();
       return st === 'connected' || st === 'completed' || out === 'accepted';
     }).length;
-  }, [filteredReferrals]);
+  }, [scopedReferrals]);
 
   const closedReferrals = useMemo(() => {
-    return filteredReferrals.filter(r => {
+    return scopedReferrals.filter(r => {
       const st = (r.status || '').toLowerCase();
       const out = (r.outcome || '').toLowerCase();
       return st === 'closed' || out === 'closed' || (r.closedAmount && r.closedAmount > 0);
     }).length;
-  }, [filteredReferrals]);
+  }, [scopedReferrals]);
 
   const pendingReferrals = useMemo(() => {
     return Math.max(0, totalReferrals - connectedReferrals - closedReferrals);
@@ -237,7 +323,8 @@ export default function RoundRunner({
       if (!pId && !pName) return null;
       const cleanPName = pName ? pName.toLowerCase().trim() : null;
 
-      const targetRounds = roundNum ? scheduleRounds.filter(r => r.roundNumber === roundNum) : scheduleRounds;
+      const targetRoundNum = roundNum || (effectiveReferralRound === 'all' ? (activeRound || 1) : effectiveReferralRound);
+      const targetRounds = targetRoundNum ? scheduleRounds.filter(r => r.roundNumber === targetRoundNum) : scheduleRounds;
       const roundsToSearch = targetRounds.length > 0 ? targetRounds : scheduleRounds;
 
       for (const rnd of roundsToSearch) {
@@ -261,7 +348,7 @@ export default function RoundRunner({
       return null;
     };
 
-    filteredReferrals.forEach((r, idx) => {
+    scopedReferrals.forEach((r, idx) => {
       const st = (r.status || '').toLowerCase();
       const out = (r.outcome || '').toLowerCase();
       const isConnected = st === 'connected' || st === 'completed' || out === 'accepted';
@@ -296,7 +383,7 @@ export default function RoundRunner({
     });
 
     return Object.values(tableStats);
-  }, [tables, selectedConclave, filteredReferrals]);
+  }, [tables, selectedConclave, scopedReferrals, effectiveReferralRound, activeRound]);
 
   const maxTableReferrals = useMemo(() => {
     return Math.max(1, ...tableReferralsChartData.map(t => t.referrals));
@@ -377,6 +464,22 @@ export default function RoundRunner({
       (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral' && timingState.phase !== 'paused')
     );
   }, [isCompleted, isUpcoming, activeRound, timingState.phase, timingState.isEnded, timingState.totalRemaining, clock.phase]);
+
+  // Round is actively running only when unpaused, not ended, not upcoming, and has time remaining
+  const isRoundRunning = useMemo(() => {
+    if (isCompleted || isUpcoming || activeRound === 0 || isRoundEnded) return false;
+    if (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0) return false;
+    if (timingState.phase === 'ended' || timingState.phase === 'not_started' || timingState.phase === 'ready') return false;
+    return Boolean(
+      timerRunning ||
+      timingState.isTalking ||
+      timingState.isReferral ||
+      timingState.isTransition ||
+      timingState.phase === 'active' ||
+      timingState.phase === 'referral' ||
+      timingState.phase === 'transition'
+    );
+  }, [isCompleted, isUpcoming, activeRound, isRoundEnded, timerRunning, timingState]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -495,7 +598,7 @@ export default function RoundRunner({
   // Top 5 referrals leaderboard derived from real referral slips
   const leaderboard = useMemo(() => {
     const counts = {};
-    filteredReferrals.forEach(r => {
+    scopedReferrals.forEach(r => {
       const giverId = r.fromMemberId || r.fromUserId || r.fromName || r.giverId || r.giverName;
       if (!giverId) return;
       if (!counts[giverId]) {
@@ -530,7 +633,7 @@ export default function RoundRunner({
       }
     });
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [filteredReferrals, selectedConclave]);
+  }, [scopedReferrals, selectedConclave]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -680,6 +783,7 @@ export default function RoundRunner({
   };
 
   const handlePauseRound = async () => {
+    if (!isRoundRunning) return;
     try {
       const now = new Date();
       setConclaves(prev => prev.map(c => {
@@ -924,12 +1028,14 @@ export default function RoundRunner({
             ? 'bg-emerald-50 text-[#00875A] border-emerald-200'
             : isRoundPaused
               ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-red-50 text-brand-red border-red-200'
+              : isRoundEnded
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-red-50 text-brand-red border-red-200'
             }`}>
             <span className="relative flex h-2.5 w-2.5">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isCompleted ? 'hidden' : isRoundPaused ? 'bg-amber-400' : 'bg-brand-red'
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isCompleted || isRoundEnded ? 'hidden' : isRoundPaused ? 'bg-amber-400' : 'bg-brand-red'
                 }`} />
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isCompleted ? 'bg-[#00875A]' : isRoundPaused ? 'bg-amber-500' : 'bg-brand-red'
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isCompleted ? 'bg-[#00875A]' : isRoundPaused ? 'bg-amber-500' : isRoundEnded ? 'bg-amber-500' : 'bg-brand-red'
                 }`} />
             </span>
             <span className="font-black text-xs uppercase tracking-wider">
@@ -937,9 +1043,13 @@ export default function RoundRunner({
                 ? 'Conclave Concluded'
                 : isRoundPaused
                   ? `Round ${activeRound || 1} Paused`
-                  : activeRound > 0
-                    ? `Round ${activeRound} In Progress`
-                    : 'Round Ready To Start'}
+                  : isRoundEnded
+                    ? activeRound < totalRounds
+                      ? `Round ${activeRound} Ended • Ready for Round ${activeRound + 1}`
+                      : `Round ${activeRound} Ended • Ready to Conclude`
+                    : activeRound > 0
+                      ? `Round ${activeRound} In Progress`
+                      : 'Round Ready To Start'}
             </span>
           </div>
 
@@ -1027,13 +1137,15 @@ export default function RoundRunner({
                   ? 'text-emerald-400'
                   : isRoundPaused
                     ? 'text-amber-400'
-                    : timingState.phase === 'referral'
-                      ? 'text-sky-400'
-                      : timingState.phase === 'transition'
-                        ? 'text-amber-400'
-                        : 'text-brand-red'
+                    : isRoundEnded
+                      ? 'text-amber-400'
+                      : timingState.phase === 'referral'
+                        ? 'text-sky-400'
+                        : timingState.phase === 'transition'
+                          ? 'text-amber-400'
+                          : 'text-brand-red'
                   }`}>
-                  {!isCompleted && (
+                  {!isCompleted && !isRoundEnded && (
                     <span className={`w-2 h-2 rounded-full animate-ping ${isRoundPaused ? 'bg-amber-400' : timingState.phase === 'referral' ? 'bg-sky-400' : 'bg-brand-red'
                       }`} />
                   )}
@@ -1041,13 +1153,17 @@ export default function RoundRunner({
                     ? 'Conclave Concluded'
                     : isRoundPaused
                       ? 'Round Paused'
-                      : timingState.phase === 'active'
-                        ? `Speaker ${timingState.speakerNumber || 1} Talking`
-                        : timingState.phase === 'referral'
-                          ? 'Give Referrals'
-                          : timingState.phase === 'transition'
-                            ? 'Move to Next Table'
-                            : 'Ready To Start'}
+                      : isRoundEnded
+                        ? activeRound < totalRounds
+                          ? `Round ${activeRound} Ended • Ready for Round ${activeRound + 1}`
+                          : 'All Rounds Completed'
+                        : timingState.phase === 'active'
+                          ? `Speaker ${timingState.speakerNumber || 1} Talking`
+                          : timingState.phase === 'referral'
+                            ? 'Give Referrals'
+                            : timingState.phase === 'transition'
+                              ? 'Move to Next Table'
+                              : 'Ready To Start'}
                 </span>
               </div>
 
@@ -1159,19 +1275,26 @@ export default function RoundRunner({
                 <button
                   type="button"
                   onClick={handleResumeRound}
-                  className="h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                  disabled={isCompleted || isRoundEnded}
+                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${(isCompleted || isRoundEnded)
+                      ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
+                    }`}
                 >
-                  <Play className="w-4 h-4 fill-white text-white shrink-0" />
+                  <Play className={`w-4 h-4 shrink-0 ${(isCompleted || isRoundEnded) ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
                   <span>Resume</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handlePauseRound}
-                  disabled={isUpcoming || isCompleted || activeRound === 0}
-                  className="h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={!isRoundRunning}
+                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${!isRoundRunning
+                      ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-xs'
+                    }`}
                 >
-                  <Pause className="w-4 h-4 fill-white text-white shrink-0" />
+                  <Pause className={`w-4 h-4 shrink-0 ${!isRoundRunning ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
                   <span>Pause</span>
                 </button>
               )}
@@ -1263,8 +1386,8 @@ export default function RoundRunner({
                 <Handshake className="w-3.5 h-3.5 text-emerald-600" />
               </div>
               <div className="flex items-baseline gap-1 my-1">
-                <span className="text-display-sm font-extrabold text-brand-red">{totalReferrals}</span>
-                <span className="text-caption font-bold text-emerald-600 ml-1">+{totalReferrals} R{activeRound || 1}</span>
+                <span className="text-display-sm font-extrabold text-brand-red">{allReferralsCount}</span>
+                <span className="text-caption font-bold text-emerald-600 ml-1">+{currentRoundReferralsCount} R{activeRound || 1}</span>
               </div>
               <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden">
                 <div className="h-full bg-[#00875A] rounded-full w-full" />
@@ -1278,31 +1401,71 @@ export default function RoundRunner({
 
           {/* Top Card: Extended Referrals by Table Dynamic Chart */}
           <div className="bg-white rounded-2xl shadow-xs border border-zinc-200/90 p-4 sm:p-5 flex flex-col gap-3 font-sans">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-brand-red" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <BarChart3 className="w-4 h-4 text-brand-red shrink-0" />
                 <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Referrals by Table</span>
-                <span className="text-label-xs font-bold bg-red-50 text-brand-red border border-red-200/80 px-2.5 py-0.5 rounded-full font-sans tabular-nums">
-                  {totalReferrals} Logged
+                <span className="text-label-xs font-bold bg-red-50 text-brand-red border border-red-200/80 px-2.5 py-0.5 rounded-full font-sans tabular-nums whitespace-nowrap">
+                  {totalReferrals} Logged {effectiveReferralRound === 'all' ? '(All Rounds)' : `(Round ${effectiveReferralRound})`}
                 </span>
               </div>
 
-              {/* Segmented Pill Toggle */}
-              <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
-                <button
-                  type="button"
-                  onClick={() => setReferralChartMode('table')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'table' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                >
-                  By Table
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReferralChartMode('status')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'status' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
-                >
-                  Status
-                </button>
+              {/* Controls: Round Scope Filter & View Mode */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Round Filter Tabs */}
+                <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
+                  <button
+                    type="button"
+                    onClick={() => setReferralRoundFilter('current')}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${referralRoundFilter === 'current' ? 'bg-white text-brand-red font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                    title={`Showing active Round ${activeRound || 1}`}
+                  >
+                    Round {activeRound || 1}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReferralRoundFilter('all')}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${referralRoundFilter === 'all' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                    title="All rounds cumulative"
+                  >
+                    All Rounds
+                  </button>
+                  {totalRounds > 1 && (
+                    <select
+                      value={typeof referralRoundFilter === 'number' ? referralRoundFilter : ''}
+                      onChange={(e) => {
+                        if (e.target.value) setReferralRoundFilter(Number(e.target.value));
+                      }}
+                      className={`px-2 py-1 rounded-md text-label-xs font-semibold bg-transparent border-0 cursor-pointer focus:outline-none ${typeof referralRoundFilter === 'number' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                      aria-label="Filter historical round"
+                    >
+                      <option value="" disabled>History...</option>
+                      {Array.from({ length: totalRounds }, (_, i) => i + 1).map((rNum) => (
+                        <option key={rNum} value={rNum}>
+                          Round {rNum}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Segmented Pill Toggle: By Table vs Status */}
+                <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-label-xs">
+                  <button
+                    type="button"
+                    onClick={() => setReferralChartMode('table')}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'table' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                  >
+                    By Table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReferralChartMode('status')}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${referralChartMode === 'status' ? 'bg-white text-zinc-900 font-bold shadow-xs' : 'text-zinc-500 hover:text-zinc-800'}`}
+                  >
+                    Status
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1624,10 +1787,6 @@ export default function RoundRunner({
                   <Award className="w-4 h-4 text-brand-red" />
                   <span className="text-card-title font-bold uppercase text-zinc-900 tracking-wider">Top Referrals</span>
                 </div>
-                <span className="flex items-center gap-1 text-label-xs text-[#00875A] font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 font-sans tabular-nums">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Live ({totalReferrals})
-                </span>
               </div>
 
               <div className="flex flex-col gap-2 mt-1 font-sans flex-1 min-h-0">
@@ -1671,21 +1830,10 @@ export default function RoundRunner({
                   </div>
                 ) : (
                   <div className="p-4 my-auto text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200 text-zinc-500 text-caption font-medium">
-                    No referrals given yet this round. When members give referrals on their phones, they will appear here.
+                    No referrals given yet in {effectiveReferralRound === 'all' ? 'this conclave' : `Round ${effectiveReferralRound}`}. When members give referrals on their phones, they will appear here.
                   </div>
                 )}
               </div>
-
-              {navigateToSchedule ? (
-                <button
-                  type="button"
-                  onClick={navigateToSchedule}
-                  className="mt-auto pt-1 text-center text-button text-brand-red hover:text-[#b51c2a] transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <span>View All {totalParticipantsSeated} Members</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              ) : null}
             </div>
           </div>
         </div>

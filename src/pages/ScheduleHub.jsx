@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutGrid,
   Play,
@@ -26,6 +27,11 @@ export default function ScheduleHub({
         const data = await api.get(`/admin/conclaves/${selectedConclaveId}`).catch(() => null);
         if (isMounted && data) {
           setConclave(data);
+          if (typeof data.snapshot?.activeOnly === 'boolean') {
+            try {
+              sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, data.snapshot.activeOnly ? 'true' : 'false');
+            } catch {}
+          }
         }
       } catch (err) {
         console.warn('Failed to load conclave in ScheduleHub:', err);
@@ -42,34 +48,54 @@ export default function ScheduleHub({
       if (initialStage === 'review') return 'generate';
       return initialStage;
     }
+    if (selectedConclaveId) {
+      try {
+        const saved = sessionStorage.getItem(`bni_schedule_hub_stage_${selectedConclaveId}`);
+        if (saved === 'generate' || saved === 'runner') return saved;
+      } catch {}
+    }
     return 'generate';
   });
+
+  const navigate = useNavigate();
 
   // Auto-switch to appropriate stage when conclave loads if initialStage was 'auto'
   useEffect(() => {
     if (!conclave || initialStage !== 'auto') return;
+    const role = localStorage.getItem('bni_user_role') || 'admin';
+    if (selectedConclaveId) {
+      try {
+        const saved = sessionStorage.getItem(`bni_schedule_hub_stage_${selectedConclaveId}`);
+        if (saved === 'generate' || saved === 'runner') {
+          setStage(saved);
+          const conclaveTab = saved === 'runner' ? 'round-runner' : 'schedule-gen';
+          navigate(`/${role}/conclaves/${selectedConclaveId}/${conclaveTab}`, { replace: true });
+          return;
+        }
+      } catch {}
+    }
     const status = (conclave.status || '').toLowerCase();
 
     if (status === 'running') {
       setStage('runner');
       if (selectedConclaveId) {
-        const role = localStorage.getItem('bni_user_role') || 'admin';
-        window.history.replaceState({}, '', `/${role}/conclaves/${selectedConclaveId}/round-runner`);
+        navigate(`/${role}/conclaves/${selectedConclaveId}/round-runner`, { replace: true });
       }
     } else {
       setStage('generate');
+      if (selectedConclaveId) {
+        navigate(`/${role}/conclaves/${selectedConclaveId}/schedule-gen`, { replace: true });
+      }
     }
-  }, [conclave, initialStage, selectedConclaveId]);
+  }, [conclave, initialStage, selectedConclaveId, navigate]);
 
   // Synchronize when initialStage prop changes externally (e.g., from URL navigation)
   useEffect(() => {
     if (initialStage && initialStage !== 'auto') {
       const normalized = initialStage === 'review' ? 'generate' : initialStage;
-      if (normalized !== stage) {
-        setStage(normalized);
-      }
+      setStage(normalized);
     }
-  }, [initialStage, stage]);
+  }, [initialStage]);
 
   const conclaveStatus = (conclave?.status || '').toLowerCase();
   const isLive = conclaveStatus === 'running';
@@ -101,18 +127,20 @@ export default function ScheduleHub({
     if (typeof onStageChange === 'function') {
       onStageChange(stageId);
     }
-    // Update browser URL gently without full page reload, keeping conclave ID in URL
     const role = localStorage.getItem('bni_user_role') || 'admin';
     if (selectedConclaveId) {
-      const conclaveTab = stageId === 'runner' ? 'round-runner' : 'schedule';
-      window.history.replaceState({}, '', `/${role}/conclaves/${selectedConclaveId}/${conclaveTab}`);
+      try {
+        sessionStorage.setItem(`bni_schedule_hub_stage_${selectedConclaveId}`, stageId);
+      } catch {}
+      const conclaveTab = stageId === 'runner' ? 'round-runner' : 'schedule-gen';
+      navigate(`/${role}/conclaves/${selectedConclaveId}/${conclaveTab}`);
     } else {
       const tabUrlMap = {
         generate: 'schedule-gen',
         review: 'schedule-gen',
         runner: 'round-runner'
       };
-      window.history.replaceState({}, '', `/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
+      navigate(`/${role}/${tabUrlMap[stageId] || 'schedule-hub'}`);
     }
   };
 

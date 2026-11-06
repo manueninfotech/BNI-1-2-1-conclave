@@ -203,7 +203,40 @@ export default function ScheduleGen({
   const [tableSearch, setTableSearch] = useState('');
 
   // Attendee Seating Pool Scope: false = all registered members; true = only members active in the room today
-  const [activeOnly, setActiveOnly] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(() => {
+    if (selectedConclaveId) {
+      try {
+        const stored = sessionStorage.getItem(`bni_schedule_active_only_${selectedConclaveId}`);
+        if (stored === 'true') return true;
+        if (stored === 'false') return false;
+      } catch {}
+    }
+    return false;
+  });
+
+  const handleActiveOnlyToggle = (val) => {
+    if (isConclaveRunningOrLocked) return;
+    setActiveOnly(val);
+    if (selectedConclaveId) {
+      try {
+        sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, val ? 'true' : 'false');
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedConclave) return;
+    const snap = selectedConclave.snapshot;
+    const isStored = snap && typeof snap === 'object' ? snap.activeOnly : undefined;
+    if (typeof isStored === 'boolean') {
+      setActiveOnly(isStored);
+      if (selectedConclave.id) {
+        try {
+          sessionStorage.setItem(`bni_schedule_active_only_${selectedConclave.id}`, isStored ? 'true' : 'false');
+        } catch {}
+      }
+    }
+  }, [selectedConclave?.id, selectedConclave?.snapshot]);
 
   const registeredAttendees = useMemo(() => {
     return Number(stats?.counts?.registered || selectedConclave?.registrationCount || selectedConclave?.participants?.length || 0);
@@ -231,6 +264,7 @@ export default function ScheduleGen({
   }, [targetTableCount, totalAttendees, personsPerTable, selectedConclave]);
 
   const handleTableCountChange = (newCount) => {
+    if (isConclaveRunningOrLocked) return;
     const targetTables = Math.max(1, Math.min(50, newCount));
     setTargetTableCount(targetTables);
     const count = totalAttendees > 0 ? totalAttendees : 30;
@@ -313,6 +347,7 @@ export default function ScheduleGen({
   const roundLengthSecs = Math.min(8, personsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
 
   const saveMoveSeconds = async (secs) => {
+    if (isConclaveRunningOrLocked) return;
     setMoveSecondsState(secs);
     if (!selectedConclaveId) return;
     try {
@@ -371,6 +406,12 @@ export default function ScheduleGen({
         roundCount,
         tableCount: calculatedTableCount
       });
+
+      if (selectedConclaveId) {
+        try {
+          sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, activeOnly ? 'true' : 'false');
+        } catch {}
+      }
 
       clearInterval(simInterval);
 
@@ -1051,7 +1092,7 @@ export default function ScheduleGen({
               <button
                 type="button"
                 disabled={isConclaveRunningOrLocked}
-                onClick={() => setActiveOnly(false)}
+                onClick={() => handleActiveOnlyToggle(false)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${!activeOnly
                   ? 'bg-white text-zinc-950 shadow-2xs'
                   : 'text-zinc-600 hover:text-zinc-950'
@@ -1062,7 +1103,7 @@ export default function ScheduleGen({
               <button
                 type="button"
                 disabled={isConclaveRunningOrLocked}
-                onClick={() => setActiveOnly(true)}
+                onClick={() => handleActiveOnlyToggle(true)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${activeOnly
                   ? 'bg-brand-red text-white shadow-2xs'
                   : 'text-zinc-600 hover:text-zinc-950'
@@ -1076,15 +1117,24 @@ export default function ScheduleGen({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Card 1: Tables & Seats */}
-            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
+            <div className={`border rounded-xl p-5 space-y-4 shadow-2xs transition-all ${
+              isConclaveRunningOrLocked ? 'bg-zinc-50/70 border-zinc-250' : 'bg-white border-zinc-200'
+            }`}>
               <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-brand-red" />
+                  <Building2 className={`w-4 h-4 ${isConclaveRunningOrLocked ? 'text-zinc-400' : 'text-brand-red'}`} />
                   <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Tables & Seats</h3>
                 </div>
-                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                  Room Size
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {isConclaveRunningOrLocked && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5 text-amber-600" /> Locked
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
+                    Room Size
+                  </span>
+                </div>
               </div>
 
               {/* Stepper: Number of Tables */}
@@ -1098,9 +1148,9 @@ export default function ScheduleGen({
                 <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || calculatedTableCount <= 1}
+                    disabled={isConclaveRunningOrLocked || calculatedTableCount <= 1}
                     onClick={() => handleTableCountChange(calculatedTableCount - 1)}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -1109,9 +1159,9 @@ export default function ScheduleGen({
                   </div>
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || calculatedTableCount >= 50}
+                    disabled={isConclaveRunningOrLocked || calculatedTableCount >= 50}
                     onClick={() => handleTableCountChange(calculatedTableCount + 1)}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -1122,11 +1172,16 @@ export default function ScheduleGen({
                     <button
                       key={cnt}
                       type="button"
-                      disabled={isConclaveCompleted}
+                      disabled={isConclaveRunningOrLocked}
                       onClick={() => handleTableCountChange(cnt)}
-                      className={`py-1 rounded-md text-[10.5px] font-bold border transition-smooth cursor-pointer text-center ${calculatedTableCount === cnt
-                        ? 'bg-brand-red text-white border-brand-red shadow-2xs'
-                        : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900'
+                      className={`py-1 rounded-md text-[10.5px] font-bold border transition-smooth text-center ${
+                        isConclaveRunningOrLocked
+                          ? calculatedTableCount === cnt
+                            ? 'bg-zinc-200 text-zinc-700 border-zinc-300 cursor-not-allowed'
+                            : 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60'
+                          : calculatedTableCount === cnt
+                            ? 'bg-brand-red text-white border-brand-red shadow-2xs cursor-pointer'
+                            : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 cursor-pointer'
                         }`}
                     >
                       {cnt}T
@@ -1144,12 +1199,13 @@ export default function ScheduleGen({
                 <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || personsPerTable <= 2}
+                    disabled={isConclaveRunningOrLocked || personsPerTable <= 2}
                     onClick={() => {
+                      if (isConclaveRunningOrLocked) return;
                       setTargetTableCount(null);
                       setPersonsPerTable(prev => Math.max(2, prev - 1));
                     }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -1158,12 +1214,13 @@ export default function ScheduleGen({
                   </div>
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || personsPerTable >= 12}
+                    disabled={isConclaveRunningOrLocked || personsPerTable >= 12}
                     onClick={() => {
+                      if (isConclaveRunningOrLocked) return;
                       setTargetTableCount(null);
                       setPersonsPerTable(prev => Math.min(12, prev + 1));
                     }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -1187,7 +1244,7 @@ export default function ScheduleGen({
                   Total Seats: {calculatedTableCount * personsPerTable}
                 </p>
                 <p>
-                  You have {totalAttendees} registered members, leaving{' '}
+                  You have {totalAttendees} {activeOnly ? 'active members' : 'registered members'}, leaving{' '}
                   <strong className="text-emerald-700 font-bold">
                     {Math.max(0, (calculatedTableCount * personsPerTable) - totalAttendees)} extra seats
                   </strong>{' '}
@@ -1197,15 +1254,24 @@ export default function ScheduleGen({
             </div>
 
             {/* Card 2: Rounds & Timing */}
-            <div className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-2xs">
+            <div className={`border rounded-xl p-5 space-y-4 shadow-2xs transition-all ${
+              isConclaveRunningOrLocked ? 'bg-zinc-50/70 border-zinc-250' : 'bg-white border-zinc-200'
+            }`}>
               <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-brand-red" />
+                  <Clock className={`w-4 h-4 ${isConclaveRunningOrLocked ? 'text-zinc-400' : 'text-brand-red'}`} />
                   <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Rounds & Timing</h3>
                 </div>
-                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                  Schedule
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {isConclaveRunningOrLocked && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5 text-amber-600" /> Locked
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
+                    Schedule
+                  </span>
+                </div>
               </div>
 
               {/* Total Rounds Stepper */}
@@ -1217,9 +1283,12 @@ export default function ScheduleGen({
                 <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || roundCount <= 1}
-                    onClick={() => setRoundCount(prev => Math.max(1, prev - 1))}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    disabled={isConclaveRunningOrLocked || roundCount <= 1}
+                    onClick={() => {
+                      if (isConclaveRunningOrLocked) return;
+                      setRoundCount(prev => Math.max(1, prev - 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -1228,9 +1297,12 @@ export default function ScheduleGen({
                   </div>
                   <button
                     type="button"
-                    disabled={isConclaveCompleted || roundCount >= 20}
-                    onClick={() => setRoundCount(prev => Math.min(20, prev + 1))}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 cursor-pointer shadow-2xs"
+                    disabled={isConclaveRunningOrLocked || roundCount >= 20}
+                    onClick={() => {
+                      if (isConclaveRunningOrLocked) return;
+                      setRoundCount(prev => Math.min(20, prev + 1));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -1256,12 +1328,17 @@ export default function ScheduleGen({
                     <button
                       key={secs}
                       type="button"
-                      disabled={isConclaveCompleted}
+                      disabled={isConclaveRunningOrLocked}
                       onClick={() => saveMoveSeconds(secs)}
-                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-smooth cursor-pointer disabled:opacity-40 ${moveSeconds === secs
-                        ? 'bg-brand-red border-brand-red text-white'
-                        : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50'
-                        }`}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-smooth ${
+                        isConclaveRunningOrLocked
+                          ? moveSeconds === secs
+                            ? 'bg-zinc-200 border-zinc-300 text-zinc-700 cursor-not-allowed'
+                            : 'bg-zinc-50 border-zinc-200 text-zinc-400 cursor-not-allowed opacity-60'
+                          : moveSeconds === secs
+                            ? 'bg-brand-red border-brand-red text-white cursor-pointer'
+                            : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50 cursor-pointer'
+                      }`}
                     >
                       {secs / 60} min
                     </button>
