@@ -22,9 +22,12 @@ import {
   Mic,
   AlertCircle,
   LayoutGrid,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import confetti from 'canvas-confetti';
+import { colors } from '../config/theme';
 
 import {
   calculateRoundTiming,
@@ -46,6 +49,8 @@ export default function RoundRunner({
   isHubMode = false,
 }) {
   const navigateToSchedule = onNavigateToSchedule || onNavigateToReview;
+  const roundRunnerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [conclaves, setConclaves] = useState(() => {
     const cached = localStorage.getItem('bni_admin_conclaves_cache');
     if (cached) {
@@ -397,6 +402,9 @@ export default function RoundRunner({
   const conclaveMoveSeconds = useMemo(() => {
     return Number(selectedConclave?.moveSeconds) || (stats?.roundTransitionMs ? stats.roundTransitionMs / 1000 : 60);
   }, [selectedConclave?.moveSeconds, stats?.roundTransitionMs]);
+  const moveTimeLeft = clock.phase === 'move' && clock.phaseEndsMs
+    ? Math.max(0, Math.ceil((clock.phaseEndsMs - nowTick) / 1000))
+    : null;
 
   const isRoundPaused = Boolean(selectedConclave?.isRoundPaused);
 
@@ -485,6 +493,28 @@ export default function RoundRunner({
   const showToast = (title, desc) => {
     setToast({ title, desc });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(document.fullscreenElement === roundRunnerRef.current);
+    };
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
+
+  const handleToggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement === roundRunnerRef.current) {
+        await document.exitFullscreen();
+      } else if (roundRunnerRef.current?.requestFullscreen) {
+        await roundRunnerRef.current.requestFullscreen();
+      } else {
+        showToast('Fullscreen Unavailable', 'This browser does not support fullscreen for the Round Runner.');
+      }
+    } catch (error) {
+      showToast('Fullscreen Failed', error.message || 'Could not change fullscreen mode.');
+    }
   };
 
   // Audio chime state
@@ -888,7 +918,13 @@ export default function RoundRunner({
 
   // Round timing block & elapsed ratio
   const currentTotalBlock = Math.max(1, timingState.totalBlockSecs || ROUND_BLOCK_DURATION_SECS);
-  const roundElapsedRatio = Math.max(0, Math.min(1, (currentTotalBlock - (timeLeft || 0)) / currentTotalBlock));
+  const moveElapsedRatio = moveTimeLeft !== null
+    ? Math.max(0, Math.min(1, 1 - (moveTimeLeft / Math.max(1, conclaveMoveSeconds))))
+    : null;
+  const roundElapsedRatio = moveElapsedRatio !== null
+    ? moveElapsedRatio
+    : Math.max(0, Math.min(1, (currentTotalBlock - (timeLeft || 0)) / currentTotalBlock));
+  const displayedTimeLeft = moveTimeLeft ?? timeLeft;
 
   const talkingSecs = timingState.activeSecs || (personsPerTable * 60);
   const referralSecs = timingState.referralSecs || (personsPerTable * 30);
@@ -1018,7 +1054,10 @@ export default function RoundRunner({
   ]);
 
   return (
-    <div className={`w-full max-w-full overflow-hidden flex flex-col animate-fade-in relative select-none gap-4 pb-8 ${isHubMode ? '' : 'p-2 sm:p-4'}`}>
+    <div
+      ref={roundRunnerRef}
+      className={`w-full max-w-full overflow-hidden flex flex-col animate-fade-in relative select-none gap-4 pb-8 ${isFullscreen ? 'fixed inset-0 z-[9999] h-screen overflow-y-auto bg-zinc-50 p-2 sm:p-4' : isHubMode ? '' : 'p-2 sm:p-4'}`}
+    >
 
       {/* Top Status Banner */}
       <div className="w-full bg-white rounded-2xl shadow-xs border border-zinc-200/90 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -1103,6 +1142,16 @@ export default function RoundRunner({
             <Timer className="w-3.5 h-3.5 text-zinc-500" />
             <span>Move Time: <strong className="text-brand-red font-bold">{conclaveMoveSeconds < 60 ? `${conclaveMoveSeconds}s` : `${Math.round(conclaveMoveSeconds / 60)}m`}</strong></span>
           </div>
+          <button
+            type="button"
+            onClick={handleToggleFullscreen}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen (Esc)' : 'View Round Runner fullscreen'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            <span>{isFullscreen ? 'Exit Full Screen' : 'Full Screen'}</span>
+          </button>
         </div>
       </div>
 
@@ -1113,16 +1162,22 @@ export default function RoundRunner({
         <div className="lg:col-span-5 flex flex-col gap-4">
 
           {/* Futuristic Dark HUD Timer Card */}
-          <div className="relative bg-gradient-to-br from-[#121215] via-[#18181D] to-[#0E0E11] rounded-2xl shadow-2xl overflow-hidden text-zinc-100 p-5 sm:p-6 flex flex-col justify-between min-h-[480px] border border-zinc-800/90">
+          <div
+            className="relative rounded-2xl shadow-2xl overflow-hidden text-zinc-100 p-5 sm:p-6 flex flex-col justify-between min-h-[480px] border"
+            style={{
+              background: `linear-gradient(135deg, ${colors.brandRed} 0%, #8F1C29 55%, #3A171E 100%)`,
+              borderColor: 'rgba(207, 32, 48, 0.7)',
+            }}
+          >
             {/* Ambient Multi-Hue Glow Effects */}
-            <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-gradient-to-br from-red-600/30 to-pink-600/10 blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-gradient-to-tr from-blue-600/20 to-indigo-600/10 blur-3xl pointer-events-none" />
+            <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(207, 32, 48, 0.38), rgba(207, 32, 48, 0.08) 70%)' }} />
+            <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(207, 32, 48, 0.2), rgba(207, 32, 48, 0.04) 70%)' }} />
 
             {/* HUD Top Header */}
-            <div className="relative flex items-center justify-between shrink-0 border-b border-white/[0.08] pb-3">
+            <div className="relative flex items-center justify-between shrink-0 border-b border-white/20 pb-3">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-brand-red animate-pulse" />
-                <span className="text-label-xs font-bold tracking-widest text-zinc-400 uppercase font-sans">LIVE ROUND TIMER</span>
+                <span className="inline-block w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span className="text-sm sm:text-base font-bold tracking-widest text-white/90 uppercase font-sans">LIVE ROUND TIMER</span>
               </div>
             </div>
 
@@ -1130,10 +1185,10 @@ export default function RoundRunner({
             <div className="relative my-auto flex flex-col items-center justify-center py-4 w-full">
               {/* Massive Countdown Numerals */}
               <div className="flex flex-col items-center text-center w-full">
-                <span className="text-[76px] sm:text-[92px] md:text-[104px] leading-none font-black font-sans tabular-nums tracking-tight text-white drop-shadow-[0_0_28px_rgba(255,255,255,0.3)]">
-                  {isCompleted ? '00:00' : formatTime(timeLeft)}
+                <span className="text-[82px] sm:text-[100px] md:text-[112px] leading-none font-black font-sans tabular-nums tracking-tight text-white drop-shadow-[0_0_28px_rgba(255,255,255,0.3)]">
+                  {isCompleted ? '00:00' : formatTime(displayedTimeLeft)}
                 </span>
-                <span className={`text-label-sm font-bold tracking-wider uppercase mt-2.5 flex items-center gap-2 font-sans ${isCompleted
+                <span className={`text-sm sm:text-base font-bold tracking-wider uppercase mt-2.5 flex items-center gap-2 font-sans ${isCompleted
                   ? 'text-emerald-400'
                   : isRoundPaused
                     ? 'text-amber-400'
@@ -1143,16 +1198,18 @@ export default function RoundRunner({
                         ? 'text-sky-400'
                         : timingState.phase === 'transition'
                           ? 'text-amber-400'
-                          : 'text-brand-red'
+                          : 'text-white'
                   }`}>
                   {!isCompleted && !isRoundEnded && (
-                    <span className={`w-2 h-2 rounded-full animate-ping ${isRoundPaused ? 'bg-amber-400' : timingState.phase === 'referral' ? 'bg-sky-400' : 'bg-brand-red'
+                    <span className={`w-2 h-2 rounded-full animate-ping ${isRoundPaused ? 'bg-amber-300' : timingState.phase === 'referral' ? 'bg-sky-300' : 'bg-white'
                       }`} />
                   )}
                   {isCompleted
                     ? 'Conclave Concluded'
                     : isRoundPaused
                       ? 'Round Paused'
+                      : clock.phase === 'move'
+                        ? 'Move to Next Table'
                       : isRoundEnded
                         ? activeRound < totalRounds
                           ? `Round ${activeRound} Ended • Ready for Round ${activeRound + 1}`
@@ -1169,7 +1226,7 @@ export default function RoundRunner({
 
               {/* Progress Bar Style */}
               <div className="w-full mt-6 flex flex-col gap-1.5 font-sans">
-                <div className="w-full h-3.5 bg-white/10 rounded-full overflow-hidden p-0.5">
+                <div className="w-full h-3.5 bg-black/30 rounded-full overflow-hidden p-0.5">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${isCompleted
                       ? 'bg-gradient-to-r from-emerald-500 to-[#00875A]'
@@ -1179,7 +1236,7 @@ export default function RoundRunner({
                           ? 'bg-gradient-to-r from-sky-500 to-blue-600'
                           : timingState.phase === 'transition'
                             ? 'bg-gradient-to-r from-amber-500 to-amber-600'
-                            : 'bg-gradient-to-r from-red-600 to-brand-red'
+                            : 'bg-gradient-to-r from-white to-rose-100'
                       }`}
                     style={{
                       width: `${isCompleted ? 100 : Math.round(roundElapsedRatio * 100)}%`,
@@ -1193,16 +1250,20 @@ export default function RoundRunner({
                     }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-label-xs text-zinc-400 font-semibold px-0.5">
+                <div className="flex items-center justify-between text-xs text-white/90 font-semibold px-0.5">
                   <span>{isCompleted ? '100% Completed' : `${Math.round(roundElapsedRatio * 100)}% Elapsed`}</span>
                   <span className="tabular-nums font-sans">
-                    {isCompleted ? 'Finished' : `${formatTime(Math.max(0, currentTotalBlock - (timeLeft || 0)))} / ${formatDurationText(currentTotalBlock)}`}
+                    {isCompleted
+                      ? 'Finished'
+                      : clock.phase === 'move'
+                        ? `${formatTime(Math.max(0, conclaveMoveSeconds - displayedTimeLeft))} / ${formatDurationText(conclaveMoveSeconds)}`
+                        : `${formatTime(Math.max(0, currentTotalBlock - (timeLeft || 0)))} / ${formatDurationText(currentTotalBlock)}`}
                   </span>
                 </div>
               </div>
 
               {/* Active Speaker Spotlight Card */}
-              <div className="mt-3.5 w-full bg-white/[0.08] backdrop-blur-md rounded-2xl p-4 flex flex-col gap-2.5 border border-white/10 shadow-lg">
+              <div className="mt-3.5 w-full bg-black/25 backdrop-blur-md rounded-2xl p-4 flex flex-col gap-2.5 border border-white/20 shadow-lg">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div className={`w-11 h-11 rounded-full ${spotlightInfo.iconBg} text-white flex items-center justify-center font-black text-sm shrink-0 shadow-lg ring-2 ring-white/15`}>
@@ -1212,7 +1273,7 @@ export default function RoundRunner({
                       <span className="text-[15px] font-black text-white tracking-tight leading-tight font-sans">
                         {spotlightInfo.title}
                       </span>
-                      <span className="text-xs font-semibold text-zinc-300 tracking-wide truncate font-sans leading-none">
+                      <span className="text-xs font-semibold text-white/90 tracking-wide truncate font-sans leading-none">
                         {spotlightInfo.subtitle}
                       </span>
                     </div>
@@ -1222,7 +1283,7 @@ export default function RoundRunner({
                     <span className="text-lg font-black font-sans tabular-nums text-white leading-tight tracking-tight">
                       {spotlightInfo.timeText}
                     </span>
-                    <div className="text-[9.5px] font-extrabold text-zinc-400 uppercase tracking-widest font-sans leading-none">
+                    <div className="text-[9.5px] font-extrabold text-white/75 uppercase tracking-widest font-sans leading-none">
                       {spotlightInfo.timeSub}
                     </div>
                   </div>
@@ -1230,7 +1291,7 @@ export default function RoundRunner({
 
                 {/* Speaker Turn Micro Progress Bar */}
                 {spotlightInfo.showProgress && (
-                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-0.5">
+                  <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden mt-0.5">
                     <div
                       className="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-brand-red rounded-full transition-all duration-300"
                       style={{ width: `${Math.round(speakerTurnRatio * 100)}%` }}
@@ -1248,7 +1309,7 @@ export default function RoundRunner({
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
                       : state === 'active'
                         ? 'bg-gradient-to-r from-brand-red to-red-600 text-white shadow-md ring-2 ring-red-400 animate-pulse scale-105'
-                        : 'bg-white/[0.06] text-zinc-400 border border-white/10'
+                        : 'bg-black/25 text-white/85 border border-white/20'
                       }`}
                   >
                     <span>S{num}</span>
@@ -1257,7 +1318,7 @@ export default function RoundRunner({
               </div>
 
               {/* Official Conclave Formula Caption */}
-              <div className="text-center text-caption text-zinc-400 font-sans mt-2.5 uppercase tracking-wide font-medium">
+              <div className="text-center text-caption text-white/90 font-sans mt-2.5 uppercase tracking-wide font-medium">
                 {personsPerTable} Members · {formatDurationText(talkingSecs)} Speaking + {formatDurationText(referralSecs)} Referrals + {formatDurationText(transitionSecs)} Move = {formatDurationText(totalTimingSecs)} Total Round
               </div>
             </div>
@@ -1690,7 +1751,7 @@ export default function RoundRunner({
 
               {/* If tables are scheduled, show the vertical bar visualizer */}
               {tables.length > 0 ? (
-                <div className="flex items-stretch gap-1.5 sm:gap-2 pt-14 px-3 overflow-x-auto pb-1.5 custom-scrollbar h-52">
+                <div className="flex items-stretch justify-evenly gap-1.5 sm:gap-2 pt-14 px-3 overflow-x-auto pb-1.5 custom-scrollbar h-52">
                   {tables.map((t, idx) => {
                     const seatedCount = (t.members?.length || 0) + (t.captain ? 1 : 0);
                     const heightPercent = Math.min(100, Math.max(15, Math.round((seatedCount / personsPerTable) * 100)));

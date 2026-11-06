@@ -14,8 +14,51 @@ import {
   Search,
   Smartphone,
   Info,
+  Upload,
 } from 'lucide-react';
 import { api } from '../services/api';
+
+const capitalizeFirst = (value) => value.charAt(0).toLocaleUpperCase() + value.slice(1);
+
+function parseNamesCsv(text, kind) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const source = text.replace(/^\uFEFF/, '');
+
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char === '"' && quoted && source[i + 1] === '"') {
+      cell += '"';
+      i++;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      row.push(cell.trim());
+      cell = '';
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && source[i + 1] === '\n') i++;
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+  if (quoted) throw new Error('The CSV has an unclosed quotation mark.');
+  if (cell || row.length) {
+    row.push(cell.trim());
+    rows.push(row);
+  }
+
+  const names = rows.map((cells) => cells[0]?.trim()).filter(Boolean);
+  const headers = ['name', 'category', 'region', 'business category', 'business categories', 'regions'];
+  if (headers.includes(names[0]?.toLocaleLowerCase())) names.shift();
+  if (names.length === 0) throw new Error(`No ${kind} found. Use a CSV with one ${kind} per row.`);
+  return names.map(capitalizeFirst);
+}
 
 /**
  * Modern Executive Settings & Configurations.
@@ -32,11 +75,13 @@ export default function Settings() {
   const [newCatDraft, setNewCatDraft] = useState('');
   const [catErr, setCatErr] = useState(false);
   const [catActionLoading, setCatActionLoading] = useState(false);
+  const [catImportStatus, setCatImportStatus] = useState('');
 
   // Regions
   const [regions, setRegions] = useState([]);
   const [newRegionDraft, setNewRegionDraft] = useState('');
   const [regState, setRegState] = useState('');
+  const [regionImportStatus, setRegionImportStatus] = useState('');
 
   // Round timing (Official BNI Standard)
   const [timing, setTiming] = useState({ bioSeconds: 60, referralSeconds: 30, bufferSeconds: 120 });
@@ -85,7 +130,8 @@ export default function Settings() {
 
   // --- Category Actions ---
   const addCategory = async (name) => {
-    const trimmed = (name || newCatDraft).trim();
+    const raw = (name || newCatDraft).trim();
+    const trimmed = raw ? capitalizeFirst(raw) : '';
     if (!trimmed) return;
     setCatActionLoading(true);
     try {
@@ -119,12 +165,66 @@ export default function Settings() {
     return categories.filter((c) => c.toLowerCase().includes(q));
   }, [categories, catSearch]);
 
+  const handleNamesImport = async (kind, event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const setImportStatus = kind === 'category' ? setCatImportStatus : setRegionImportStatus;
+    const currentNames = kind === 'category' ? categories : regions;
+    setImportStatus('Importing…');
+    if (kind === 'category') setCatActionLoading(true);
+    else setRegState('saving');
+
+    try {
+      const importedNames = parseNamesCsv(await file.text(), kind === 'category' ? 'categories' : 'regions');
+      const existing = new Set(currentNames.map((name) => name.toLocaleLowerCase()));
+      const additions = [];
+      for (const name of importedNames) {
+        const key = name.toLocaleLowerCase();
+        if (!existing.has(key)) {
+          existing.add(key);
+          additions.push(name);
+        }
+      }
+
+      if (additions.length === 0) {
+        setImportStatus('No new entries; all imported names already exist.');
+        return;
+      }
+
+      if (kind === 'category') {
+        const merged = [...currentNames, ...additions];
+        const result = await api.put('/admin/categories', { categories: merged });
+        setCategories(result.categories || merged);
+        setCatErr(false);
+      } else {
+        const merged = [...currentNames, ...additions];
+        const result = await api.put('/admin/settings/regions', { regions: merged });
+        setRegions(result.regions || merged);
+        setRegState('saved');
+      }
+      const skipped = importedNames.length - additions.length;
+      setImportStatus(`Imported ${additions.length}${skipped ? `; skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`);
+    } catch (error) {
+      setImportStatus(`Error: ${error.message || `Could not import ${kind}s.`}`);
+      if (kind === 'region') setRegState('error');
+    } finally {
+      if (kind === 'category') setCatActionLoading(false);
+      else setTimeout(() => setRegState(''), 2500);
+    }
+  };
+
   // --- Region Actions ---
   const saveRegions = async (next) => {
+    const capitalizedRegions = next.map((region) => {
+      const trimmed = region.trim();
+      return trimmed ? capitalizeFirst(trimmed) : '';
+    }).filter(Boolean);
     setRegState('saving');
     try {
-      const r = await api.put('/admin/settings/regions', { regions: next });
-      setRegions(r.regions || next);
+      const r = await api.put('/admin/settings/regions', { regions: capitalizedRegions });
+      setRegions(r.regions || capitalizedRegions);
       setRegState('saved');
       setNewRegionDraft('');
     } catch {
@@ -134,7 +234,8 @@ export default function Settings() {
   };
 
   const addRegion = () => {
-    const trimmed = newRegionDraft.trim();
+    const raw = newRegionDraft.trim();
+    const trimmed = raw ? capitalizeFirst(raw) : '';
     if (!trimmed) return;
     if (!regions.some((r) => r.toLowerCase() === trimmed.toLowerCase())) {
       saveRegions([...regions, trimmed]);
@@ -405,21 +506,34 @@ export default function Settings() {
         {(activeTab === 'all' || activeTab === 'categories') && (
           <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0 border border-emerald-100">
-                  <Tag className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-zinc-950">Business Categories</h3>
-                    <span className="px-2 py-0.2 bg-zinc-100 text-zinc-700 text-[10px] font-bold rounded-full">
-                      {categories.length} total
-                    </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0 border border-emerald-100">
+                    <Tag className="w-4.5 h-4.5" />
                   </div>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    BNI classification standard. No two members sharing the same category are seated together.
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-zinc-950">Business Categories</h3>
+                      <span className="px-2 py-0.2 bg-zinc-100 text-zinc-700 text-[10px] font-bold rounded-full">
+                        {categories.length} total
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      BNI classification standard. No two members sharing the same category are seated together.
+                    </p>
+                  </div>
                 </div>
+                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 ${catActionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <Upload className="w-3.5 h-3.5" />
+                  Import
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    disabled={catActionLoading}
+                    className="hidden"
+                    onChange={(event) => handleNamesImport('category', event)}
+                  />
+                </label>
               </div>
 
               {/* Category Search */}
@@ -447,6 +561,11 @@ export default function Settings() {
             {catErr && (
               <p className="text-xs font-bold text-brand-red bg-red-50 border border-red-200 p-2.5 rounded-lg mt-3">
                 Failed to communicate with categories API. Please retry.
+              </p>
+            )}
+            {catImportStatus && (
+              <p className={`text-xs font-semibold mt-3 ${catImportStatus.startsWith('Error:') ? 'text-brand-red' : 'text-emerald-700'}`} role="status">
+                {catImportStatus}
               </p>
             )}
 
@@ -590,8 +709,20 @@ export default function Settings() {
                 </div>
               </div>
 
-              <StatusBadge state={regState} />
+              <div className="flex items-center gap-2">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  Import
+                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => handleNamesImport('region', event)} />
+                </label>
+                <StatusBadge state={regState} />
+              </div>
             </div>
+            {regionImportStatus && (
+              <p className={`text-xs font-semibold mt-3 ${regionImportStatus.startsWith('Error:') ? 'text-brand-red' : 'text-emerald-700'}`} role="status">
+                {regionImportStatus}
+              </p>
+            )}
 
             <div className="pt-4 flex gap-2">
               <input

@@ -6,9 +6,9 @@
  *  - A round: 1-min bio per person, then one referral slot of 30 s per
  *    person (8 per table → 8 + 4 = 12 min). Max 8 per table.
  *  - Extension (+1/+2/+5 min) is added after the referral slot.
- *  - Manual: the admin starts each round; a finished round waits.
- *    Automatic: after the round (+ extension), a move break (1/2/5 min),
- *    then the next round starts by itself.
+ *  - Manual: after a round (+ extension), show the move break (1/2/5 min),
+ *    then wait for the admin to start the next round.
+ *    Automatic: the same move break is followed by the next round.
  *  - Paused: the clock is frozen.
  */
 
@@ -79,6 +79,9 @@ export function liveClock(c, now = Date.now()) {
   if (into < talkMs) return { ...base, phase: 'referral', phaseEndsMs: start + talkMs };
   if (into < talkMs + ext) return { ...base, phase: 'extension', phaseEndsMs: start + talkMs + ext };
   if (k >= total) return { ...base, phase: 'done', phaseEndsMs: null };
+  if (t < start + talkMs + ext + moveMs(c)) {
+    return { ...base, phase: 'move', phaseEndsMs: start + talkMs + ext + moveMs(c) };
+  }
   if (isAutomatic(c)) return { ...base, phase: 'move', phaseEndsMs: start + talkMs + ext + moveMs(c) };
   return { ...base, phase: 'waiting', phaseEndsMs: null };
 }
