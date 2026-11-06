@@ -401,7 +401,11 @@ export default function ScheduleGen({
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/generate-schedule`, {
         activeOnly,
-        autoFillCaptains: false,
+        // Auto-assign captains when none are designated, so a chapter/region with
+        // no captain format can still generate and run the conclave instead of
+        // being blocked by "Need More Table Captains". (If captains ARE
+        // designated, those are used.)
+        autoFillCaptains: true,
         personsPerTable,
         roundCount,
         tableCount: calculatedTableCount
