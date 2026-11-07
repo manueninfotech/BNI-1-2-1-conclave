@@ -489,6 +489,13 @@ export default function RoundRunner({
     );
   }, [isCompleted, isUpcoming, activeRound, isRoundEnded, timerRunning, timingState]);
 
+  // The move window is still part of the RUNNING round — the admin may need to
+  // pause it while people are still walking to their next table (automatic mode
+  // otherwise auto-advances to the next round). So pause/resume stay available
+  // during the move phase even though isRoundRunning/isRoundEnded treat it as
+  // "ended".
+  const isMovePhase = !isCompleted && !isUpcoming && activeRound > 0 && clock.phase === 'move';
+
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
     setToast({ title, desc });
@@ -813,7 +820,7 @@ export default function RoundRunner({
   };
 
   const handlePauseRound = async () => {
-    if (!isRoundRunning) return;
+    if (!isRoundRunning && !isMovePhase) return;
     try {
       const now = new Date();
       setConclaves(prev => prev.map(c => {
@@ -1336,7 +1343,7 @@ export default function RoundRunner({
                 <button
                   type="button"
                   onClick={handleResumeRound}
-                  disabled={isCompleted || isRoundEnded}
+                  disabled={isCompleted || (isRoundEnded && !isMovePhase)}
                   className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${(isCompleted || isRoundEnded)
                       ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
@@ -1349,7 +1356,7 @@ export default function RoundRunner({
                 <button
                   type="button"
                   onClick={handlePauseRound}
-                  disabled={!isRoundRunning}
+                  disabled={!isRoundRunning && !isMovePhase}
                   className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${!isRoundRunning
                       ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
                       : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-xs'
