@@ -33,7 +33,7 @@ import {
   calculateRoundTiming,
   ROUND_BLOCK_DURATION_SECS,
 } from '../utils/roundTiming';
-import { liveClock } from '../utils/roundClock';
+import { clockNow, liveClock } from '../utils/roundClock';
 
 /**
  * Modernized Live Round Runner.
@@ -403,7 +403,7 @@ export default function RoundRunner({
     return Number(selectedConclave?.moveSeconds) || (stats?.roundTransitionMs ? stats.roundTransitionMs / 1000 : 60);
   }, [selectedConclave?.moveSeconds, stats?.roundTransitionMs]);
   const moveTimeLeft = clock.phase === 'move' && clock.phaseEndsMs
-    ? Math.max(0, Math.ceil((clock.phaseEndsMs - nowTick) / 1000))
+    ? Math.max(0, Math.ceil((clock.phaseEndsMs - clockNow(selectedConclave, nowTick)) / 1000))
     : null;
 
   const isRoundPaused = Boolean(selectedConclave?.isRoundPaused);
@@ -1344,12 +1344,12 @@ export default function RoundRunner({
                   type="button"
                   onClick={handleResumeRound}
                   disabled={isCompleted || (isRoundEnded && !isMovePhase)}
-                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${(isCompleted || isRoundEnded)
+                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${(isCompleted || (isRoundEnded && !isMovePhase))
                       ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs'
                     }`}
                 >
-                  <Play className={`w-4 h-4 shrink-0 ${(isCompleted || isRoundEnded) ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
+                  <Play className={`w-4 h-4 shrink-0 ${(isCompleted || (isRoundEnded && !isMovePhase)) ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
                   <span>Resume</span>
                 </button>
               ) : (
@@ -1357,12 +1357,12 @@ export default function RoundRunner({
                   type="button"
                   onClick={handlePauseRound}
                   disabled={!isRoundRunning && !isMovePhase}
-                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${!isRoundRunning
+                  className={`h-11 px-4 rounded-xl text-xs sm:text-sm font-extrabold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 whitespace-nowrap ${!isRoundRunning && !isMovePhase
                       ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
                       : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer shadow-xs'
                     }`}
                 >
-                  <Pause className={`w-4 h-4 shrink-0 ${!isRoundRunning ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
+                  <Pause className={`w-4 h-4 shrink-0 ${!isRoundRunning && !isMovePhase ? 'text-zinc-400 fill-zinc-400' : 'text-white fill-white'}`} />
                   <span>Pause</span>
                 </button>
               )}
