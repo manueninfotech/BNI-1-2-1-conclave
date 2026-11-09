@@ -34,6 +34,8 @@ import {
   ROUND_BLOCK_DURATION_SECS,
 } from '../utils/roundTiming';
 import { clockNow, liveClock } from '../utils/roundClock';
+import TableCaptainsPanel from '../admin/TableCaptainsPanel';
+import WalkInsPanel from '../admin/WalkInsPanel';
 
 /**
  * Modernized Live Round Runner.
@@ -230,7 +232,7 @@ export default function RoundRunner({
             tableNumber: t.tableNumber,
             conclaveId: selectedConclaveId,
             status: 'active',
-            captain: {
+            captain: !captain ? null : {
               id: captain?.id || captain?.uid,
               name: captain?.name || 'Table Captain',
               role: 'Table Captain',
@@ -1737,6 +1739,14 @@ export default function RoundRunner({
               </span>
             </div>
           </div>
+
+          {/* Captain per table (stand-ins for late or away captains) */}
+          {!isCompleted && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <WalkInsPanel conclave={selectedConclave} showToast={showToast} />
+              <TableCaptainsPanel conclave={selectedConclave} activeRound={activeRound} showToast={showToast} />
+            </div>
+          )}
 
           {/* Bottom Dual-Card Grid: Seating Attendance & Top Referrals */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">

@@ -119,6 +119,37 @@ export default function ConclaveForm({ mode, formData, setFormData, onSubmit, on
             )}
           </div>
 
+          {/* Table captains */}
+          <div className="rounded-xl border border-zinc-200 p-4 space-y-2">
+            <span className="block text-sm font-bold text-zinc-900">Table captains</span>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Table captains">
+              {[
+                ['required', 'Every table has a captain', 'Captains stay at their table and scan attendance.'],
+                ['none', 'No captains', 'Everyone rotates. No attendance scanning.'],
+              ].map(([value, title, hint]) => {
+                const on = (formData.captainMode || 'required') === value;
+                const fixed = Boolean(formData.hasSchedule);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={fixed && !on}
+                    onClick={() => set({ captainMode: value })}
+                    className={`text-left rounded-lg border p-3 transition ${on ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200 hover:border-zinc-400'} ${fixed && !on ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span className="block text-sm font-semibold text-zinc-900">{title}</span>
+                    <span className="block text-[11px] text-zinc-500 mt-0.5">{hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {formData.hasSchedule && (
+              <p className="text-[11px] text-zinc-400">Tables are already generated. Regenerate them to change this.</p>
+            )}
+          </div>
+
           {FeeSection && <FeeSection formData={formData} setFormData={setFormData} />}
 
           {/* More options */}
@@ -194,6 +225,7 @@ export function conclavePayload(fd, { isSuperadmin, assignedAdminRegion, loggedI
     regEndDate: auto ? fd.regEndDate : undefined,
     regEndTime: auto ? fd.regEndTime || '23:59' : undefined,
     memberLimit: Number(fd.memberLimit) || 100,
+    captainMode: fd.captainMode === 'none' ? 'none' : 'required',
     paymentDetails: {
       registrationFee: Number(fd.registrationFee) || 0,
       bankName: (fd.bankName || '').trim(),

@@ -159,6 +159,8 @@ function parseApiError(err, defaultMsg) {
   }
   const errorObj = new Error(msg);
   errorObj.details = err.details;
+  // The server spreads its details into the body (e.g. { error, needsCaptain }).
+  errorObj.data = err;
   return errorObj;
 }
 
