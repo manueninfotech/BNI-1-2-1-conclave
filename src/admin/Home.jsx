@@ -33,6 +33,7 @@ import {
 } from 'recharts';
 import { useConclaves } from './useConclaves';
 import { STAGES, nextStep, pickCurrentConclave, stageOf, formatConclaveDate } from './conclaveStage';
+import { getConclaveDisplayStatus, getStatusBadgeClasses, getStatusDotClasses } from '../utils/statusUtils';
 import { describe, who } from './Activity';
 import { api } from '../services/api';
 
@@ -153,9 +154,21 @@ export default function Home({ base, loggedInAdmin }) {
     };
   }, [conclaves, currentStats, conclaveStatsMap, current?.id]);
 
-  // Real conclave data for analytics charts (all conclaves with smooth horizontal scroll)
+  // Real conclave data for analytics charts (strictly recent 5 conclaves only)
   const conclaveChartData = useMemo(() => {
-    return conclaves.map((c) => {
+    const sorted = [...conclaves].sort((a, b) => {
+      const parseD = (obj) => {
+        const raw = obj?.startDate || obj?.date || obj?.createdAt;
+        if (!raw) return 0;
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+      };
+      return parseD(b) - parseD(a);
+    });
+
+    const recent5 = sorted.slice(0, 5);
+
+    return recent5.map((c) => {
       const count = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
       const conclaveStat = conclaveStatsMap[c.id];
       let refs = Number(c.referralCount ?? c.referralsCount ?? 0);
@@ -177,7 +190,7 @@ export default function Home({ base, loggedInAdmin }) {
   }, [conclaves, current?.id, currentStats, conclaveStatsMap]);
 
   return (
-    <div className="w-full space-y-3.5 sm:space-y-4 pb-6 font-sans">
+    <div className="admin-home-dashboard w-full flex flex-col gap-3 pb-6 font-sans">
       {/* 1. Executive Top Bar / Welcome Greeting */}
       <section className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
         <div className="flex flex-col gap-0.5">
@@ -304,8 +317,8 @@ export default function Home({ base, loggedInAdmin }) {
 
             <div className="w-full overflow-x-auto custom-scrollbar pt-1 pb-1">
               <div
-                className="h-44"
-                style={{ minWidth: `${Math.max(340, conclaveChartData.length * 85)}px`, width: '100%' }}
+                className="h-44 w-full"
+                style={{ minWidth: `${Math.max(280, conclaveChartData.length * 60)}px` }}
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
@@ -359,8 +372,8 @@ export default function Home({ base, loggedInAdmin }) {
 
             <div className="w-full overflow-x-auto custom-scrollbar pt-1 pb-1">
               <div
-                className="h-44"
-                style={{ minWidth: `${Math.max(340, conclaveChartData.length * 85)}px`, width: '100%' }}
+                className="h-44 w-full"
+                style={{ minWidth: `${Math.max(280, conclaveChartData.length * 60)}px` }}
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={conclaveChartData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
@@ -430,9 +443,9 @@ export default function Home({ base, loggedInAdmin }) {
               </thead>
               <tbody className="divide-y divide-zinc-100 text-table-text">
                 {conclaves.slice(0, 4).map((c) => {
-                  const stage = stageOf(c);
-                  const isLive = stage === 'live';
-                  const isDone = stage === 'done';
+                  const displayStatus = getConclaveDisplayStatus(c);
+                  const isRunning = displayStatus === 'Running';
+                  const isCompleted = displayStatus === 'Completed';
                   const isDraft = (c.status || '').toLowerCase() === 'draft';
                   const count = Number(c.registrationCount ?? c.registeredCount ?? (Array.isArray(c.participants) ? c.participants.length : 0));
 
@@ -454,30 +467,17 @@ export default function Home({ base, loggedInAdmin }) {
                         <span className="text-caption text-zinc-400 font-normal ml-1">registered</span>
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        {isLive ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-50 text-brand-red border border-red-200 text-label-xs font-black uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-red animate-pulse" /> Live Now
-                          </span>
-                        ) : isDone ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200 text-label-xs font-bold uppercase tracking-wider">
-                            Concluded
-                          </span>
-                        ) : isDraft ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-50 text-zinc-500 border border-zinc-200 text-label-xs font-bold uppercase tracking-wider">
-                            Draft Mode
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-label-xs font-bold uppercase tracking-wider">
-                            Registrations
-                          </span>
-                        )}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-label-xs font-black uppercase tracking-wider ${getStatusBadgeClasses(displayStatus)}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${getStatusDotClasses(displayStatus)}`} />
+                          {displayStatus}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <Link
-                          to={isLive ? `${base}/conclaves/${c.id}/round-runner` : `${base}/conclaves/${c.id}`}
+                          to={isRunning ? `${base}/conclaves/${c.id}/round-runner` : `${base}/conclaves/${c.id}`}
                           className="inline-flex items-center gap-1 text-button text-brand-red hover:text-[#B01B29] hover:underline"
                         >
-                          {isLive ? 'Cockpit' : isDone ? 'Report' : isDraft ? 'Edit' : 'Manage'}
+                          {isRunning ? 'Live Session' : isCompleted ? 'Report' : isDraft ? 'Edit' : 'Manage'}
                           <ChevronRight className="w-3.5 h-3.5" />
                         </Link>
                       </td>
@@ -637,7 +637,7 @@ function ActiveConclaveHero({ c, base, stats, loggedInAdmin }) {
           to={isLive ? `${base}/conclaves/${c.id}/round-runner` : `${base}/conclaves/${c.id}`}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-brand-red hover:bg-[#B01B29] text-white font-bold text-button shadow-xs hover:shadow transition-smooth self-start sm:self-auto group cursor-pointer"
         >
-          <span>{isLive ? 'Enter Live Cockpit' : step.action || 'Open Conclave'}</span>
+          <span>{isLive ? 'Enter Live Session' : step.action || 'Open Conclave'}</span>
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       </div>

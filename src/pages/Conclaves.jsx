@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { broadcastTabMessage } from '../utils/syncBus';
 import {
   Search,
   X,
@@ -23,7 +25,7 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
 import { extractTextFromPdfDataUrl, createFreshAgendaPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
-import { formatStatus } from '../utils/statusUtils';
+import { formatStatus, getStatusBadgeClasses, getStatusDotClasses } from '../utils/statusUtils';
 import ConclaveForm, { conclavePayload } from '../admin/ConclaveForm';
 
 const parseDate = (val) => {
@@ -261,28 +263,14 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
   // can read it — the inner callbacks re-derive their own copies in their scopes.
   const isSuperadmin = loggedInAdmin?.role === 'superadmin' || loggedInAdmin?.region === 'Global';
   const assignedAdminRegion = loggedInAdmin?.region || loggedInAdmin?.scope || '';
-  const [conclaves, setConclaves] = useState(() => {
-    const cached = localStorage.getItem('bni_admin_conclaves_cache');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // If every item has null startTime the cache is stale — discard it
-          const allNull = parsed.every(c => !c.startTime && !c.endTime);
-          if (allNull) { localStorage.removeItem('bni_admin_conclaves_cache'); return []; }
-          return parsed.map(c => ({
-            ...c,
-            startDate: formatDateForInput(c.startDate || c.date),
-            startTime: formatTimeForInput(c.startTime) || null,
-            endTime: formatTimeForInput(c.endTime) || null,
-          }));
-        }
-      } catch (e) { }
-    }
-    return [];
-  });
-
+  const queryClient = useQueryClient();
+  const [conclaves, setConclaves] = useState([]);
   const [isLoadingConclaves, setIsLoadingConclaves] = useState(true);
+
+  const notifyConclavesChanged = () => {
+    queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+    broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
+  };
 
   useEffect(() => {
     async function loadConclaves() {
@@ -401,7 +389,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
           };
         });
         setConclaves(mapped);
-        localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(mapped));
 
         // Enrich captain counts in background if any conclave shows 0 but has members
         mapped.forEach(async (cItem) => {
@@ -412,9 +399,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                 const caps = regData.counts.captainsDesignated;
                 if (caps > 0) {
                   setConclaves(prev => {
-                    const next = prev.map(item => item.id === cItem.id ? { ...item, captainCount: caps } : item);
-                    localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(next));
-                    return next;
+                    return prev.map(item => item.id === cItem.id ? { ...item, captainCount: caps } : item);
                   });
                 }
               }
@@ -429,13 +414,6 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
     }
     loadConclaves();
   }, []);
-
-  useEffect(() => {
-    if (conclaves && conclaves.length > 0) {
-      localStorage.setItem('bni_conclaves', JSON.stringify(conclaves));
-      window.dispatchEvent(new Event('storage'));
-    }
-  }, [conclaves]);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -651,12 +629,9 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
         (c.status && c.status.toLowerCase().includes(q))
       );
 
-      const sLower = (c.status || '').toLowerCase().replace(/[\s_-]/g, '');
-      const filterLower = statusFilter.toLowerCase().replace(/[\s_-]/g, '');
+      const conclaveStatusText = formatStatus(c);
       const matchesStatus = statusFilter === 'All'
-        || sLower === filterLower
-        || (filterLower === 'upcoming' && sLower === 'registrationopen')
-        || (filterLower === 'registrationopen' && sLower === 'registrationopen');
+        || conclaveStatusText.toLowerCase() === statusFilter.toLowerCase();
       const matchesVenue = venueFilter === 'All' || c.venueShort === venueFilter;
       const adminReg = (loggedInAdmin?.region || loggedInAdmin?.scope || '').toLowerCase().trim();
       const concReg = (c.region || '').toLowerCase().trim();
@@ -879,6 +854,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       const payload = conclavePayload(formData, { isSuperadmin, assignedAdminRegion, loggedInAdmin });
 
       await api.post('/admin/conclaves', payload);
+      notifyConclavesChanged();
       showToast('Conclave Created', `"${formData.name}" has been successfully added.`);
       setIsAddModalOpen(false);
 
@@ -917,6 +893,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
     const newStatus = !currentStatus;
     try {
       await api.post(`/admin/conclaves/${conclave.id}/registration`, { open: newStatus });
+      notifyConclavesChanged();
       setConclaves(prev => prev.map(c => c.id === conclave.id ? {
         ...c,
         isRegistrationOpen: newStatus,
@@ -995,6 +972,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       }
       const payload = conclavePayload(formData, { isSuperadmin, assignedAdminRegion, loggedInAdmin });
       await api.put(`/admin/conclaves/${formData.id}`, payload);
+      notifyConclavesChanged();
       showToast('Conclave Updated', `Successfully updated conclave profile data.`);
       setIsEditModalOpen(false);
 
@@ -1129,7 +1107,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <SearchableDropdown
               label="Status"
-              options={['All', 'Upcoming', 'Registration Open', 'Running', 'Completed']}
+              options={['All', 'Registration Open', 'Registration Close', 'Running', 'Completed', 'Cancelled']}
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="Search status..."
@@ -1247,27 +1225,15 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                         {conclave.memberCount}
                       </td>
                       <td className="px-5 py-4">
-                        {(conclave.status || '').toLowerCase() === 'running' || (conclave.status || '').toLowerCase() === 'active' ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Running
-                          </span>
-                        ) : (conclave.status || '').toLowerCase().replace(/[\s_-]/g, '') === 'registrationopen' ? (
-                          <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Registration Open
-                          </span>
-                        ) : (conclave.status || '').toLowerCase() === 'upcoming' ? (
-                          <span className="inline-flex items-center gap-1 text-brand-red bg-red-50 border border-red-100 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-brand-red"></span> Upcoming
-                          </span>
-                        ) : (conclave.status || '').toLowerCase() === 'draft' ? (
-                          <span className="inline-flex items-center gap-1 text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> Draft
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-zinc-700 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span> {formatStatus(conclave.status) || 'Completed'}
-                          </span>
-                        )}
+                        {(() => {
+                          const displayStatus = formatStatus(conclave);
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusBadgeClasses(displayStatus)}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${getStatusDotClasses(displayStatus)}`} />
+                              {displayStatus}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                         {conclave.status === 'Completed' || conclave.isScheduleLocked || conclave.status === 'locked' ? (
@@ -1421,6 +1387,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
                 onClick={async () => {
                   try {
                     await api.delete(`/admin/conclaves/${deleteTarget.id}`);
+                    notifyConclavesChanged();
                     showToast('Conclave Removed', `Successfully deleted ${deleteTarget.name}.`);
                     setDeleteTarget(null);
                     const freshData = await api.get('/admin/conclaves?global=true');

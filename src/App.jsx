@@ -386,7 +386,6 @@ export default function App() {
         if (myRegisteredConclave) {
           syncResult = await api.post(`/conclaves/${myRegisteredConclave.id}/sync`, {}).catch(() => null);
           if (syncResult && syncResult.conclaveStatus) {
-            localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(syncResult));
             setConclaveSyncData(prev => (JSON.stringify(prev) !== JSON.stringify(syncResult) ? syncResult : prev));
           } else {
             setConclaveSyncData(null);

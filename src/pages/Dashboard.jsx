@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import {
   Users,
@@ -14,86 +14,36 @@ import {
   Handshake
 } from 'lucide-react';
 
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { colors } from '../config/theme';
-import { formatStatus } from '../utils/statusUtils';
+import { formatStatus, getStatusBadgeClasses, getStatusDotClasses } from '../utils/statusUtils';
+import { useConclaveReferrals } from '../hooks/useConclaveReferrals';
 
 export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin, embedded = false }) {
-  const [referrals, setReferrals] = useState(() => {
-    const stored = localStorage.getItem('bni_referrals');
-    return stored ? JSON.parse(stored) : [];
+  // TanStack React Query: Conclaves list
+  const { data: conclaves = [], isLoading: isConclavesLoading } = useQuery({
+    queryKey: ['conclaves'],
+    queryFn: async () => {
+      const data = await api.get('/admin/conclaves');
+      return Array.isArray(data) ? data : [];
+    },
   });
 
-  useEffect(() => {
-    const sync = () => {
-      const s = localStorage.getItem('bni_referrals');
-      setReferrals(s ? JSON.parse(s) : []);
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-
-  const [conclaves, setConclaves] = useState(() => {
-    const cached = localStorage.getItem('bni_admin_conclaves_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return [];
+  // TanStack React Query: Conclave stats
+  const { data: stats = null } = useQuery({
+    queryKey: ['stats', selectedConclaveId],
+    queryFn: async () => {
+      if (!selectedConclaveId) return null;
+      return await api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null);
+    },
+    enabled: Boolean(selectedConclaveId),
   });
-  const [stats, setStats] = useState(() => {
-    const cached = localStorage.getItem('bni_admin_stats_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch conclaves
-  useEffect(() => {
-    async function loadConclaves() {
-      setIsLoading(false);
-      try {
-        const data = await api.get('/admin/conclaves');
-        if (Array.isArray(data)) {
-          setConclaves(data);
-          localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(data));
-        }
-      } catch (err) {
-        console.error("Failed to load conclaves:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadConclaves();
-  }, []);
+  // TanStack React Query: Real-time Conclave Referrals
+  const { data: referrals = [] } = useConclaveReferrals(selectedConclaveId);
 
-  // Fetch stats for the selected conclave
-  // Fetch stats & live referrals for the selected conclave
-  useEffect(() => {
-    if (!selectedConclaveId) return;
-    async function loadStatsAndReferrals() {
-      try {
-        const [statsData, refData] = await Promise.all([
-          api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
-          api.get(`/admin/conclaves/${selectedConclaveId}/referrals`).catch(() => null)
-        ]);
-
-        if (statsData) {
-          setStats(statsData);
-          localStorage.setItem('bni_admin_stats_cache', JSON.stringify(statsData));
-        }
-
-        if (Array.isArray(refData)) {
-          setReferrals(refData);
-          localStorage.setItem('bni_referrals', JSON.stringify(refData));
-        }
-      } catch (err) {
-        console.warn("Failed to load conclave stats/referrals:", err?.message || err);
-      }
-    }
-    loadStatsAndReferrals();
-  }, [selectedConclaveId]);
+  const isLoading = isConclavesLoading;
 
 
   const selectedConclave = useMemo(() => {
@@ -148,15 +98,26 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     }).length;
   }, [filteredReferrals]);
 
+  const totalClosedAmount = useMemo(() => {
+    return filteredReferrals.reduce((sum, r) => {
+      const amt = Number(r.closedAmount || r.amount || 0);
+      return sum + (isNaN(amt) ? 0 : amt);
+    }, 0);
+  }, [filteredReferrals]);
+
+  const conversionRate = totalReferrals > 0 ? Math.round((closedReferrals / totalReferrals) * 100) : 0;
+  const activeRate = totalReferrals > 0 ? Math.round(((connectedReferrals + closedReferrals) / totalReferrals) * 100) : 0;
+
   // Top referral givers for this conclave
   const leaderboard = useMemo(() => {
     const counts = {};
     filteredReferrals.forEach(r => {
       const giverId = r.fromMemberId || r.fromUserId || r.fromName;
-      const giverName = r.fromName || 'BNI Member';
+      const rawName = r.fromName || 'BNI Member';
+      const cleanName = rawName.replace(/\s*\(Active\)/gi, '').trim();
       if (!giverId) return;
       if (!counts[giverId]) {
-        counts[giverId] = { name: giverName, count: 0 };
+        counts[giverId] = { name: cleanName, count: 0 };
       }
       counts[giverId].count++;
     });
@@ -278,21 +239,15 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
             <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
               {selectedConclave.name || selectedConclave.title || 'Conclave Dashboard'}
             </h1>
-            {(selectedConclave.status || '').toLowerCase() === 'running' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Running Live
-              </span>
-            ) : (selectedConclave.status || '').toLowerCase() === 'completed' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-700 border border-zinc-250">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Completed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
-                {formatStatus(selectedConclave.status)}
-              </span>
-            )}
+            {(() => {
+              const displayStatus = formatStatus(selectedConclave);
+              return (
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-2xs ${getStatusBadgeClasses(displayStatus)}`}>
+                  <span className={`w-2 h-2 rounded-full ${getStatusDotClasses(displayStatus)}`} />
+                  {displayStatus}
+                </span>
+              );
+            })()}
           </div>
 
           {/* Clean metadata line */}
@@ -412,10 +367,10 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
       </div>
 
       {/* Analytics: Referrals & Leaderboard */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 items-start">
 
         {/* Referrals Status & Pipeline Chart Card */}
-        <div className="p-4 sm:p-5 border border-zinc-200/80 rounded-xl bg-white shadow-2xs hover:shadow-xs transition-smooth flex flex-col justify-between">
+        <div className="p-4 sm:p-5 border border-zinc-200/80 rounded-xl bg-white shadow-2xs hover:shadow-xs transition-smooth flex flex-col">
           <div>
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
@@ -507,7 +462,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                 <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider">Referral Stages Comparison</span>
                 <span className="text-[9px] font-semibold text-zinc-400">Activity Funnel</span>
               </div>
-              <div className="w-full h-32">
+              <div className="w-full h-40">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={referralPipelineData} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
                     <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a', fontWeight: 600 }} />
@@ -531,11 +486,29 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* Conversion Metrics Footer */}
+            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 text-center">
+              <div className="p-2 bg-zinc-50 rounded-lg border border-zinc-100">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block tracking-wider">Conversion</span>
+                <span className="text-sm font-extrabold text-zinc-900">{conversionRate}%</span>
+              </div>
+              <div className="p-2 bg-zinc-50 rounded-lg border border-zinc-100">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block tracking-wider">Active Rate</span>
+                <span className="text-sm font-extrabold text-emerald-700">{activeRate}%</span>
+              </div>
+              <div className="p-2 bg-zinc-50 rounded-lg border border-zinc-100">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase block tracking-wider">Closed Value</span>
+                <span className="text-sm font-extrabold text-brand-red">
+                  {totalClosedAmount > 0 ? `₹${totalClosedAmount.toLocaleString('en-IN')}` : '₹0'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Top Referral Givers — Bar Chart & Leaderboard */}
-        <div className="p-4 sm:p-5 border border-zinc-200/80 rounded-xl bg-white shadow-2xs hover:shadow-xs transition-smooth flex flex-col justify-between">
+        <div className="p-4 sm:p-5 border border-zinc-200/80 rounded-xl bg-white shadow-2xs hover:shadow-xs transition-smooth flex flex-col">
           <div>
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
@@ -556,12 +529,12 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
             ) : (
               <div>
                 {/* Horizontal Bar Chart for Top Givers */}
-                <div className="w-full h-40 mb-3">
+                <div className="w-full h-40 mb-2.5">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       layout="vertical"
                       data={leaderboardChartData}
-                      margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+                      margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
                     >
                       <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#71717a' }} />
                       <YAxis
@@ -569,8 +542,13 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
                         dataKey="name"
                         tickLine={false}
                         axisLine={false}
+                        interval={0}
                         tick={{ fontSize: 11, fill: '#27272a', fontWeight: 600 }}
-                        width={85}
+                        tickFormatter={(val) => {
+                          const s = String(val || '');
+                          return s.length > 16 ? s.slice(0, 15) + '…' : s;
+                        }}
+                        width={115}
                       />
                       <Tooltip
                         cursor={false}

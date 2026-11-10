@@ -348,8 +348,37 @@ export default function Activity({ conclaveId, embedded = false }) {
 
           <div className="bg-white border border-zinc-200 rounded-xl divide-y divide-zinc-150 overflow-hidden shadow-xs">
             {rows.map((r) => {
-              const changes = r.changes ? Object.entries(r.changes).filter(([k]) => !HIDDEN_FIELDS.has(k)) : [];
-              const expandable = changes.length > 0 || r.ip;
+              const pauseInfo = getPauseWindowInfo(r, items);
+              let displayedChanges = r.changes ? Object.entries(r.changes).filter(([k, v]) => !HIDDEN_FIELDS.has(k) && hasMeaningfulChange(v)) : [];
+
+              if (pauseInfo && (r.action === 'round.pause' || r.action === 'round.resume')) {
+                // Filter out raw roundPausedAt so we replace it with ordered Pause Start, Pause End, and Total Duration
+                displayedChanges = displayedChanges.filter(([k]) => k !== 'roundPausedAt');
+
+                const pauseRows = [];
+                if (pauseInfo.pausedAt) {
+                  pauseRows.push(['pauseStartTime', { from: null, to: formatDateTime(pauseInfo.pausedAt) }]);
+                }
+                if (pauseInfo.resumedAt) {
+                  pauseRows.push(['pauseEndTime', { from: null, to: formatDateTime(pauseInfo.resumedAt) }]);
+                } else {
+                  pauseRows.push(['pauseEndTime', { from: null, to: 'Currently Paused' }]);
+                }
+                if (pauseInfo.durationMs !== null) {
+                  pauseRows.push(['pauseDuration', { from: null, to: formatDuration(pauseInfo.durationMs) }]);
+                } else {
+                  pauseRows.push(['pauseDuration', { from: null, to: 'Ongoing' }]);
+                }
+
+                const isPausedIdx = displayedChanges.findIndex(([k]) => k === 'isRoundPaused');
+                if (isPausedIdx !== -1) {
+                  displayedChanges.splice(isPausedIdx + 1, 0, ...pauseRows);
+                } else {
+                  displayedChanges.unshift(...pauseRows);
+                }
+              }
+
+              const expandable = displayedChanges.length > 0 || r.ip || Boolean(pauseInfo);
               const isOpen = open === r.id;
               const iconMeta = getActionIcon(r.action);
               const IconComponent = iconMeta.icon;
@@ -372,7 +401,7 @@ export default function Activity({ conclaveId, embedded = false }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="text-xs font-bold text-zinc-950 leading-snug">
-                          {describe(r, !conclaveId)}
+                          {describe(r, !conclaveId, pauseInfo)}
                         </span>
                         {r.conclave?.name && !conclaveId && (
                           <span className="text-[10px] bg-zinc-100 text-zinc-700 font-semibold px-1.5 py-0.2 rounded">
@@ -425,20 +454,26 @@ export default function Activity({ conclaveId, embedded = false }) {
 
                   {/* Expandable Field Diffs & Audit Metadata */}
                   {isOpen && (
-                    <div className="px-4 pb-3 pt-1 border-t border-zinc-100 bg-zinc-50/60 ml-10 mr-4 rounded-b-lg mb-2 space-y-1.5">
+                    <div className="px-4 pb-3 pt-2 border-t border-zinc-100 bg-zinc-50/60 ml-10 mr-4 rounded-b-lg mb-2 space-y-1.5">
                       <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">
                         Change Details:
                       </span>
-                      {changes.map(([field, v]) => (
+                      {displayedChanges.map(([field, v]) => (
                         <div key={field} className="text-xs text-zinc-700 flex items-baseline gap-2">
                           <span className="font-bold text-zinc-900">{label(field)}:</span>
                           <span className="bg-red-50 text-brand-red px-1 rounded line-through text-[11px]">
-                            {show(v?.from)}
+                            {show(v?.from, field)}
                           </span>
                           <span className="text-zinc-400">→</span>
-                          <span className="bg-emerald-50 text-[#00875A] px-1 rounded font-bold text-[11px]">
-                            {show(v?.to)}
-                          </span>
+                          {v?.to === 'Currently Paused' || v?.to === 'Ongoing' ? (
+                            <span className="bg-amber-100 text-amber-900 px-1 rounded font-bold text-[11px]">
+                              {v.to}
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-50 text-[#00875A] px-1 rounded font-bold text-[11px]">
+                              {show(v?.to, field)}
+                            </span>
+                          )}
                         </div>
                       ))}
                       {r.ip && (
@@ -530,14 +565,112 @@ const HIDDEN_FIELDS = new Set([
   'snapshot',
   'scheduleSummary',
   'warnings',
+  'dateRange', // legacy string field, superseded by startDate and endDate
+  'creator', // legacy field, superseded by coordinator
+  'theme', // legacy unused field
 ]);
+
+function hasMeaningfulChange(v) {
+  const fromVal = show(v?.from);
+  const toVal = show(v?.to);
+  if (fromVal === '—' && toVal === '—') return false;
+  if (fromVal === toVal) return false;
+  return true;
+}
 
 export function who(r) {
   if (r.kind === 'system' || r.actor?.role === 'system') return 'Automatic';
   return r.actor?.name || (r.actor?.role ? r.actor.role : 'Someone');
 }
 
-export function describe(r, withConclave) {
+function formatDuration(ms) {
+  if (ms === null || ms === undefined || ms === '' || isNaN(Number(ms))) return '—';
+  const totalSecs = Math.max(0, Math.round(Number(ms) / 1000));
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  if (mins === 0) return `${secs}s`;
+  if (secs === 0) return `${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
+function formatDateTime(d) {
+  if (!d) return '—';
+  const dateObj = typeof d === 'string' || typeof d === 'number' ? new Date(d) : d;
+  if (isNaN(dateObj.getTime())) return String(d);
+  return dateObj.toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+export function getPauseWindowInfo(r, allItems = []) {
+  if (!r || (r.action !== 'round.pause' && r.action !== 'round.resume')) return null;
+
+  const conclaveId = r.conclaveId || r.entityId;
+
+  if (r.action === 'round.pause') {
+    const pausedAtRaw = r.changes?.roundPausedAt?.to || r.after?.roundPausedAt || r.occurredAt;
+    const pausedAt = pausedAtRaw ? new Date(pausedAtRaw) : new Date(r.occurredAt);
+    const pTime = pausedAt.getTime();
+
+    // Find the matching resume event for this conclave that occurred after this pause
+    const resumeEvent = (allItems || [])
+      .filter(it =>
+        it.action === 'round.resume' &&
+        (it.conclaveId === conclaveId || it.entityId === conclaveId) &&
+        new Date(it.occurredAt).getTime() >= pTime - 1000
+      )
+      .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())[0];
+
+    const resumedAt = resumeEvent ? new Date(resumeEvent.occurredAt) : null;
+    const durationMs = resumedAt ? Math.max(0, resumedAt.getTime() - pTime) : null;
+
+    return {
+      isPaused: true,
+      pausedAt,
+      resumedAt,
+      isStillPaused: !resumedAt,
+      durationMs,
+      elapsedMsBefore: r.changes?.roundElapsedMsBeforePause?.to ?? r.after?.roundElapsedMsBeforePause ?? null,
+      resumeActor: resumeEvent?.actor?.name || null
+    };
+  }
+
+  if (r.action === 'round.resume') {
+    const resumedAt = new Date(r.occurredAt);
+    const rTime = resumedAt.getTime();
+
+    const pausedAtRaw = r.changes?.roundPausedAt?.from || r.before?.roundPausedAt || r.metadata?.pausedAt;
+    let pausedAt = pausedAtRaw ? new Date(pausedAtRaw) : null;
+
+    if (!pausedAt) {
+      // Find the pause event immediately preceding this resume
+      const pauseEvent = (allItems || [])
+        .filter(it =>
+          it.action === 'round.pause' &&
+          (it.conclaveId === conclaveId || it.entityId === conclaveId) &&
+          new Date(it.occurredAt).getTime() <= rTime + 1000
+        )
+        .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())[0];
+      if (pauseEvent) {
+        const raw = pauseEvent.changes?.roundPausedAt?.to || pauseEvent.occurredAt;
+        if (raw) pausedAt = new Date(raw);
+      }
+    }
+
+    const durationMs = pausedAt ? Math.max(0, rTime - pausedAt.getTime()) : null;
+
+    return {
+      isPaused: false,
+      pausedAt,
+      resumedAt,
+      isStillPaused: false,
+      durationMs,
+      elapsedMsBefore: r.changes?.roundElapsedMsBeforePause?.from ?? r.before?.roundElapsedMsBeforePause ?? null
+    };
+  }
+
+  return null;
+}
+
+export function describe(r, withConclave, pauseInfo = null) {
   const self = r.subject?.uid && r.subject.uid === r.actor?.uid;
   const person =
     r.subject?.name || (['member', 'captain'].includes(r.actor?.role) ? r.actor?.name : null) || 'a member';
@@ -570,10 +703,29 @@ export function describe(r, withConclave) {
       return `Started round ${r.metadata?.roundNumber ?? ch.currentRound?.to ?? ''}${inC}`.replace('  ', ' ');
     case 'conclave.set_member_permission':
       return ch.allowAdminAddMembers?.to ? `Allowed admins to add members${toC}` : `Stopped admins adding members${toC}`;
-    case 'round.pause':
+    case 'round.pause': {
+      if (pauseInfo) {
+        if (pauseInfo.resumedAt) {
+          const pStr = time(pauseInfo.pausedAt);
+          const rStr = time(pauseInfo.resumedAt);
+          const dur = pauseInfo.durationMs !== null ? ` (${formatDuration(pauseInfo.durationMs)})` : '';
+          return `Paused the round${inC} · Paused from ${pStr} to ${rStr}${dur}`;
+        }
+        if (pauseInfo.isStillPaused) {
+          return `Paused the round${inC} · Paused at ${time(pauseInfo.pausedAt)} (Currently Paused)`;
+        }
+      }
       return `Paused the round${inC}`;
-    case 'round.resume':
+    }
+    case 'round.resume': {
+      if (pauseInfo && pauseInfo.pausedAt) {
+        const pStr = time(pauseInfo.pausedAt);
+        const rStr = time(pauseInfo.resumedAt);
+        const dur = pauseInfo.durationMs !== null ? ` (${formatDuration(pauseInfo.durationMs)})` : '';
+        return `Resumed the round${inC} · Was paused from ${pStr} to ${rStr}${dur}`;
+      }
       return `Resumed the round${inC}`;
+    }
     case 'schedule.generate':
       return `Generated table seating${onC}`;
     case 'registration.create':
@@ -637,13 +789,20 @@ export function describe(r, withConclave) {
 }
 
 function fieldsList(changes) {
-  const keys = Object.keys(changes || {}).filter((k) => !HIDDEN_FIELDS.has(k));
+  const keys = Object.entries(changes || {})
+    .filter(([k, v]) => !HIDDEN_FIELDS.has(k) && hasMeaningfulChange(v))
+    .map(([k]) => k);
   if (!keys.length) return '';
   const names = keys.slice(0, 3).map(label).join(', ');
   return `: ${names}${keys.length > 3 ? ` and ${keys.length - 3} more` : ''}`;
 }
 
 function label(key) {
+  if (key === 'roundElapsedMsBeforePause') return 'Round Elapsed Time Before Pause';
+  if (key === 'isRoundPaused') return 'Is Round Paused';
+  if (key === 'roundPausedAt' || key === 'pauseStartTime') return 'Pause Start Time';
+  if (key === 'pauseEndTime') return 'Pause End Time';
+  if (key === 'pauseDuration') return 'Total Pause Duration';
   return String(key)
     .replace(/[._]/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -651,10 +810,21 @@ function label(key) {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-function show(v) {
+function show(v, field = '') {
   if (v === null || v === undefined || v === '') return '—';
+  if (field === 'roundElapsedMsBeforePause' && !isNaN(Number(v))) {
+    return `${formatDuration(v)} (${Number(v).toLocaleString()} ms)`;
+  }
   if (typeof v === 'boolean') return v ? 'yes' : 'no';
-  if (typeof v === 'object') return JSON.stringify(v).slice(0, 120);
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '—';
+    return v.join(', ').slice(0, 120);
+  }
+  if (typeof v === 'object') {
+    const entries = Object.entries(v).filter(([_, val]) => val !== '' && val !== 0 && val !== null && val !== undefined);
+    if (entries.length === 0) return '—';
+    return JSON.stringify(v).slice(0, 120);
+  }
   const s = String(v);
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
     const d = new Date(s);

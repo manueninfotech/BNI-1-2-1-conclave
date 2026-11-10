@@ -1,53 +1,52 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { broadcastTabMessage } from '../utils/syncBus';
 import {
   X,
-  Play,
-  PlayCircle,
-  StopCircle,
   Lock,
   ShieldAlert,
   Users,
-  Award,
-  SlidersHorizontal,
   Plus,
   Minus,
   ChevronRight,
-  Building2,
-  AlertTriangle,
-  RotateCcw,
-  LayoutGrid,
+  ChevronDown,
   Layers,
   Clock,
-  Check,
   Zap,
   Search,
-  UserCheck,
+  Coffee,
+  CalendarDays,
+  Download,
+  BarChart3,
+  Crown,
+  Armchair,
+  Table as TableIcon,
+  Sparkles,
+  RotateCw,
+  Eye,
+  Printer,
+  Maximize2,
+  Minimize2,
+  List,
+  LayoutGrid,
+  CheckCircle2,
+  UserCheck
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { api } from '../services/api';
 import { formatStatus } from '../utils/statusUtils';
 
 export default function ScheduleGen({
   selectedConclaveId,
   showGenWarning,
-  clearGenWarning,
   onScheduleReady,
   onNavigateToRunner,
   isHubMode = false,
 }) {
+  const queryClient = useQueryClient();
   // Conclaves list state
-  const [conclaves, setConclaves] = useState(() => {
-    const cached = localStorage.getItem('bni_schedule_gen_conclaves_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch { }
-    }
-    const adminCached = localStorage.getItem('bni_admin_conclaves_cache');
-    if (adminCached) {
-      try { return JSON.parse(adminCached); } catch { }
-    }
-    return [];
-  });
+  const [conclaves, setConclaves] = useState([]);
 
   useEffect(() => {
     async function loadConclaves() {
@@ -101,12 +100,23 @@ export default function ScheduleGen({
   const conclaveName = selectedConclave?.name || 'Conclave';
 
   const isLocked = Boolean(selectedConclave?.isScheduleLocked || selectedConclave?.status?.toLowerCase() === 'locked');
+  const isConclaveCompleted = Boolean(
+    selectedConclave && (
+      (selectedConclave.status || '').toLowerCase() === 'completed' ||
+      (selectedConclave.status || '').toLowerCase() === 'cancelled'
+    )
+  );
+  const isRunning = Boolean(['running'].includes((selectedConclave?.status || '').toLowerCase()));
+  const isConclaveRunningOrLocked = Boolean(isLocked || isConclaveCompleted || isRunning);
+  const hasGeneratedSchedule = Boolean(selectedConclave?.schedule || selectedConclave?.scheduleSummary);
 
-  // Stats state
+  // Stats state - scoped strictly per conclave ID without static fallbacks
   const [stats, setStats] = useState(() => {
-    const cached = localStorage.getItem('bni_admin_stats_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch { }
+    if (selectedConclaveId) {
+      try {
+        const cached = localStorage.getItem(`bni_admin_stats_cache_${selectedConclaveId}`);
+        if (cached) return JSON.parse(cached);
+      } catch { }
     }
     return null;
   });
@@ -114,14 +124,17 @@ export default function ScheduleGen({
   useEffect(() => {
     let alive = true;
     async function loadStatsAndMembers() {
-      if (!selectedConclaveId) return;
+      if (!selectedConclaveId) {
+        setStats(null);
+        return;
+      }
       try {
         let statsData = await api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null);
         let allUsers = await api.get('/admin/users').catch(() => []);
 
-        let registeredCount = statsData?.counts?.registered || 0;
+        let registeredCount = statsData?.counts?.registered ?? 0;
         let activeCount = statsData?.counts?.active ?? 0;
-        let captainsCount = statsData?.counts?.captains || 0;
+        let captainsCount = statsData?.counts?.captains ?? 0;
 
         const distinctCatCount = new Set((allUsers || []).map(u => u.category?.trim() || u.businessCategory?.trim()).filter(Boolean)).size || 0;
 
@@ -130,12 +143,16 @@ export default function ScheduleGen({
             registered: registeredCount,
             active: activeCount,
             captains: captainsCount,
-            businessTypes: distinctCatCount
+            businessTypes: distinctCatCount,
+            referrals: statsData?.counts?.referrals ?? 0,
+            attendanceRecords: statsData?.counts?.attendanceRecords ?? 0
           }
         };
         if (alive) {
           setStats(updatedStats);
-          localStorage.setItem('bni_admin_stats_cache', JSON.stringify(updatedStats));
+          try {
+            localStorage.setItem(`bni_admin_stats_cache_${selectedConclaveId}`, JSON.stringify(updatedStats));
+          } catch { }
         }
       } catch (err) {
         console.error('Failed to load conclave stats:', err);
@@ -151,6 +168,7 @@ export default function ScheduleGen({
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [checkedQuality, setCheckedQuality] = useState(false);
   const [checkedEdits, setCheckedEdits] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
@@ -169,19 +187,11 @@ export default function ScheduleGen({
     };
   }, [isModalOpen]);
 
-  const isConclaveRunningOrLocked = Boolean(
-    selectedConclave && (
-      ['running', 'completed', 'locked'].includes((selectedConclave.status || '').toLowerCase()) ||
-      Boolean(selectedConclave.scheduleSummary) ||
-      Boolean(selectedConclave.schedule)
-    )
-  );
-
-  const [progress, setProgress] = useState(isConclaveRunningOrLocked ? 100 : 0);
+  const [progress, setProgress] = useState(hasGeneratedSchedule ? 100 : 0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [elapsed, setElapsed] = useState(isConclaveRunningOrLocked ? 42 : 0);
-  const [processed, setProcessed] = useState(isConclaveRunningOrLocked ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
-  const [genStep, setGenStep] = useState('Idle');
+  const [elapsed, setElapsed] = useState(hasGeneratedSchedule ? 42 : 0);
+  const [processed, setProcessed] = useState(hasGeneratedSchedule ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
+  const [genStep, setGenStep] = useState(hasGeneratedSchedule ? 'Schedule Ready' : 'Idle');
 
   // Backend Conclave Defaults State
   const [conclaveDefaults, setConclaveDefaults] = useState(() => {
@@ -189,18 +199,110 @@ export default function ScheduleGen({
       const cached = localStorage.getItem('bni_conclave_defaults');
       if (cached) return JSON.parse(cached);
     } catch { }
-    return { personsPerTable: 7, roundCount: 6 };
+    return { personsPerTable: 5, roundCount: 2 };
   });
 
   // Parameters
-  const [personsPerTable, setPersonsPerTable] = useState(() => conclaveDefaults.personsPerTable || 7);
-  const [roundCount, setRoundCount] = useState(() => conclaveDefaults.roundCount || 6);
+  const [personsPerTable, setPersonsPerTable] = useState(() => conclaveDefaults.personsPerTable || 5);
+  const [roundCount, setRoundCount] = useState(() => conclaveDefaults.roundCount || 2);
   const [moveSeconds, setMoveSecondsState] = useState(() => selectedConclave?.moveSeconds || 120);
 
-  // Active sub-tab inside Schedule Generation
-  const [activeTab, setActiveTab] = useState('planner'); // 'planner' | 'visual' | 'blueprint'
+  // Active sub-tab inside Schedule Generation: 'visual' | 'blueprint'
+  const [activeTab, setActiveTab] = useState('visual');
   const [visualRound, setVisualRound] = useState(1);
   const [tableSearch, setTableSearch] = useState('');
+  const [roundTimeMinutes, setRoundTimeMinutes] = useState('7.5');
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
+  const [membersList, setMembersList] = useState([]);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
+  const [roundSelectOpen, setRoundSelectOpen] = useState(false);
+
+  // When opening preview, refresh conclave data to ensure stand-in captains and live updates are loaded
+  useEffect(() => {
+    if (isPreviewOpen && selectedConclaveId) {
+      api.get(`/admin/conclaves/${selectedConclaveId}`).then(fresh => {
+        if (fresh && fresh.id) {
+          setConclaves(prev => prev.map(c => c.id === fresh.id ? { ...c, ...fresh } : c));
+        }
+      }).catch(() => null);
+    }
+  }, [isPreviewOpen, selectedConclaveId, visualRound]);
+
+  // Close preview on Escape key and lock body scroll
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isPreviewOpen) {
+        setIsPreviewOpen(false);
+      }
+    };
+    if (isPreviewOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPreviewOpen]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadMembers() {
+      if (!selectedConclaveId) return;
+      try {
+        const res = await api.get(`/admin/conclaves/${selectedConclaveId}/registrations`).catch(() => null);
+        const list = res?.registrations || (Array.isArray(res) ? res : []);
+        if (alive && Array.isArray(list)) {
+          setMembersList(list);
+        }
+      } catch (err) {
+        console.warn('Could not load conclave registrations:', err);
+      }
+    }
+    loadMembers();
+    return () => { alive = false; };
+  }, [selectedConclaveId]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleExportCSV = () => {
+    if (!selectedConclave?.schedule?.rounds?.length) {
+      showToast('No Schedule', 'Please generate a schedule first before exporting.');
+      return;
+    }
+    let csv = 'Round,Table,Captain,Members\n';
+    selectedConclave.schedule.rounds.forEach(r => {
+      const rNum = r.roundNumber || r.round || r.number;
+      (r.tables || []).forEach(t => {
+        const tNum = t.tableNumber || t.number;
+        const capt = t.captainName || t.captain?.name || (t.captainId !== undefined ? `Captain ${t.captainId}` : 'None');
+        const mems = (t.memberNames || t.members?.map(m => m.name) || t.memberIds || []).join('; ');
+        csv += `"${rNum}","${tNum}","${capt}","${mems}"\n`;
+      });
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `bni_schedule_${(selectedConclave?.name || 'conclave').replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setExportOpen(false);
+    showToast('Exported', 'Schedule CSV downloaded successfully.');
+  };
 
   // Attendee Seating Pool Scope: false = all registered members; true = only members active in the room today
   const [activeOnly, setActiveOnly] = useState(() => {
@@ -209,7 +311,7 @@ export default function ScheduleGen({
         const stored = sessionStorage.getItem(`bni_schedule_active_only_${selectedConclaveId}`);
         if (stored === 'true') return true;
         if (stored === 'false') return false;
-      } catch {}
+      } catch { }
     }
     return false;
   });
@@ -220,7 +322,7 @@ export default function ScheduleGen({
     if (selectedConclaveId) {
       try {
         sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, val ? 'true' : 'false');
-      } catch {}
+      } catch { }
     }
   };
 
@@ -233,25 +335,52 @@ export default function ScheduleGen({
       if (selectedConclave.id) {
         try {
           sessionStorage.setItem(`bni_schedule_active_only_${selectedConclave.id}`, isStored ? 'true' : 'false');
-        } catch {}
+        } catch { }
       }
     }
   }, [selectedConclave?.id, selectedConclave?.snapshot]);
 
   const registeredAttendees = useMemo(() => {
-    return Number(stats?.counts?.registered || selectedConclave?.registrationCount || selectedConclave?.participants?.length || 0);
-  }, [stats, selectedConclave]);
+    if (stats?.counts?.registered !== undefined && stats?.counts?.registered !== null) {
+      return Number(stats.counts.registered);
+    }
+    if (selectedConclave?.registrationCount !== undefined && selectedConclave?.registrationCount !== null) {
+      return Number(selectedConclave.registrationCount);
+    }
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      return membersList.length;
+    }
+    if (Array.isArray(selectedConclave?.participants) && selectedConclave.participants.length > 0) {
+      return selectedConclave.participants.length;
+    }
+    return 0;
+  }, [stats, selectedConclave, membersList]);
 
   const activeAttendees = useMemo(() => {
-    return Number(stats?.counts?.active || 0);
-  }, [stats]);
+    if (stats?.counts?.active !== undefined && stats?.counts?.active !== null) {
+      return Number(stats.counts.active);
+    }
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      return membersList.filter(m => Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || (m.status?.toLowerCase() === 'active'))).length;
+    }
+    return 0;
+  }, [stats, membersList]);
 
   const effectiveAttendees = activeOnly ? activeAttendees : registeredAttendees;
   const totalAttendees = effectiveAttendees;
 
   const captainsCount = useMemo(() => {
-    return Number(stats?.counts?.captains || selectedConclave?.captainCount || 0);
-  }, [stats, selectedConclave]);
+    if (stats?.counts?.captains !== undefined && stats?.counts?.captains !== null) {
+      return Number(stats.counts.captains);
+    }
+    if (selectedConclave?.captainCount !== undefined && selectedConclave?.captainCount !== null) {
+      return Number(selectedConclave.captainCount);
+    }
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      return membersList.filter(m => (m.role || '').toLowerCase() === 'captain' || m.isCaptain).length;
+    }
+    return 0;
+  }, [stats, selectedConclave, membersList]);
 
   const [targetTableCount, setTargetTableCount] = useState(null);
 
@@ -259,7 +388,7 @@ export default function ScheduleGen({
     if (targetTableCount !== null && targetTableCount > 0) {
       return targetTableCount;
     }
-    if (totalAttendees <= 0) return selectedConclave?.scheduleSummary?.tableCount || 5;
+    if (totalAttendees <= 0) return selectedConclave?.scheduleSummary?.tableCount || 0;
     return Math.max(1, Math.ceil(totalAttendees / Math.max(2, personsPerTable)));
   }, [targetTableCount, totalAttendees, personsPerTable, selectedConclave]);
 
@@ -267,7 +396,7 @@ export default function ScheduleGen({
     if (isConclaveRunningOrLocked) return;
     const targetTables = Math.max(1, Math.min(50, newCount));
     setTargetTableCount(targetTables);
-    const count = totalAttendees > 0 ? totalAttendees : 30;
+    const count = totalAttendees > 0 ? totalAttendees : 6;
     const newCapacity = Math.max(2, Math.min(12, Math.ceil(count / targetTables)));
     setPersonsPerTable(newCapacity);
   };
@@ -279,28 +408,29 @@ export default function ScheduleGen({
   useEffect(() => {
     if (!selectedConclave) return;
 
-    const isRunning = Boolean(
-      ['running', 'completed', 'locked'].includes((selectedConclave.status || '').toLowerCase()) ||
-      Boolean(selectedConclave.scheduleSummary) ||
-      Boolean(selectedConclave.schedule)
-    );
-    setProgress(isRunning ? 100 : 0);
-    setElapsed(isRunning ? 42 : 0);
-    setProcessed(isRunning ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
+    const hasSched = Boolean(selectedConclave.scheduleSummary || selectedConclave.schedule);
+    setProgress(hasSched ? 100 : 0);
+    setElapsed(0);
+    setProcessed(hasSched ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
 
     // Only populate input parameters when switching to a different conclave or on first load
     if (prevConclaveIdRef.current !== selectedConclave.id) {
       prevConclaveIdRef.current = selectedConclave.id;
       setTargetTableCount(null);
-      if (typeof selectedConclave.personsPerTable === 'number') {
+      const hasGeneratedSchedule = Boolean(selectedConclave.schedule || selectedConclave.scheduleSummary || isRunning);
+      if (hasGeneratedSchedule && typeof selectedConclave.personsPerTable === 'number') {
         setPersonsPerTable(selectedConclave.personsPerTable);
-      } else if (conclaveDefaults.personsPerTable) {
+      } else if (conclaveDefaults?.personsPerTable) {
         setPersonsPerTable(conclaveDefaults.personsPerTable);
+      } else if (typeof selectedConclave.personsPerTable === 'number') {
+        setPersonsPerTable(selectedConclave.personsPerTable);
       }
-      if (typeof selectedConclave.roundCount === 'number') {
+      if (hasGeneratedSchedule && typeof selectedConclave.roundCount === 'number') {
         setRoundCount(selectedConclave.roundCount);
-      } else if (conclaveDefaults.roundCount) {
+      } else if (conclaveDefaults?.roundCount) {
         setRoundCount(conclaveDefaults.roundCount);
+      } else if (typeof selectedConclave.roundCount === 'number') {
+        setRoundCount(selectedConclave.roundCount);
       }
       if (typeof selectedConclave.moveSeconds === 'number') {
         setMoveSecondsState(selectedConclave.moveSeconds);
@@ -319,11 +449,17 @@ export default function ScheduleGen({
         if (d && typeof d === 'object') {
           setConclaveDefaults(d);
           localStorage.setItem('bni_conclave_defaults', JSON.stringify(d));
-          if (!selectedConclave || typeof selectedConclave.personsPerTable !== 'number') {
-            setPersonsPerTable(d.personsPerTable || 7);
-          }
-          if (!selectedConclave || typeof selectedConclave.roundCount !== 'number') {
-            setRoundCount(d.roundCount || 6);
+          const hasGeneratedSchedule = Boolean(selectedConclave?.schedule || selectedConclave?.scheduleSummary || isConclaveRunningOrLocked);
+          if (!hasGeneratedSchedule) {
+            if (d.personsPerTable) setPersonsPerTable(d.personsPerTable);
+            if (d.roundCount) setRoundCount(d.roundCount);
+          } else {
+            if (!selectedConclave || typeof selectedConclave.personsPerTable !== 'number') {
+              setPersonsPerTable(d.personsPerTable || 5);
+            }
+            if (!selectedConclave || typeof selectedConclave.roundCount !== 'number') {
+              setRoundCount(d.roundCount || 2);
+            }
           }
         }
         const t = await api.get('/admin/settings/round-timing').catch(() => null)
@@ -352,13 +488,12 @@ export default function ScheduleGen({
     if (!selectedConclaveId) return;
     try {
       await api.patch(`/admin/conclaves/${selectedConclaveId}/move-time`, { moveSeconds: secs });
-      try {
-        const cached = JSON.parse(localStorage.getItem('bni_admin_conclaves_cache') || '[]');
-        if (Array.isArray(cached)) {
-          const updated = cached.map(c => c.id === selectedConclaveId ? { ...c, moveSeconds: secs } : c);
-          localStorage.setItem('bni_admin_conclaves_cache', JSON.stringify(updated));
-        }
-      } catch { }
+      queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
+      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
       showToast('Move time saved', `${secs / 60} min between rounds in automatic mode.`);
     } catch (err) {
       showToast('Could not save move time', err.message || 'Please try again.');
@@ -392,7 +527,7 @@ export default function ScheduleGen({
       simProgress = Math.min(simProgress + 10, 95);
       setProgress(simProgress);
       setElapsed(prev => prev + 1);
-      setProcessed(prev => Math.min(prev + 5, effectiveAttendees || 48));
+      setProcessed(prev => Math.min(prev + 5, effectiveAttendees || 0));
       if (simProgress === 30) setGenStep('Separating members from same chapter...');
       if (simProgress === 60) setGenStep('Balancing tables...');
       if (simProgress === 80) setGenStep('Checking for repeat meetings...');
@@ -414,7 +549,7 @@ export default function ScheduleGen({
       if (selectedConclaveId) {
         try {
           sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, activeOnly ? 'true' : 'false');
-        } catch {}
+        } catch { }
       }
 
       clearInterval(simInterval);
@@ -438,13 +573,13 @@ export default function ScheduleGen({
       setProgress(100);
       setIsGenerating(false);
       setGenStep('Schedule Ready');
-      setProcessed(effectiveAttendees || 48);
+      setProcessed(effectiveAttendees || 0);
+      setShowSuccessModal(true);
 
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
+      queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
+      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
 
       showToast('Schedule Created', 'All tables and members have been arranged.');
     } catch (err) {
@@ -496,19 +631,12 @@ export default function ScheduleGen({
           : c
       );
       setConclaves(updatedConclaves);
-      try {
-        localStorage.setItem('bni_schedule_gen_conclaves_cache', JSON.stringify(updatedConclaves));
-        localStorage.setItem('bni_conclaves_cache', JSON.stringify(updatedConclaves));
-        localStorage.setItem('bni_superadmin_conclaves_cache', JSON.stringify(updatedConclaves));
-      } catch { }
+      queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
+      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
       setIsModalOpen(false);
       showToast('Seating Finalized & Locked', 'Table assignments are now locked and visible in the mobile app.');
-
-      confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
     } catch (err) {
       console.error('Backend conclave lock failed:', err.message);
       showToast('Error', err.message || 'Failed to lock seating. Please try again.');
@@ -528,6 +656,143 @@ export default function ScheduleGen({
     } catch (err) {
       console.error('Failed to start round:', err.message || err);
       showToast('Start Round Failed', err.message || 'Could not start round.');
+    }
+  };
+
+  const [isAddingDemo, setIsAddingDemo] = useState(false);
+
+  const handleAdd6DemoMembers = async () => {
+    if (!selectedConclaveId || isAddingDemo) return;
+    setIsAddingDemo(true);
+    try {
+      const timestamp = Date.now().toString().slice(-4);
+      const demoMembers = [
+        {
+          name: "Aarav Sharma",
+          category: "Information Technology",
+          email: `aarav.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "Apex Cloud Solutions",
+          chapter: "Alpha Titans",
+          role: "captain",
+          isCaptain: true,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        },
+        {
+          name: "Bhavna Patel",
+          category: "Chartered Accountant",
+          email: `bhavna.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "Patel & Associates Tax",
+          chapter: "Alpha Titans",
+          role: "captain",
+          isCaptain: true,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        },
+        {
+          name: "Chirag Reddy",
+          category: "Real Estate",
+          email: `chirag.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "Prime Skyline Realty",
+          chapter: "Bravo Champions",
+          role: "member",
+          isCaptain: false,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        },
+        {
+          name: "Deepika Verma",
+          category: "Digital Marketing",
+          email: `deepika.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "Nexus Growth Agency",
+          chapter: "Bravo Champions",
+          role: "member",
+          isCaptain: false,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        },
+        {
+          name: "Eshwar Rao",
+          category: "Corporate Law",
+          email: `eshwar.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "Rao & Co Legal",
+          chapter: "Charlie Pioneers",
+          role: "member",
+          isCaptain: false,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        },
+        {
+          name: "Farhan Khan",
+          category: "Healthcare",
+          email: `farhan.${timestamp}@demo-conclave.com`,
+          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
+          company: "CareWell Diagnostics",
+          chapter: "Charlie Pioneers",
+          role: "member",
+          isCaptain: false,
+          paymentStatus: "paid",
+          paymentMethod: "Online",
+          status: "confirmed"
+        }
+      ];
+
+      for (const m of demoMembers) {
+        await api.post(`/admin/conclaves/${selectedConclaveId}/members`, m);
+      }
+
+      // Automatically configure recommended settings for 6 members:
+      // 3 seats per table (gives 2 tables of 3, each with 1 captain)
+      // 4 rounds (engine requires between 4 and 8 rounds)
+      setPersonsPerTable(3);
+      setRoundCount(4);
+
+      // Refresh registrations, stats, and conclaves from backend
+      const [regsRes, statsRes, conclavesRes] = await Promise.all([
+        api.get(`/admin/conclaves/${selectedConclaveId}/registrations`).catch(() => null),
+        api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
+        api.get('/admin/conclaves').catch(() => null)
+      ]);
+
+      if (regsRes) {
+        const list = regsRes.registrations || (Array.isArray(regsRes) ? regsRes : []);
+        setMembersList(list);
+      }
+      if (statsRes) {
+        setStats(statsRes);
+        try {
+          localStorage.setItem(`bni_admin_stats_cache_${selectedConclaveId}`, JSON.stringify(statsRes));
+        } catch { }
+      }
+      if (conclavesRes && conclavesRes.length > 0) {
+        setConclaves(conclavesRes.map(c => {
+          const s = (c.status || '').toLowerCase();
+          const hasSched = Boolean(c.scheduleSummary || c.schedule || ['running', 'completed', 'locked'].includes(s));
+          return {
+            ...c,
+            venueShort: (c.venueLocation || c.venue || 'N/A').split(',')[0] || 'N/A',
+            dateRange: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : (c.dateRange || 'N/A'),
+            progress: hasSched ? 100 : s === 'running' ? 60 : 0
+          };
+        }));
+      }
+
+      showToast('6 Demo Members Added', 'Added 6 members with 6 distinct categories and 2 captains. Seats per table set to 3.');
+    } catch (err) {
+      console.error('Failed to add demo members:', err);
+      showToast('Add Members Failed', err.message || 'Could not add demo members.');
+    } finally {
+      setIsAddingDemo(false);
     }
   };
 
@@ -626,25 +891,25 @@ export default function ScheduleGen({
 
   const uniqueMeetingsVal = selectedConclave?.scheduleSummary?.coverage !== undefined
     ? Math.round(selectedConclave.scheduleSummary.coverage * 100)
-    : Math.min(100, Math.round(98 - (progress === 100 ? 0 : 2.5)));
+    : (selectedConclave?.schedule?.stats?.coverage !== undefined
+      ? Math.round(selectedConclave.schedule.stats.coverage * 100)
+      : 0);
 
   const hasSchedule = Boolean(selectedConclave?.schedule?.rounds?.length);
   const repeatedPairingsVal = hasSchedule
     ? repeatPairingDetails.length
     : (selectedConclave?.scheduleSummary?.repeatPairings !== undefined
       ? selectedConclave.scheduleSummary.repeatPairings
-      : 0);
+      : (selectedConclave?.schedule?.stats?.repeatPairings !== undefined
+        ? selectedConclave.schedule.stats.repeatPairings
+        : 0));
 
   const diversityVal = selectedConclave?.scheduleSummary?.coverage !== undefined
-    ? Math.min(100, Math.round((selectedConclave.scheduleSummary.coverage * 100) - (selectedConclave.scheduleSummary.repeatPairings || 0)))
-    : Math.min(100, Math.round(92 - (progress === 100 ? 0 : 3.5)));
+    ? Math.max(0, Math.min(100, Math.round((selectedConclave.scheduleSummary.coverage * 100) - (selectedConclave.scheduleSummary.repeatPairings || 0))))
+    : (selectedConclave?.schedule?.stats?.coverage !== undefined
+      ? Math.max(0, Math.min(100, Math.round((selectedConclave.schedule.stats.coverage * 100) - (selectedConclave.schedule.stats.repeatPairings || 0))))
+      : 0);
 
-  const isConclaveCompleted = Boolean(
-    selectedConclave && (
-      (selectedConclave.status || '').toLowerCase() === 'completed' ||
-      (selectedConclave.status || '').toLowerCase() === 'cancelled'
-    )
-  );
 
   // Visual layout round data
   const currentVisualRoundData = useMemo(() => {
@@ -652,1004 +917,991 @@ export default function ScheduleGen({
     return selectedConclave.schedule.rounds.find(r => (r.roundNumber || r.round || r.number) === visualRound) || selectedConclave.schedule.rounds[0];
   }, [selectedConclave, visualRound]);
 
+  const displayedMembers = useMemo(() => {
+    let list = [];
+    if (membersList && membersList.length > 0) {
+      list = membersList.map(m => {
+        const name = m.name || m.userName || m.fullName || 'Member';
+        const role = (m.role || '').toLowerCase() === 'captain' || m.isCaptain ? 'Table Captain' : 'Member';
+        const isAct = Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || (m.status?.toLowerCase() === 'active'));
+        const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'M';
+        return { id: m.id || m.uid || name, name, role, active: isAct, initials };
+      });
+    } else if (selectedConclave?.participants && selectedConclave.participants.length > 0) {
+      list = selectedConclave.participants.map(m => {
+        const name = m.name || 'Member';
+        const role = (m.role || '').toLowerCase() === 'captain' || m.isCaptain ? 'Table Captain' : 'Member';
+        const isAct = Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || (m.status?.toLowerCase() === 'active'));
+        const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'M';
+        return { id: m.id || name, name, role, active: isAct, initials };
+      });
+    } else {
+      list = [];
+    }
+
+    if (activeOnly) {
+      return list.filter(m => m.active);
+    }
+    return list;
+  }, [membersList, selectedConclave, activeOnly]);
+
+  const tablesData = useMemo(() => {
+    const count = calculatedTableCount;
+    if (count <= 0) return [];
+    const list = [];
+    const r1 = selectedConclave?.schedule?.rounds?.[0];
+
+    for (let i = 1; i <= count; i++) {
+      const tbl = r1?.tables?.find(t => (t.tableNumber || t.number) === i);
+      const hasCaptain = tbl
+        ? (tbl.captainId !== undefined || Boolean(tbl.captainName))
+        : (i <= captainsCount);
+
+      let assignedText = '';
+      if (tbl) {
+        const memberCount = tbl.memberIds?.length || (tbl.participants?.length ? (hasCaptain ? tbl.participants.length - 1 : tbl.participants.length) : (personsPerTable - (hasCaptain ? 1 : 0)));
+        assignedText = hasCaptain ? `${memberCount} Members + 1 Captain` : `${memberCount} Members`;
+      } else {
+        assignedText = hasCaptain ? `${personsPerTable - 1} Members + 1 Captain` : `${personsPerTable} Members`;
+      }
+
+      list.push({
+        tableNum: i,
+        seats: personsPerTable,
+        assigned: assignedText
+      });
+    }
+    return list;
+  }, [calculatedTableCount, selectedConclave, captainsCount, personsPerTable]);
+
   return (
-    <div className={`w-full flex flex-col gap-3.5 animate-fade-in pb-8 sm:pb-10 ${isHubMode ? '' : 'max-w-[1600px] mx-auto'}`}>
+    <div className={`w-full flex flex-col gap-3 sm:gap-3.5 animate-fade-in pb-8 sm:pb-10 ${isHubMode ? '' : 'max-w-[1600px] mx-auto'}`}>
 
-      {/* Standalone Header (Rendered only when not embedded in ScheduleHub) */}
-      {!isHubMode && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-0.5">
+      {/* Top Header Row with Divider (Clean Header, No Big Background Card) */}
+      <div className="flex items-center justify-between pb-1">
+        <div className="flex items-center gap-3 sm:gap-3.5">
+          {/* Calendar Icon Box */}
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#FFF0F2] border border-rose-100/90 text-brand-red flex items-center justify-center shrink-0 shadow-3xs">
+            <CalendarDays className="w-5 h-5 text-brand-red" />
+          </div>
+
+          {/* Vertical Divider */}
+          <div className="h-7 sm:h-8 w-px bg-zinc-200/90 shrink-0" />
+
+          {/* Title & Subtitle */}
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-zinc-950 tracking-tight leading-tight">
-              Schedule Generation
-            </h1>
-            <p className="text-xs text-zinc-500 font-semibold mt-0.5">
-              {conclaveName} · Create tables and assign members for every round
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Executive 4-Metric KPI Strip (Feedback UI & Typography) */}
-      <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 sm:grid-cols-4">
-        {/* Metric 1: Total Members */}
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Total Members</span>
-            <div className="my-1.5 flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-zinc-950 tabular-nums">
-                {totalAttendees.toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Metric 2: Table Captains */}
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Table Captains</span>
-            <div className="my-1.5 flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-zinc-950 tabular-nums">{captainsCount}</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-            <Award className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Metric 3: Total Seats */}
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">Total Seats</span>
-            <div className="my-1.5 flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-zinc-950 tabular-nums">{calculatedTableCount * personsPerTable}</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <LayoutGrid className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Metric 4: People You Meet */}
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider block">People You Meet</span>
-            <div className="my-1.5 flex items-baseline gap-1.5">
-              <span className="text-3xl font-black text-zinc-950 tabular-nums">{Math.max(1, personsPerTable - 1) * roundCount}</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00875A] flex items-center justify-center shrink-0">
-            <UserCheck className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Completed Notice */}
-      {isConclaveCompleted && (
-        <div className="p-3.5 sm:p-4 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>This conclave is <strong>{formatStatus(selectedConclave?.status)}</strong>. Seating is finalized and locked.</span>
-          </div>
-          <span className="px-2.5 py-0.5 bg-amber-200/70 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-            Locked
-          </span>
-        </div>
-      )}
-
-      {/* Central Optimization Command Center */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-4 sm:p-5 shadow-2xs space-y-4">
-        {/* Header Row: Title, Status Pill, Action Buttons */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-zinc-950 tracking-tight">
+            <h2 className="text-base sm:text-lg font-black text-zinc-950 tracking-tight leading-tight">
               Schedule Generation
             </h2>
-            <p className="text-xs text-zinc-400 font-semibold mt-1">
-              Automatically arranges members at different tables each round so people meet new business partners without repeats.
+            <p className="text-[11px] sm:text-xs font-medium text-zinc-600 mt-0.5">
+              Configure tables, rounds and timing, then generate the conclave schedule.
             </p>
           </div>
-
-          {/* Action Button Group */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {isGenerating ? (
-              <button
-                type="button"
-                onClick={handleAbort}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-brand-red text-brand-red hover:bg-red-50/50 text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer"
-              >
-                <StopCircle className="w-4 h-4" />
-                <span>Stop</span>
-              </button>
-            ) : progress === 100 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handleStartGeneration}
-                  disabled={isLocked || isConclaveCompleted}
-                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-700 text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={
-                    isConclaveCompleted
-                      ? 'Conclave is completed. Seating is archived and cannot be regenerated.'
-                      : isLocked
-                        ? 'Schedule is locked. Cannot recreate schedule.'
-                        : 'Re-run the seating algorithm to create a new schedule'
-                  }
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>Create Again</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('visual')}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-zinc-250 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-extrabold transition-smooth cursor-pointer shadow-2xs"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>View Tables</span>
-                </button>
-
-                {selectedConclave?.status?.toLowerCase() === 'running' ? (
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToRunner && onNavigateToRunner()}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer shadow-sm animate-pulse"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Round in Progress →</span>
-                  </button>
-                ) : !isConclaveCompleted && (
-                  <button
-                    type="button"
-                    onClick={() => handleStartRound(1)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer shadow-sm"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Start Round 1 →</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isLocked) {
-                      showToast('Already Locked', 'This conclave is already locked.');
-                      return;
-                    }
-                    setIsModalOpen(true);
-                  }}
-                  disabled={isLocked || isConclaveCompleted}
-                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-smooth cursor-pointer ${isLocked || isConclaveCompleted
-                    ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                    }`}
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>{isLocked ? 'Schedule Locked' : 'Lock & Finalize'}</span>
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStartGeneration}
-                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-brand-red hover:bg-red-750 text-white text-xs font-black uppercase tracking-wider transition-smooth shadow-sm cursor-pointer"
-              >
-                <PlayCircle className="w-4.5 h-4.5" />
-                <span>Create Schedule</span>
-              </button>
-            )}
-          </div>
         </div>
-
-        {/* Dynamic Center State Body */}
-        {isGenerating ? (
-          /* State 1: Active Progress */
-          <div className="bg-zinc-50/80 border border-zinc-200 rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-extrabold text-zinc-900 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-brand-red animate-pulse" />
-                <span>{genStep}</span>
-              </span>
-              <span className="font-black text-brand-red">{progress}% complete</span>
-            </div>
-            <div className="w-full h-3 bg-zinc-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand-red rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3 pt-1 text-center">
-              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Time Elapsed</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">00:{elapsed < 10 ? `0${elapsed}` : elapsed}s</strong>
-              </div>
-              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Members Placed</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">{processed} / {totalAttendees}</strong>
-              </div>
-              <div className="bg-white p-2.5 rounded-lg border border-zinc-200">
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Time Remaining</span>
-                <strong className="text-xs font-black text-brand-red mt-0.5 block">{Math.ceil((100 - progress) * 0.8)}s</strong>
-              </div>
-            </div>
-          </div>
-        ) : progress === 100 ? (
-          /* State 2: Generated & Verification Matrix */
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Health 1: New Connections */}
-              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-zinc-700">New Connections</span>
-                  <span className="font-black text-emerald-700">{uniqueMeetingsVal}%</span>
-                </div>
-                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${uniqueMeetingsVal}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-zinc-400 font-semibold">Goal: Meet different people each round</p>
-              </div>
-
-              {/* Health 2: Repeat Meetings */}
-              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-zinc-700">Repeat Pairings</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-black text-zinc-950">{repeatedPairingsVal} repeats</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowRepeatModal(true)}
-                      className="text-[10.5px] font-black text-brand-red hover:underline cursor-pointer ml-1"
-                    >
-                      (See Names →)
-                    </button>
-                  </div>
-                </div>
-                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-500 rounded-full"
-                    style={{ width: `${Math.min(100, (repeatedPairingsVal || 0) * 8)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-zinc-400 font-semibold">Members sitting together more than once</p>
-              </div>
-
-              {/* Health 3: Chapter Mixing */}
-              <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-zinc-700">Chapter Mixing</span>
-                  <span className="font-black text-blue-700">{diversityVal}%</span>
-                </div>
-                <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full"
-                    style={{ width: `${diversityVal}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-zinc-400 font-semibold">Keeps same-chapter members at different tables</p>
-              </div>
-            </div>
-
-            {/* Quick summary strip */}
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold text-zinc-600 bg-zinc-50/50 px-4 py-2.5 rounded-lg border border-zinc-200/60">
-              <span className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" />
-                <span>{roundCount} Rounds Created</span>
-              </span>
-              <span>·</span>
-              <span>{calculatedTableCount} Tables Each Round</span>
-              <span>·</span>
-              <span>{totalAttendees} Members Seated</span>
-              <span>·</span>
-              <span>{captainsCount} Captains Assigned</span>
-            </div>
-          </div>
-        ) : (
-          /* State 3: Ready for Generation (Readiness Checklist) */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Seating Pool</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
-                  {activeOnly ? 'Active in Room' : 'All Registered'}
-                </strong>
-                <span className="text-[10px] font-semibold text-zinc-500">
-                  {totalAttendees} {activeOnly ? 'active members' : 'members'}
-                </span>
-              </div>
-              <span className={`p-1 rounded-full ${activeOnly && activeAttendees === 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                {activeOnly && activeAttendees === 0 ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-              </span>
-            </div>
-
-            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Table Captains</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
-                  {captainsCount} / {calculatedTableCount} Tables
-                </strong>
-                <span className="text-[10px] font-semibold text-zinc-500">
-                  {captainsCount >= calculatedTableCount ? 'Captains ready' : 'Need more captains'}
-                </span>
-              </div>
-              {captainsCount >= calculatedTableCount ? (
-                <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
-                  <Check className="w-4 h-4" />
-                </span>
-              ) : (
-                <span className="p-1 rounded-full bg-amber-100 text-amber-700">
-                  <AlertTriangle className="w-4 h-4" />
-                </span>
-              )}
-            </div>
-
-            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Extra Seats Available</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
-                  {Math.max(0, (calculatedTableCount * personsPerTable) - totalAttendees)} Extra Seats
-                </strong>
-                <span className="text-[10px] font-semibold text-zinc-500">
-                  {calculatedTableCount * personsPerTable} total capacity
-                </span>
-              </div>
-              <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
-                <Check className="w-4 h-4" />
-              </span>
-            </div>
-
-            <div className="bg-zinc-50/70 border border-zinc-200 rounded-xl p-3.5 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-zinc-700 font-bold uppercase block">Arrangement Rules</span>
-                <strong className="text-xs font-black text-zinc-900 mt-0.5 block">
-                  No repeat meetings
-                </strong>
-                <span className="text-[10px] font-semibold text-zinc-500">
-                  Balanced seating
-                </span>
-              </div>
-              <span className="p-1 rounded-full bg-emerald-100 text-emerald-700">
-                <Check className="w-4 h-4" />
-              </span>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Segmented Workspace Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-200 pb-2 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('planner')}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'planner'
-            ? 'bg-zinc-900 text-white shadow-xs'
-            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
-            }`}
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>Table Setup</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('visual')}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'visual'
-            ? 'bg-zinc-900 text-white shadow-xs'
-            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
-            }`}
-        >
-          <LayoutGrid className="w-3.5 h-3.5" />
-          <span>Room View</span>
-          {hasSchedule && (
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('blueprint')}
-          className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer ${activeTab === 'blueprint'
-            ? 'bg-zinc-900 text-white shadow-xs'
-            : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
-            }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Rounds List</span>
-          <span className="px-1.5 py-0.2 bg-zinc-200 text-zinc-700 rounded-full text-[9.5px]">
-            {roundCount}
-          </span>
-        </button>
-      </div>
-
-      {/* TAB CONTENT 1: Table Setup */}
-      {activeTab === 'planner' && (
-        <div className="space-y-4">
-          {/* Seating Cohort Banner */}
-          <div className="bg-white border border-zinc-200/90 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-brand-red shrink-0">
+      {/* Central Configurations & Rounds Summary Grid (50% / 50%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+        {/* Left Column (50%): Seating Pool & Configurations */}
+        <div className="bg-white border border-rose-100/80 rounded-2xl p-4 sm:p-5 shadow-3xs flex flex-col justify-between h-full space-y-4">
+          {/* Top: Seating Pool Header */}
+          <div className="space-y-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
                 <Users className="w-4 h-4" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-black text-xs uppercase tracking-wider text-zinc-950">Seating Pool</span>
-                  {activeOnly && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Active Only Mode
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                  {activeOnly
-                    ? 'Only seating attendees present in the room who checked in / opened their mobile app today.'
-                    : 'Seating all registered attendees enrolled in this conclave.'}
-                </p>
+                <h3 className="text-sm font-black text-zinc-950">Seating Pool</h3>
+                <p className="text-[11px] text-zinc-500 font-medium">Configure who will be included for table arrangement.</p>
               </div>
             </div>
 
-            <div className="flex items-center bg-zinc-100 p-1 rounded-xl gap-1 shrink-0">
+            {/* Radio Selector: All Eligible Members vs Custom Selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
               <button
                 type="button"
                 disabled={isConclaveRunningOrLocked}
                 onClick={() => handleActiveOnlyToggle(false)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${!activeOnly
-                  ? 'bg-white text-zinc-950 shadow-2xs'
-                  : 'text-zinc-600 hover:text-zinc-950'
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-smooth cursor-pointer ${!activeOnly
+                  ? 'bg-rose-50/70 border border-brand-red text-brand-red shadow-3xs'
+                  : 'bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50'
                   }`}
               >
-                All Registered ({registeredAttendees})
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${!activeOnly ? 'border-brand-red' : 'border-zinc-300'}`}>
+                    {!activeOnly && <span className="w-2 h-2 rounded-full bg-brand-red" />}
+                  </span>
+                  <span className="truncate">Registered members</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-black tabular-nums shrink-0 ${!activeOnly
+                  ? 'bg-brand-red text-white'
+                  : 'bg-zinc-150 text-zinc-700'
+                  }`}>
+                  {registeredAttendees}
+                </span>
               </button>
+
               <button
                 type="button"
                 disabled={isConclaveRunningOrLocked}
                 onClick={() => handleActiveOnlyToggle(true)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-smooth cursor-pointer disabled:opacity-50 ${activeOnly
-                  ? 'bg-brand-red text-white shadow-2xs'
-                  : 'text-zinc-600 hover:text-zinc-950'
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-smooth cursor-pointer ${activeOnly
+                  ? 'bg-rose-50/70 border border-brand-red text-brand-red shadow-3xs'
+                  : 'bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50'
                   }`}
               >
-                <span className={`w-2 h-2 rounded-full ${activeAttendees > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-300'}`} />
-                <span>Active in Room ({activeAttendees})</span>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${activeOnly ? 'border-brand-red' : 'border-zinc-300'}`}>
+                    {activeOnly && <span className="w-2 h-2 rounded-full bg-brand-red" />}
+                  </span>
+                  <span className="truncate">Active Members</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-black tabular-nums shrink-0 ${activeOnly
+                  ? 'bg-brand-red text-white'
+                  : 'bg-zinc-150 text-zinc-700'
+                  }`}>
+                  {activeAttendees}
+                </span>
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Card 1: Tables & Seats */}
-            <div className={`border rounded-xl p-5 space-y-4 shadow-2xs transition-all ${
-              isConclaveRunningOrLocked ? 'bg-zinc-50/70 border-zinc-250' : 'bg-white border-zinc-200'
-            }`}>
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <Building2 className={`w-4 h-4 ${isConclaveRunningOrLocked ? 'text-zinc-400' : 'text-brand-red'}`} />
-                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Tables & Seats</h3>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {isConclaveRunningOrLocked && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                      <Lock className="w-2.5 h-2.5 text-amber-600" /> Locked
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                    Room Size
-                  </span>
-                </div>
-              </div>
+          {/* Middle: Seating Configuration */}
+          <div className="space-y-2.5 pt-1 border-t border-zinc-100">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-brand-red" />
+              <h4 className="text-xs sm:text-sm font-black text-zinc-950 tracking-tight">Seating Configuration</h4>
+            </div>
 
-              {/* Stepper: Number of Tables */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Number of Tables</label>
-                  <span className="text-[10px] font-bold text-brand-red">
-                    {totalAttendees} {activeOnly ? 'active members to seat' : 'members registered'}
-                  </span>
-                </div>
-                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+            {/* 3 Columns: Tables, Seats per Table, Total Rounds */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100">
+              {/* Tables */}
+              <div className="flex flex-col gap-1.5 sm:pr-4">
+                <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5 leading-none">
+                  <TableIcon className="w-3.5 h-3.5 text-brand-red" />
+                  <span>Tables</span>
+                </span>
+                <div className="flex items-center justify-between h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-2 shadow-3xs transition-smooth">
                   <button
                     type="button"
                     disabled={isConclaveRunningOrLocked || calculatedTableCount <= 1}
                     onClick={() => handleTableCountChange(calculatedTableCount - 1)}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <div className="flex-1 text-center font-black text-base text-zinc-950">
-                    {calculatedTableCount} <span className="text-xs font-semibold text-zinc-400">Tables</span>
-                  </div>
+                  <span className="text-sm font-black text-zinc-950 tabular-nums">
+                    {calculatedTableCount}
+                  </span>
                   <button
                     type="button"
                     disabled={isConclaveRunningOrLocked || calculatedTableCount >= 50}
                     onClick={() => handleTableCountChange(calculatedTableCount + 1)}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                {/* Quick Table Presets */}
-                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 pt-1">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(cnt => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      disabled={isConclaveRunningOrLocked}
-                      onClick={() => handleTableCountChange(cnt)}
-                      className={`py-1 rounded-md text-[10.5px] font-bold border transition-smooth text-center ${
-                        isConclaveRunningOrLocked
-                          ? calculatedTableCount === cnt
-                            ? 'bg-zinc-200 text-zinc-700 border-zinc-300 cursor-not-allowed'
-                            : 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-60'
-                          : calculatedTableCount === cnt
-                            ? 'bg-brand-red text-white border-brand-red shadow-2xs cursor-pointer'
-                            : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900 cursor-pointer'
-                        }`}
-                    >
-                      {cnt}T
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* Stepper: Seats Per Table */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Seats at Each Table</label>
-                  <span className="text-[10px] font-bold text-emerald-700">{Math.max(1, personsPerTable - 1)} Members + 1 Captain</span>
-                </div>
-                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+              {/* Seats per Table */}
+              <div className="flex flex-col gap-1.5 sm:px-4 pt-2 sm:pt-0">
+                <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5 leading-none">
+                  <Armchair className="w-3.5 h-3.5 text-brand-red" />
+                  <span>Seats per Table</span>
+                </span>
+                <div className="flex items-center justify-between h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-2 shadow-3xs transition-smooth">
                   <button
                     type="button"
                     disabled={isConclaveRunningOrLocked || personsPerTable <= 2}
-                    onClick={() => {
-                      if (isConclaveRunningOrLocked) return;
-                      setTargetTableCount(null);
-                      setPersonsPerTable(prev => Math.max(2, prev - 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    onClick={() => setPersonsPerTable(p => Math.max(2, p - 1))}
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <div className="flex-1 text-center font-black text-base text-zinc-950">
-                    {personsPerTable} <span className="text-xs font-semibold text-zinc-400">Seats</span>
-                  </div>
+                  <span className="text-sm font-black text-zinc-950 tabular-nums">
+                    {personsPerTable}
+                  </span>
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || personsPerTable >= 12}
-                    onClick={() => {
-                      if (isConclaveRunningOrLocked) return;
-                      setTargetTableCount(null);
-                      setPersonsPerTable(prev => Math.min(12, prev + 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    disabled={isConclaveRunningOrLocked || personsPerTable >= 16}
+                    onClick={() => setPersonsPerTable(p => Math.min(16, p + 1))}
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
-                {/* Visual Seat Dots */}
-                <div className="flex items-center justify-center gap-1.5 pt-1.5">
-                  {Array.from({ length: Math.min(12, personsPerTable) }).map((_, sIdx) => (
-                    <span
-                      key={sIdx}
-                      className={`w-2 h-2 rounded-full ${sIdx === 0 ? 'bg-brand-red ring-2 ring-red-200' : 'bg-zinc-300'}`}
-                      title={sIdx === 0 ? 'Table Captain' : `Member ${sIdx}`}
-                    />
-                  ))}
-                </div>
               </div>
 
-              {/* Capacity Reach Summary */}
-              <div className="bg-zinc-50 p-3 rounded-lg border border-zinc-200/80 text-[11px] text-zinc-600 space-y-1">
-                <p className="font-bold text-zinc-900">
-                  Total Seats: {calculatedTableCount * personsPerTable}
-                </p>
-                <p>
-                  You have {totalAttendees} {activeOnly ? 'active members' : 'registered members'}, leaving{' '}
-                  <strong className="text-emerald-700 font-bold">
-                    {Math.max(0, (calculatedTableCount * personsPerTable) - totalAttendees)} extra seats
-                  </strong>{' '}
-                  for guests or walk-ins.
-                </p>
-              </div>
-            </div>
-
-            {/* Card 2: Rounds & Timing */}
-            <div className={`border rounded-xl p-5 space-y-4 shadow-2xs transition-all ${
-              isConclaveRunningOrLocked ? 'bg-zinc-50/70 border-zinc-250' : 'bg-white border-zinc-200'
-            }`}>
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <Clock className={`w-4 h-4 ${isConclaveRunningOrLocked ? 'text-zinc-400' : 'text-brand-red'}`} />
-                  <h3 className="font-black text-xs uppercase tracking-wider text-zinc-900">Rounds & Timing</h3>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {isConclaveRunningOrLocked && (
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
-                      <Lock className="w-2.5 h-2.5 text-amber-600" /> Locked
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold text-zinc-500 bg-zinc-50 px-2 py-0.5 rounded border border-zinc-200">
-                    Schedule
-                  </span>
-                </div>
-              </div>
-
-              {/* Total Rounds Stepper */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-baseline">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Total Rounds</label>
-                  <span className="text-[10px] font-bold text-zinc-400">Number of rounds</span>
-                </div>
-                <div className="flex items-center bg-zinc-50 border border-zinc-250 rounded-xl p-1">
+              {/* Total Rounds */}
+              <div className="flex flex-col gap-1.5 sm:pl-4 pt-2 sm:pt-0">
+                <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5 leading-none">
+                  <RotateCw className="w-3.5 h-3.5 text-brand-red" />
+                  <span>Total Rounds</span>
+                </span>
+                <div className="flex items-center justify-between h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-2 shadow-3xs transition-smooth">
                   <button
                     type="button"
                     disabled={isConclaveRunningOrLocked || roundCount <= 1}
-                    onClick={() => {
-                      if (isConclaveRunningOrLocked) return;
-                      setRoundCount(prev => Math.max(1, prev - 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    onClick={() => setRoundCount(r => Math.max(1, r - 1))}
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <div className="flex-1 text-center font-black text-base text-zinc-950">
-                    {roundCount} <span className="text-xs font-semibold text-zinc-400">Rounds</span>
-                  </div>
+                  <span className="text-sm font-black text-zinc-950 tabular-nums">
+                    {roundCount}
+                  </span>
                   <button
                     type="button"
                     disabled={isConclaveRunningOrLocked || roundCount >= 20}
-                    onClick={() => {
-                      if (isConclaveRunningOrLocked) return;
-                      setRoundCount(prev => Math.min(20, prev + 1));
-                    }}
-                    className="w-8 h-8 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none cursor-pointer shadow-2xs"
+                    onClick={() => setRoundCount(r => Math.min(20, r + 1))}
+                    className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Round Length (Fixed Formula) */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Round Time</label>
-                <div className="bg-zinc-50 border border-zinc-250 rounded-xl px-3.5 py-2.5">
-                  <p className="font-black text-base text-zinc-950">{Math.round(roundLengthSecs / 60 * 10) / 10} min per round</p>
-                  <p className="text-[10px] font-semibold text-zinc-500 mt-0.5">
-                    1 min introduction + 30s referral ask per member at the table.
+          {/* Bottom: Round Timing */}
+          <div className="space-y-2.5 pt-1 border-t border-zinc-100">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-brand-red" />
+              <h4 className="text-xs sm:text-sm font-black text-zinc-950 tracking-tight">Round Timing</h4>
+            </div>
+
+            {/* 2 Columns: Break Between Rounds (Move Time) on left, Round Duration (Calculated) on right */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100">
+              {/* Break Between Rounds (Move Time - Shifted to Left) */}
+              <div className="flex flex-col gap-1.5 sm:pr-4">
+                <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5 leading-none">
+                  <Coffee className="w-3.5 h-3.5 text-brand-red" />
+                  <span>Break Between Rounds</span>
+                </span>
+                <div className="relative w-full">
+                  <select
+                    value={moveSeconds}
+                    disabled={isConclaveRunningOrLocked}
+                    onChange={(e) => saveMoveSeconds(Number(e.target.value))}
+                    className="w-full appearance-none h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl pl-3 pr-8 py-1 text-xs font-bold text-zinc-900 shadow-3xs outline-none focus:border-brand-red focus:ring-1 focus:ring-brand-red/30 cursor-pointer disabled:opacity-50 transition-smooth"
+                  >
+                    <option value={60}>1 minute</option>
+                    <option value={120}>2 minutes</option>
+                    <option value={300}>5 minutes</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Round Duration (Shifted to Right - Calculated dynamically from backend) */}
+              <div className="flex flex-col gap-1.5 sm:pl-4 pt-2 sm:pt-0">
+                <div className="flex items-center justify-between leading-none">
+                  <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+                    <Armchair className="w-3.5 h-3.5 text-brand-red" />
+                    <span>Round Duration</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                    Calculated
+                  </span>
+                </div>
+                <div className="h-9 bg-zinc-50/80 border border-zinc-200 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-zinc-900 shadow-3xs">
+                  <span>
+                    {(roundLengthSecs / 60) % 1 === 0
+                      ? `${roundLengthSecs / 60} minutes`
+                      : `${(roundLengthSecs / 60).toFixed(1)} minutes`}
+                  </span>
+                  <span className="text-[10.5px] font-semibold text-zinc-400">
+                    ({personsPerTable} seats × 90s)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (50%): Rounds Summary */}
+        <div className="bg-white border border-rose-100/80 rounded-2xl p-4 sm:p-5 shadow-3xs flex flex-col justify-between h-full space-y-4">
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+                <BarChart3 className="w-4 h-4 text-brand-red" />
+              </div>
+              <h3 className="text-xs sm:text-sm font-black text-zinc-950">Rounds Summary</h3>
+            </div>
+
+            {/* 4 Metric Row (Moved to top) */}
+            <div className="grid grid-cols-4 divide-x divide-zinc-150 text-center pb-3 border-b border-zinc-150">
+              <div className="flex flex-col items-center justify-center px-1">
+                <Users className="w-3.5 h-3.5 text-brand-red mb-1" />
+                <span className="text-base font-black text-zinc-950 leading-none">{roundCount}</span>
+                <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Rounds</span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center px-1">
+                <TableIcon className="w-3.5 h-3.5 text-brand-red mb-1" />
+                <span className="text-base font-black text-zinc-950 leading-none">{calculatedTableCount}</span>
+                <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Tables / Round</span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center px-1">
+                <Users className="w-3.5 h-3.5 text-brand-red mb-1" />
+                <span className="text-base font-black text-zinc-950 leading-none">{totalAttendees}</span>
+                <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Members Seated</span>
+              </div>
+
+              <div className="flex flex-col items-center justify-center px-1">
+                <Crown className="w-3.5 h-3.5 text-brand-red mb-1" />
+                <span className="text-base font-black text-zinc-950 leading-none">{captainsCount}</span>
+                <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Captains Assigned</span>
+              </div>
+            </div>
+
+            {/* 3 Prominent Stat Lines (Moved to bottom) */}
+            <div className="space-y-3.5 pt-0.5">
+              {/* Line 1: New Connections */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="font-extrabold text-zinc-800">New Connections</span>
+                  <span className="font-black text-emerald-600 tabular-nums">{uniqueMeetingsVal}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-zinc-150 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${uniqueMeetingsVal}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Line 2: Chapter Mixing */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="font-extrabold text-zinc-800">Chapter Mixing</span>
+                  <span className="font-black text-blue-600 tabular-nums">{diversityVal}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-zinc-150 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                    style={{ width: `${diversityVal}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Line 3: Repeat Pairings */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-zinc-800">Repeat Pairings</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowRepeatModal(true)}
+                      className="text-[11px] font-black text-brand-red bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-md border border-brand-red/20 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                      title="View members with repeat pairings"
+                    >
+                      <span>See Names</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <span className="font-black text-zinc-950 tabular-nums">{repeatedPairingsVal}</span>
+                </div>
+                <div className="w-full h-2.5 bg-zinc-150 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, (repeatedPairingsVal / Math.max(1, totalAttendees)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Real-time Generation Progress Bar (shown when isGenerating) */}
+      {isGenerating && (
+        <div className="pt-2 border-t border-zinc-100 bg-zinc-50/70 p-3.5 rounded-xl space-y-2.5 relative z-10">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-extrabold text-zinc-900 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-brand-red animate-pulse" />
+              <span>{genStep}</span>
+            </span>
+            <span className="font-black text-brand-red">{progress}% complete</span>
+          </div>
+          <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand-red rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Footer: Action Buttons */}
+      <div className="pt-4 border-t border-zinc-150/70 flex items-center justify-end gap-3 relative z-10">
+        {/* Action Buttons: Preview & Generate Schedule */}
+        <div className="flex items-center gap-3">
+          {/* Preview Button */}
+          <button
+            type="button"
+            onClick={() => setIsPreviewOpen(true)}
+            className="h-9 px-4 rounded-xl border border-brand-red text-brand-red hover:bg-rose-50/70 font-bold text-xs inline-flex items-center gap-1.5 transition-smooth cursor-pointer"
+          >
+            <Eye className="w-3.5 h-3.5 text-brand-red" />
+            <span>Preview</span>
+          </button>
+
+          {/* Lock Schedule Button (Visible when schedule is generated but not yet locked) */}
+          {hasGeneratedSchedule && !isLocked && !isConclaveRunningOrLocked && (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              disabled={isGenerating || isLocking}
+              className="h-9 px-4 rounded-xl border border-zinc-300 hover:border-zinc-400 bg-white hover:bg-zinc-50 text-zinc-800 font-bold text-xs inline-flex items-center gap-1.5 transition-smooth cursor-pointer shadow-3xs disabled:opacity-50"
+            >
+              <Lock className="w-3.5 h-3.5 text-zinc-600" />
+              <span>Lock Schedule</span>
+            </button>
+          )}
+
+          {/* Generate / Regenerate / Locked Button */}
+          <button
+            type="button"
+            onClick={handleStartGeneration}
+            disabled={isGenerating || isLocked || isConclaveCompleted || isRunning}
+            className="h-9 inline-flex items-center gap-2 px-5 rounded-xl bg-brand-red hover:bg-red-750 text-white text-xs font-bold transition-smooth shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {isLocked || isConclaveCompleted ? (
+              <>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Schedule Locked</span>
+              </>
+            ) : isRunning ? (
+              <>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Conclave Running</span>
+              </>
+            ) : isGenerating ? (
+              <>
+                <Zap className="w-3.5 h-3.5 animate-pulse" />
+                <span>Generating...</span>
+              </>
+            ) : hasGeneratedSchedule ? (
+              <>
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Regenerate Schedule</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generate Schedule</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* PREVIEW MODAL OVERLAY (Matches Mockup with Fullscreen Toggle) */}
+      {isPreviewOpen && createPortal(
+        <div className={`fixed inset-0 z-[99999] transition-all duration-200 ${isPreviewFullscreen
+          ? 'bg-white flex flex-col overflow-hidden'
+          : 'bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-fade-in'
+          }`}>
+          <div className={`w-full bg-white flex flex-col overflow-hidden ${isPreviewFullscreen
+            ? 'h-full w-full rounded-none border-none'
+            : 'max-w-6xl max-h-[92vh] rounded-2xl shadow-2xl border border-zinc-200 animate-scale-up'
+            }`}>
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-150 flex items-center justify-between gap-3 bg-white shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+                  <Eye className="w-5 h-5 text-brand-red" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-black text-zinc-950 truncate">
+                    Preview – Room View
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 font-medium truncate">
+                    Overview of table-wise seating and assigned members for this schedule.
                   </p>
                 </div>
               </div>
 
-              {/* Move Time Between Rounds */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700">Break Between Rounds (to change tables)</label>
-                <div className="flex gap-2">
-                  {[60, 120, 300].map(secs => (
-                    <button
-                      key={secs}
-                      type="button"
-                      disabled={isConclaveRunningOrLocked}
-                      onClick={() => saveMoveSeconds(secs)}
-                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-smooth ${
-                        isConclaveRunningOrLocked
-                          ? moveSeconds === secs
-                            ? 'bg-zinc-200 border-zinc-300 text-zinc-700 cursor-not-allowed'
-                            : 'bg-zinc-50 border-zinc-200 text-zinc-400 cursor-not-allowed opacity-60'
-                          : moveSeconds === secs
-                            ? 'bg-brand-red border-brand-red text-white cursor-pointer'
-                            : 'bg-white border-zinc-250 text-zinc-700 hover:bg-zinc-50 cursor-pointer'
-                      }`}
-                    >
-                      {secs / 60} min
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] font-semibold text-zinc-400">Time allowed for members to walk to their next table.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB CONTENT 2: Room View */}
-      {activeTab === 'visual' && (
-        <div className="bg-white border border-zinc-200 rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs">
-          {/* Visual Bar Header with Round Switcher & Search */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
-            <div>
-              <h3 className="font-black text-base text-zinc-950">Table Seating View</h3>
-              <p className="text-xs text-zinc-400 font-semibold mt-0.5">
-                {hasSchedule
-                  ? `Table seating for Round ${visualRound}. Search by member name, business, or table number.`
-                  : `Room layout: ${calculatedTableCount} tables for ${totalAttendees} members.`}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Attendee & Table Search */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search member name, business, or table..."
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  className="w-full pl-8.5 pr-8 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-brand-red transition-smooth"
-                />
-                {tableSearch && (
+              {/* Right Side: Round Switcher Pill + Fullscreen Toggle + Close Button */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Round Switcher Pill Dropdown */}
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setTableSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                    onClick={() => setRoundSelectOpen(!roundSelectOpen)}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-bold text-zinc-800 shadow-3xs transition-smooth cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <RotateCw className="w-3.5 h-3.5 text-brand-red" />
+                    <span>Round {visualRound} of {roundCount}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
                   </button>
+
+                  {roundSelectOpen && (
+                    <div className="absolute right-0 top-full mt-1.5 w-44 bg-white border border-zinc-200 rounded-xl shadow-xl py-1.5 z-50 animate-scale-up">
+                      <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                        Select Round
+                      </div>
+                      {Array.from({ length: roundCount }).map((_, idx) => {
+                        const rNum = idx + 1;
+                        return (
+                          <button
+                            key={rNum}
+                            type="button"
+                            onClick={() => {
+                              setVisualRound(rNum);
+                              setRoundSelectOpen(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs font-bold flex items-center justify-between cursor-pointer ${visualRound === rNum
+                              ? 'bg-red-50 text-brand-red font-black'
+                              : 'text-zinc-700 hover:bg-zinc-50'
+                              }`}
+                          >
+                            <span>Round {rNum}</span>
+                            {visualRound === rNum && <CheckCircle2 className="w-3.5 h-3.5 text-brand-red" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fullscreen Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
+                  className="w-8 h-8 rounded-xl hover:bg-zinc-100 flex items-center justify-center text-zinc-500 hover:text-zinc-900 transition-smooth cursor-pointer border border-zinc-200 shadow-3xs"
+                  title={isPreviewFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                >
+                  {isPreviewFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="w-8 h-8 rounded-xl hover:bg-zinc-100 flex items-center justify-center text-zinc-500 hover:text-zinc-900 transition-smooth cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 bg-zinc-50/50">
+              {/* 4 Stat Metric Cards Across */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                {/* 1. Tables */}
+                <div className="bg-white border border-rose-100/90 rounded-2xl p-3 sm:p-3.5 shadow-3xs flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 text-brand-red flex items-center justify-center shrink-0">
+                    <TableIcon className="w-5 h-5 text-brand-red" />
+                  </div>
+                  <div>
+                    <div className="text-lg sm:text-xl font-black text-brand-red leading-tight">
+                      {calculatedTableCount}
+                    </div>
+                    <div className="text-[11px] font-bold text-zinc-600">Tables</div>
+                  </div>
+                </div>
+
+                {/* 2. Total Seats */}
+                <div className="bg-white border border-blue-100/90 rounded-2xl p-3 sm:p-3.5 shadow-3xs flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="text-lg sm:text-xl font-black text-zinc-950 leading-tight">
+                      {calculatedTableCount * personsPerTable}
+                    </div>
+                    <div className="text-[11px] font-bold text-zinc-600">Total Seats</div>
+                  </div>
+                </div>
+
+                {/* 3. Seated Members */}
+                <div className="bg-white border border-emerald-100/90 rounded-2xl p-3 sm:p-3.5 shadow-3xs flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <UserCheck className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="text-lg sm:text-xl font-black text-zinc-950 leading-tight">
+                      {totalAttendees}
+                    </div>
+                    <div className="text-[11px] font-bold text-zinc-600">Seated Members</div>
+                  </div>
+                </div>
+
+                {/* 4. Available Seats */}
+                <div className="bg-white border border-amber-100/90 rounded-2xl p-3 sm:p-3.5 shadow-3xs flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Armchair className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <div className="text-lg sm:text-xl font-black text-zinc-950 leading-tight">
+                      {Math.max(0, (calculatedTableCount * personsPerTable) - (totalAttendees || 0))}
+                    </div>
+                    <div className="text-[11px] font-bold text-zinc-600">Available Seats</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="pt-1">
+                {/* Search input */}
+                <div className="relative w-full max-w-md">
+                  <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={tableSearch}
+                    onChange={(e) => setTableSearch(e.target.value)}
+                    placeholder="Search by member name, business, or table number..."
+                    className="w-full pl-9.5 pr-8 py-2 bg-white border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-brand-red transition-smooth shadow-3xs"
+                  />
+                  {tableSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTableSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Room Grid View */}
+              {(() => {
+                  const query = tableSearch.toLowerCase().trim();
+                  const participants = selectedConclave?.participants || [];
+                  const standIns = selectedConclave?.standInCaptains?.[String(visualRound)] || {};
+
+                  const allTables = Array.from({ length: calculatedTableCount }).map((_, tblIdx) => {
+                    const tableNum = tblIdx + 1;
+                    const scheduledTable = currentVisualRoundData?.tables?.find(t => (t.tableNumber || t.number) === tableNum);
+
+                    const standInUid = standIns[String(tableNum)];
+                    const anchorCaptain = scheduledTable
+                      ? participants.find(p => p.id === scheduledTable.captainId || p.uid === scheduledTable.captainId || p._originalUid === scheduledTable.captainId) || (scheduledTable.captainName ? { name: scheduledTable.captainName } : null)
+                      : null;
+
+                    const standInCaptain = standInUid
+                      ? participants.find(p => p._originalUid === standInUid || p.uid === standInUid || String(p.id) === String(standInUid))
+                      : null;
+
+                    const captain = standInCaptain || anchorCaptain || (scheduledTable ? { name: `Captain ${tableNum}` } : null);
+                    const isStandIn = Boolean(standInCaptain);
+
+                    const rawMembers = scheduledTable && Array.isArray(scheduledTable.memberIds)
+                      ? scheduledTable.memberIds.map(mId => participants.find(p => p.id === mId || p.uid === mId || p._originalUid === mId) || { name: `Member ${mId}` })
+                      : [];
+
+                    // If a stand-in captain is designated, remove them from members list of this table so they aren't duplicated
+                    const seatedMembers = isStandIn
+                      ? rawMembers.filter(m => {
+                          const mUid = m._originalUid || m.uid || String(m.id);
+                          const sUid = standInCaptain._originalUid || standInCaptain.uid || String(standInCaptain.id);
+                          return mUid !== sUid && m.id !== standInCaptain.id;
+                        })
+                      : rawMembers;
+
+                    const captainCat = captain?.category || captain?.businessCategory || '';
+                    const allCats = [captainCat, ...seatedMembers.map(m => m.category || m.businessCategory || '')].filter(Boolean).map(c => c.trim().toLowerCase());
+                    const hasCategoryConflict = allCats.length !== new Set(allCats).size;
+
+                    const matches = !query ||
+                      tableNum.toString() === query ||
+                      `table ${tableNum}`.includes(query) ||
+                      (captain?.name || '').toLowerCase().includes(query) ||
+                      (anchorCaptain?.name || '').toLowerCase().includes(query) ||
+                      captainCat.toLowerCase().includes(query) ||
+                      seatedMembers.some(m =>
+                        (m.name || '').toLowerCase().includes(query) ||
+                        (m.category || m.businessCategory || '').toLowerCase().includes(query)
+                      );
+
+                    return {
+                      tableNum,
+                      captain,
+                      anchorCaptain,
+                      isStandIn,
+                      seatedMembers,
+                      hasCategoryConflict,
+                      matches
+                    };
+                  });
+
+                  const visibleTables = allTables.filter(t => t.matches);
+
+                  if (visibleTables.length === 0) {
+                    return (
+                      <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-zinc-200 space-y-2">
+                        <p className="text-xs font-bold text-zinc-500">No tables matching "{tableSearch}" in Round {visualRound}.</p>
+                        <button
+                          type="button"
+                          onClick={() => setTableSearch('')}
+                          className="text-xs font-extrabold text-brand-red hover:underline cursor-pointer"
+                        >
+                          Clear Search
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {visibleTables.map(({ tableNum, captain, anchorCaptain, isStandIn, seatedMembers, hasCategoryConflict }) => {
+                        const occupiedCount = (captain ? 1 : 0) + seatedMembers.length;
+                        const displaySeats = personsPerTable;
+
+                        return (
+                          <div
+                            key={tableNum}
+                            className={`bg-white rounded-2xl border p-4 space-y-3.5 shadow-3xs transition-smooth ${tableNum === 1
+                              ? 'border-brand-red ring-1 ring-brand-red/20'
+                              : 'border-zinc-200/80 hover:border-zinc-300'
+                              }`}
+                          >
+                            {/* Card Header */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-brand-red text-white font-black text-xs flex items-center justify-center shrink-0">
+                                  {tableNum}
+                                </span>
+                                <span className="text-xs font-black text-zinc-900">Table {tableNum}</span>
+                                {hasCategoryConflict && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[8.5px] font-black uppercase">
+                                    Conflict
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-brand-red bg-rose-50/80 border border-rose-150 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                                <Armchair className="w-3.5 h-3.5 text-brand-red" />
+                                <span>{occupiedCount} / {displaySeats} Seats</span>
+                              </div>
+                            </div>
+
+                            {/* Table Captain Box */}
+                            <div className={`border rounded-xl p-3 flex items-center gap-3 transition-smooth ${isStandIn ? 'bg-amber-50/90 border-amber-200 ring-1 ring-amber-300/30' : 'bg-rose-50/70 border-rose-100'}`}>
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isStandIn ? 'bg-amber-200/90 text-amber-800' : 'bg-amber-100/90 text-amber-500'}`}>
+                                <Crown className="w-4 h-4 fill-current" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${isStandIn ? 'text-amber-800' : 'text-brand-red'}`}>
+                                    {isStandIn ? 'STAND-IN CAPTAIN' : 'TABLE CAPTAIN'}
+                                  </span>
+                                  {isStandIn && (
+                                    <span className="text-[8.5px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 uppercase tracking-tight">
+                                      Round {visualRound}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs font-black text-zinc-900 truncate mt-1">
+                                  {captain?.name || (captain ? captain.name : `Captain ${tableNum}`)}
+                                </div>
+                                {isStandIn && anchorCaptain?.name && (
+                                  <div className="text-[10px] font-medium text-zinc-500 truncate mt-0.5">
+                                    Standing in for <span className="line-through text-zinc-400 font-semibold">{anchorCaptain.name}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Members Section */}
+                            <div className="space-y-2 pt-0.5">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-zinc-700">
+                                MEMBERS ({seatedMembers.length})
+                              </div>
+                              <div className="space-y-1.5">
+                                {seatedMembers.length > 0 ? (
+                                  seatedMembers.map((m, mIdx) => {
+                                    const nameParts = (m.name || 'Member').trim().split(/\s+/);
+                                    const initials = nameParts.length >= 2
+                                      ? (nameParts[0][0] + nameParts[1][0]).toUpperCase()
+                                      : (m.name || 'M').substring(0, 2).toUpperCase();
+
+                                    return (
+                                      <div
+                                        key={mIdx}
+                                        className="bg-white p-2 rounded-xl border border-zinc-150 flex items-center justify-between gap-2 shadow-3xs hover:border-zinc-300 transition-smooth"
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="w-6 h-6 rounded-lg bg-rose-50 text-brand-red text-[10px] font-black flex items-center justify-center shrink-0">
+                                            {initials}
+                                          </span>
+                                          <span className="text-xs font-bold text-zinc-900 truncate">
+                                            {m.name || `Member ${mIdx + 1}`}
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] font-semibold text-zinc-500 truncate text-right shrink-0 max-w-[140px]">
+                                          {m.category || m.businessCategory || 'Member'}
+                                        </span>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="p-3 text-center bg-zinc-50/80 rounded-xl border border-dashed border-zinc-200 text-[11px] font-semibold text-zinc-400">
+                                    No members assigned
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+            </div>
+
+            {/* Modal Footer (Matching Mockup) */}
+            <div className="p-3.5 sm:p-4 border-t border-zinc-200 bg-white flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-rose-200 text-brand-red hover:bg-rose-50 font-bold text-xs shadow-3xs transition-smooth cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print</span>
+              </button>
+
+              <div className="relative" ref={exportRef}>
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(!exportOpen)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-rose-200 text-brand-red hover:bg-rose-50 font-bold text-xs shadow-3xs transition-smooth cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {exportOpen && (
+                  <div className="absolute right-0 bottom-full mb-1.5 w-52 bg-white border border-zinc-200 rounded-xl shadow-xl py-1.5 z-50 animate-scale-up">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExportOpen(false);
+                        window.print();
+                      }}
+                      className="w-full px-3.5 py-2 text-left text-xs font-bold text-zinc-800 hover:bg-zinc-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Export Seating Chart (PDF)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportCSV}
+                      className="w-full px-3.5 py-2 text-left text-xs font-bold text-zinc-800 hover:bg-zinc-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Export Schedule (CSV)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExportOpen(false);
+                        window.print();
+                      }}
+                      className="w-full px-3.5 py-2 text-left text-xs font-bold text-zinc-800 hover:bg-zinc-50 flex items-center gap-2 cursor-pointer"
+                    >
+                      <span>Print Table Placards</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {hasSchedule && (
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-700 mr-1">Round:</span>
-                  {Array.from({ length: roundCount }).map((_, rIdx) => {
-                    const rNum = rIdx + 1;
-                    return (
-                      <button
-                        key={rNum}
-                        type="button"
-                        onClick={() => setVisualRound(rNum)}
-                        className={`w-7 h-7 rounded-lg text-xs font-black transition-smooth cursor-pointer ${visualRound === rNum
-                          ? 'bg-brand-red text-white shadow-2xs'
-                          : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                          }`}
-                      >
-                        {rNum}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsPreviewOpen(false)}
+                className="px-6 py-2 rounded-xl bg-brand-red hover:bg-red-750 text-white font-bold text-xs shadow-xs transition-smooth cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
-
-          {/* Visual Table Grid */}
-          {(() => {
-            const query = tableSearch.toLowerCase().trim();
-            const allTables = Array.from({ length: calculatedTableCount }).map((_, tblIdx) => {
-              const tableNum = tblIdx + 1;
-              const scheduledTable = currentVisualRoundData?.tables?.find(t => (t.tableNumber || t.number) === tableNum);
-
-              const captain = scheduledTable
-                ? (selectedConclave?.participants || []).find(p => p.id === scheduledTable.captainId) || { name: scheduledTable.captainName || `Captain ${tableNum}` }
-                : null;
-
-              const seatedMembers = scheduledTable && Array.isArray(scheduledTable.memberIds)
-                ? scheduledTable.memberIds.map(mId => (selectedConclave?.participants || []).find(p => p.id === mId) || { name: `Member ${mId}` })
-                : [];
-
-              const captainCat = captain?.category || captain?.businessCategory || '';
-              const allCats = [captainCat, ...seatedMembers.map(m => m.category || m.businessCategory || '')].filter(Boolean).map(c => c.trim().toLowerCase());
-              const hasCategoryConflict = allCats.length !== new Set(allCats).size;
-
-              const matches = !query ||
-                tableNum.toString() === query ||
-                `table ${tableNum}`.includes(query) ||
-                (captain?.name || '').toLowerCase().includes(query) ||
-                captainCat.toLowerCase().includes(query) ||
-                seatedMembers.some(m =>
-                  (m.name || '').toLowerCase().includes(query) ||
-                  (m.category || m.businessCategory || '').toLowerCase().includes(query)
-                );
-
-              return {
-                tableNum,
-                captain,
-                seatedMembers,
-                hasCategoryConflict,
-                matches
-              };
-            });
-
-            const visibleTables = allTables.filter(t => t.matches);
-
-            if (visibleTables.length === 0) {
-              return (
-                <div className="p-8 text-center bg-zinc-50 rounded-xl border border-dashed border-zinc-200 space-y-2">
-                  <p className="text-xs font-bold text-zinc-500">No tables matching "{tableSearch}" in Round {visualRound}.</p>
-                  <button
-                    type="button"
-                    onClick={() => setTableSearch('')}
-                    className="text-xs font-extrabold text-brand-red hover:underline cursor-pointer"
-                  >
-                    Clear Search
-                  </button>
-                </div>
-              );
-            }
-
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {visibleTables.map(({ tableNum, captain, seatedMembers, hasCategoryConflict }) => (
-                  <div
-                    key={tableNum}
-                    className={`bg-zinc-50/60 border rounded-xl p-4 space-y-3 transition-smooth ${query && tableSearch ? 'border-brand-red/40 ring-2 ring-brand-red/10 bg-white' : 'border-zinc-200 hover:border-zinc-300'
-                      }`}
-                  >
-                    {/* Table Card Header */}
-                    <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-md bg-zinc-900 text-white font-black text-xs flex items-center justify-center">
-                          {tableNum}
-                        </span>
-                        <strong className="text-xs font-black text-zinc-900">Table {tableNum}</strong>
-                        {hasCategoryConflict && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[8.5px] font-black uppercase">
-                            Same Business
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-bold text-zinc-500 bg-white px-2 py-0.5 rounded border border-zinc-200">
-                        {personsPerTable} Seats
-                      </span>
-                    </div>
-
-                    {/* Captain Slot */}
-                    <div className="bg-red-50/70 border border-brand-red/20 rounded-lg p-2.5 flex items-center justify-between">
-                      <div className="flex items-center gap-2 truncate">
-                        <Award className="w-4 h-4 text-brand-red shrink-0" />
-                        <div className="truncate">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-brand-red block leading-none">Table Captain</span>
-                          <span className="text-xs font-black text-zinc-900 truncate block mt-0.5">
-                            {captain?.name || `Assigned Captain ${tableNum}`}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Seated Members Preview */}
-                    <div className="space-y-1.5 pt-1">
-                      <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider block">
-                        Members at this Table ({seatedMembers.length ? seatedMembers.length : Math.max(1, personsPerTable - 1)})
-                      </span>
-                      {seatedMembers.length > 0 ? (
-                        <div className="space-y-1">
-                          {seatedMembers.map((m, mIdx) => (
-                            <div key={mIdx} className="bg-white p-1.5 rounded-md border border-zinc-200/70 text-[11px] font-bold text-zinc-800 flex items-center justify-between truncate">
-                              <span className="truncate">{m.name || `Member ${mIdx + 1}`}</span>
-                              <span className="text-[9.5px] font-semibold text-zinc-400 truncate ml-1">{m.category || m.businessCategory || ''}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {Array.from({ length: Math.max(1, personsPerTable - 1) }).map((_, mIdx) => (
-                            <div key={mIdx} className="bg-white/80 p-1.5 rounded-md border border-dashed border-zinc-200 text-[10px] text-zinc-400 font-semibold text-center">
-                              Seat {mIdx + 2}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* TAB CONTENT 3: Rounds List */}
-      {activeTab === 'blueprint' && (
-        <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">
-          {/* Table Header */}
-          <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-200 bg-zinc-50/50">
-            <div>
-              <h3 className="font-black text-zinc-950 text-base tracking-tight">Rounds Overview</h3>
-              <p className="text-xs text-zinc-400 font-semibold mt-0.5">Table count, seated members, and status for each round</p>
+      {/* Schedule Generated Success Modal */}
+      {showSuccessModal && createPortal(
+        <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-200/90 space-y-5 animate-scale-up text-left">
+            {/* Header: Green Check Icon + Title */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-zinc-950 leading-tight">
+                    Schedule Generated!
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowSuccessModal(false)}
+                    className="text-zinc-400 hover:text-zinc-600 p-1 rounded-lg hover:bg-zinc-100 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500 font-medium mt-1 leading-relaxed">
+                  All attending members have been arranged across tables and rounds. Seating is in draft mode and ready for your review.
+                </p>
+              </div>
             </div>
-            <span className="px-3 py-1 bg-white border border-zinc-200 rounded-full text-[10px] font-black uppercase tracking-wider text-zinc-700 shadow-2xs">
-              {roundCount} Rounds Created
-            </span>
+
+            {/* Quick Metrics Summary Grid */}
+            <div className="grid grid-cols-3 gap-2.5 p-3.5 bg-zinc-50/80 rounded-xl border border-zinc-200/70 text-center">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Rounds</span>
+                <p className="text-base font-black text-zinc-900 mt-0.5">{roundCount}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Tables / Round</span>
+                <p className="text-base font-black text-zinc-900 mt-0.5">{calculatedTableCount}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Seated Members</span>
+                <p className="text-base font-black text-brand-red mt-0.5">{totalAttendees}</p>
+              </div>
+            </div>
+
+            {/* Quality Summary */}
+            <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100/80 flex items-center justify-between text-xs font-semibold text-emerald-900">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>New Connections: <strong>{uniqueMeetingsVal}%</strong></span>
+              </span>
+              <span>Repeat Pairings: <strong>{repeatedPairingsVal}</strong></span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowSuccessModal(false)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 rounded-xl transition-smooth cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setIsPreviewOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-red hover:bg-red-750 text-white text-xs font-bold rounded-xl shadow-xs transition-smooth cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Preview Seating</span>
+              </button>
+            </div>
           </div>
-
-          {/* Clean, Dense Table Layout */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[10px] font-black uppercase tracking-wider text-zinc-700">
-                  <th className="py-3 px-5">Round</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Tables</th>
-                  <th className="py-3 px-4">Members</th>
-                  <th className="py-3 px-4">Captains</th>
-                  <th className="py-3 px-4">Seat Usage</th>
-                  <th className="py-3 px-5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 font-semibold text-zinc-700">
-                {Array.from({ length: roundCount }).map((_, idx) => {
-                  const roundNum = idx + 1;
-                  const currentRound = selectedConclave?.currentRound || 0;
-                  let roundStatus = 'SCHEDULED';
-                  let isRoundCompleted = false;
-                  let isRoundActive = false;
-
-                  if (progress < 100) {
-                    roundStatus = roundNum === 1 ? 'GENERATING...' : 'QUEUED';
-                  } else if (isConclaveCompleted) {
-                    roundStatus = 'COMPLETED';
-                    isRoundCompleted = true;
-                  } else if (currentRound === 0) {
-                    roundStatus = 'SCHEDULED';
-                  } else if (roundNum < currentRound) {
-                    roundStatus = 'COMPLETED';
-                    isRoundCompleted = true;
-                  } else if (roundNum === currentRound) {
-                    roundStatus = 'ACTIVE';
-                    isRoundActive = true;
-                  } else {
-                    roundStatus = 'SCHEDULED';
-                  }
-
-                  const totalTables = calculatedTableCount;
-                  const totalMembers = totalAttendees;
-
-                  return (
-                    <tr key={roundNum} className="hover:bg-zinc-50/70 transition-colors">
-                      <td className="py-3.5 px-5 font-black text-zinc-950">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800">
-                            {roundNum}
-                          </span>
-                          <span>Round {roundNum}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider border ${isRoundCompleted
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : isRoundActive
-                            ? 'bg-red-50 text-brand-red border-red-200 animate-pulse'
-                            : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                          }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${isRoundCompleted ? 'bg-emerald-500' : isRoundActive ? 'bg-brand-red' : 'bg-zinc-400'}`} />
-                          {roundStatus}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-black text-zinc-900">{totalTables} Tables</td>
-                      <td className="py-3.5 px-4 font-black text-zinc-900">{totalMembers.toLocaleString()} Members</td>
-                      <td className="py-3.5 px-4 font-bold text-zinc-600">{captainsCount} Captains</td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2.5 max-w-[160px]">
-                          <div className="flex-1 h-2 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/50">
-                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${progress === 100 ? 100 : progress}%` }} />
-                          </div>
-                          <span className="text-[10px] font-black text-zinc-600">{progress === 100 ? '100%' : `${progress}%`}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-5 text-right">
-                        {onScheduleReady && progress === 100 ? (
-                          <button
-                            type="button"
-                            onClick={onScheduleReady}
-                            className="inline-flex items-center gap-1 text-xs font-black text-brand-red hover:text-red-750 cursor-pointer"
-                          >
-                            <span>View Tables</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <span className="text-zinc-400 text-xs font-semibold">Configured</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* CONFIRM LOCK MODAL OVERLAY */}

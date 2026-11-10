@@ -57,19 +57,11 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     loadConclaves();
   }, []);
 
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 
@@ -165,10 +157,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
     elapsedMsBeforePause,
   }));
 
-  const [referrals, setReferrals] = useState(() => {
-    const stored = localStorage.getItem('bni_referrals');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [referrals, setReferrals] = useState([]);
 
   useEffect(() => {
     const handleStorageChange = () => {

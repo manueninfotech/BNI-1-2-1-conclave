@@ -26,7 +26,15 @@ const defaultBackendUrl = typeof window !== 'undefined' && (window.location.host
   ? 'http://localhost:3000/api'
   : 'https://conclave-backend.blackpond-26884e90.centralindia.azurecontainerapps.io/api';
 
-const BASE_URL = import.meta.env.VITE_API_URL || defaultBackendUrl;
+export const BASE_URL = import.meta.env.VITE_API_URL || defaultBackendUrl;
+
+export async function getAuthToken() {
+  try {
+    const user = await getAuthenticatedUser();
+    if (user) return await user.getIdToken(false);
+  } catch (e) {}
+  return localStorage.getItem('bni_auth_token') || null;
+}
 
 /**
  * A stored file's address for <img src>. The backend saves our own files as
@@ -191,14 +199,6 @@ export const api = {
       }
       const data = await response.json();
       if (data && data.quotaExceeded) {
-        const raw = localStorage.getItem('bni_conclaves_cache') || localStorage.getItem('bni_admin_conclaves_cache');
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            const cacheData = Array.isArray(parsed) ? parsed : parsed.data;
-            if (Array.isArray(cacheData)) return cacheData;
-          } catch (e) {}
-        }
         return Array.isArray(data.data) ? data.data : [];
       }
       if (Array.isArray(data) && (endpoint === '/conclaves' || endpoint === '/admin/conclaves')) {

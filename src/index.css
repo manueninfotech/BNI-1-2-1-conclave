@@ -31,6 +31,7 @@
   font-style: normal;
   font-display: swap;
 }
+
 @theme {
   --color-brand-red: #CF2030;
   --color-bni-red: #CF2030;
@@ -130,6 +131,24 @@ main>div {
 /* Page header element spacing */
 main>div>*:first-child {
   padding-bottom: 0.5rem !important;
+}
+
+/* Conclave Workspace inner tabs should have tight, compact spacing */
+main>div.conclave-workspace {
+  gap: 1.2rem !important;
+}
+
+main>div.conclave-workspace>*:first-child {
+  padding-bottom: 0 !important;
+}
+
+/* Admin Home dashboard should have tight, compact header spacing */
+main>div.admin-home-dashboard {
+  gap: 0.75rem !important;
+}
+
+main>div.admin-home-dashboard>*:first-child {
+  padding-bottom: 0 !important;
 }
 
 /* Remove default black focus outline borders on all Recharts wrapper divs and SVG graphics */

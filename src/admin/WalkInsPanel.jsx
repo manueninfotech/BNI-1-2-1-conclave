@@ -85,67 +85,108 @@ export default function WalkInsPanel({ conclave, showToast }) {
   };
 
   return (
-    <div className="bg-white border border-zinc-200 rounded-2xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-card-title font-bold text-zinc-900 flex items-center gap-1.5">
-          <UserPlus className="w-4 h-4 text-brand-red" /> Walk-ins
-          {pending.length > 0 && (
-            <span className="ml-1 text-[11px] font-bold bg-brand-red text-white rounded-full px-2 py-0.5">{pending.length} waiting</span>
-          )}
-        </h3>
-        <span className="text-caption text-zinc-500">{approved.length} seated</span>
+    <div className="bg-white border border-zinc-200/90 rounded-2xl p-4 shadow-3xs space-y-3 font-sans">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-red-50 text-brand-red flex items-center justify-center shrink-0 border border-rose-200/60 shadow-3xs">
+            <UserPlus className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-zinc-950 leading-tight">
+                Walk-ins
+              </h3>
+              {pending.length > 0 && (
+                <span className="text-[10px] font-black uppercase tracking-wider bg-brand-red text-white rounded-full px-2 py-0.5 whitespace-nowrap">
+                  {pending.length} Waiting
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
+              Venue arrivals waiting to be seated
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0">
+          <span className="text-xs font-bold text-zinc-600 bg-zinc-100 border border-zinc-200/70 px-2.5 py-1 rounded-lg whitespace-nowrap shadow-3xs">
+            {approved.length} Seated
+          </span>
+        </div>
       </div>
 
       {pending.length === 0 ? (
-        <p className="text-caption text-zinc-500">
-          No one is waiting. Late arrivals tap "Join as walk-in" in the app; collect their payment, then approve here.
-        </p>
+        <div className="py-5 px-3 bg-zinc-50/70 rounded-xl border border-dashed border-zinc-200 text-center space-y-0.5">
+          <p className="text-xs font-semibold text-zinc-500">
+            No walk-in requests waiting
+          </p>
+          <p className="text-[11px] text-zinc-400">
+            Members can tap "Join as walk-in" in the mobile app
+          </p>
+        </div>
       ) : (
-        <div className="divide-y divide-zinc-100">
+        <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
           {pending.map((w) => (
-            <div key={w.uid} className="py-2.5 space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-900 truncate">
-                    {w.name}
-                    {isBni(w) && <span className="ml-1.5 text-[10px] font-bold text-zinc-600 bg-zinc-100 px-1.5 py-0.5 rounded">BNI</span>}
-                  </p>
-                  <p className="text-caption text-zinc-500 truncate">
+            <div
+              key={w.uid}
+              className="p-3 rounded-xl border border-zinc-200/80 bg-zinc-50/60 hover:bg-white transition-smooth space-y-2.5 shadow-3xs"
+            >
+              <div className="flex items-center justify-between gap-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-zinc-950 truncate">
+                      {w.name}
+                    </span>
+                    {isBni(w) && (
+                      <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded">
+                        BNI
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-500 truncate mt-0.5">
                     {[w.category, w.company, w.chapter, w.phone].filter(Boolean).join(' · ')}
                   </p>
                 </div>
+
                 {busy === w.uid ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-400 px-3 py-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin text-brand-red" />
+                    <span className="text-[11px] font-semibold">Processing...</span>
+                  </div>
                 ) : (
-                  <>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => reject(w)}
-                      className="p-1.5 rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-900 cursor-pointer"
+                      className="p-1.5 rounded-lg border border-zinc-200 text-zinc-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 transition-smooth cursor-pointer"
                       aria-label={`Decline ${w.name}`}
+                      title="Decline walk-in"
                     >
                       <X className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => approve(w)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-sm font-semibold cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-black transition-smooth shadow-3xs cursor-pointer"
                     >
-                      <Check className="w-4 h-4" /> Paid, seat them
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Seat</span>
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
 
               {captainFor === w.uid && (
-                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 space-y-2">
-                  <p className="text-sm text-amber-900 flex items-center gap-1.5">
-                    <Crown className="w-4 h-4" /> Every table is full, so a new table opens. Who captains it?
+                <div className="rounded-xl bg-amber-50/90 border border-amber-200 p-3 space-y-2">
+                  <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                    <Crown className="w-4 h-4 text-amber-600 fill-amber-500 shrink-0" />
+                    Every table is full. Pick a captain for new table:
                   </p>
                   <div className="flex gap-2">
                     <select
                       aria-label="Captain for the new table"
-                      className="flex-1 border border-amber-200 rounded-lg px-2 py-1.5 text-sm bg-white"
+                      className="flex-1 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold bg-white text-zinc-800 outline-none focus:border-amber-500 shadow-3xs"
                       value={captainUid}
                       onChange={(e) => setCaptainUid(e.target.value)}
                     >
@@ -161,9 +202,9 @@ export default function WalkInsPanel({ conclave, showToast }) {
                       type="button"
                       disabled={!captainUid}
                       onClick={() => approve(w, captainUid)}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-sm font-semibold disabled:opacity-40 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-zinc-950 text-white text-xs font-black disabled:opacity-40 hover:bg-zinc-800 transition-smooth cursor-pointer shrink-0"
                     >
-                      Open table
+                      Open Table
                     </button>
                   </div>
                 </div>
