@@ -17,19 +17,11 @@ import { downloadOrViewAgendaDocument, parseAgendaTextToSteps, extractTextFromPd
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function MemberCurrentRound({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData, searchQuery }) {
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 

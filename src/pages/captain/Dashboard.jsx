@@ -20,29 +20,18 @@ import { formatTimeNice, formatTimeRangeNice } from '../../utils/timeFormat';
 import { calculateRoundTiming, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 
 export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboard', onTabChange, onLogout, conclaveSyncData: propConclaveSyncData }) {
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 
   const conclaveSyncData = syncData || propConclaveSyncData;
 
   const [selectedProfileMember, setSelectedProfileMember] = useState(null);
-  const [referrals, setReferrals] = useState(() => {
-    const stored = localStorage.getItem('bni_referrals');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [referrals, setReferrals] = useState([]);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -119,15 +108,8 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
     return { given, received };
   };
 
-  const [attendance, setAttendance] = useState(() => {
-      try {
-        const cached = localStorage.getItem('bni_captain_attendance_cache');
-        return cached ? JSON.parse(cached) : {};
-      } catch {
-        return {};
-      }
-    });
-    const pendingLocalEditsRef = useRef({});
+  const [attendance, setAttendance] = useState({});
+  const pendingLocalEditsRef = useRef({});
     const [isLocked, setIsLocked] = useState(false);
     const [toast, setToast] = useState(null);
     const activeRound = `Round ${conclaveSyncData?.conclaveStatus?.currentRound || 0}`;

@@ -18,50 +18,10 @@ const normRegion = (r) => String(r || '').toLowerCase().replace(/\s+region$/, ''
 import { formatStatus } from '../../utils/statusUtils';
 
 export default function SuperadminDashboard({ setActiveTab }) {
-  const [admins, setAdmins] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_admins_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [regions, setRegions] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_regions_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [conclaves, setConclaves] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_conclaves_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [members, setMembers] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_members_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
+  const [admins, setAdmins] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [conclaves, setConclaves] = useState([]);
+  const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -76,19 +36,15 @@ export default function SuperadminDashboard({ setActiveTab }) {
         ]);
         if (Array.isArray(adminsList)) {
           setAdmins(adminsList);
-          localStorage.setItem('bni_superadmin_admins_cache', JSON.stringify(adminsList));
         }
         if (Array.isArray(regionsList)) {
           setRegions(regionsList);
-          localStorage.setItem('bni_superadmin_regions_cache', JSON.stringify(regionsList));
         }
         if (Array.isArray(conclavesList)) {
           setConclaves(conclavesList);
-          localStorage.setItem('bni_superadmin_conclaves_cache', JSON.stringify(conclavesList));
         }
         if (Array.isArray(membersList)) {
           setMembers(membersList);
-          localStorage.setItem('bni_superadmin_members_cache', JSON.stringify(membersList));
         }
       } catch (err) {
         console.error("Failed to load superadmin dashboard metrics:", err);

@@ -17,6 +17,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { broadcastTabMessage, subscribeTabMessages } from '../utils/syncBus';
 
 const capitalizeFirst = (value) => value.charAt(0).toLocaleUpperCase() + value.slice(1);
 
@@ -58,6 +59,157 @@ function parseNamesCsv(text, kind) {
   if (headers.includes(names[0]?.toLocaleLowerCase())) names.shift();
   if (names.length === 0) throw new Error(`No ${kind} found. Use a CSV with one ${kind} per row.`);
   return names.map(capitalizeFirst);
+}
+
+// Native unzipper + reader for modern Excel (.xlsx) files using browser DecompressionStream and DOMParser
+async function parseXlsx(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) {
+    throw new Error('Not a valid Excel (.xlsx) file.');
+  }
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const cdOffset = view.getUint32(eocdOffset + 16, true);
+
+  const files = {};
+  let cur = cdOffset;
+  for (let i = 0; i < totalEntries; i++) {
+    if (view.getUint32(cur, true) !== 0x02014b50) break;
+    const method = view.getUint16(cur + 10, true);
+    const compressedSize = view.getUint32(cur + 20, true);
+    const fileNameLen = view.getUint16(cur + 28, true);
+    const extraLen = view.getUint16(cur + 30, true);
+    const commentLen = view.getUint16(cur + 32, true);
+    const localHeaderOffset = view.getUint32(cur + 42, true);
+
+    const fileNameBytes = bytes.subarray(cur + 46, cur + 46 + fileNameLen);
+    const fileName = new TextDecoder().decode(fileNameBytes);
+
+    if (fileName === 'xl/sharedStrings.xml' || (fileName.startsWith('xl/worksheets/sheet') && fileName.endsWith('.xml'))) {
+      const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+      const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+      const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+      const rawData = bytes.subarray(dataStart, dataStart + compressedSize);
+
+      let decompressedText = '';
+      if (method === 0) {
+        decompressedText = new TextDecoder().decode(rawData);
+      } else if (method === 8) {
+        const ds = new DecompressionStream('deflate-raw');
+        const writer = ds.writable.getWriter();
+        writer.write(rawData);
+        writer.close();
+        const resp = new Response(ds.readable);
+        decompressedText = await resp.text();
+      }
+      files[fileName] = decompressedText;
+    }
+
+    cur += 46 + fileNameLen + extraLen + commentLen;
+  }
+
+  const sharedStrings = [];
+  if (files['xl/sharedStrings.xml']) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(files['xl/sharedStrings.xml'], 'text/xml');
+    const siNodes = doc.getElementsByTagName('si');
+    for (let i = 0; i < siNodes.length; i++) {
+      const tNodes = siNodes[i].getElementsByTagName('t');
+      let str = '';
+      for (let j = 0; j < tNodes.length; j++) {
+        str += tNodes[j].textContent || '';
+      }
+      sharedStrings.push(str.trim());
+    }
+  }
+
+  const sheetKey = Object.keys(files).find((k) => k.startsWith('xl/worksheets/sheet') && k.endsWith('.xml'));
+  const values = [];
+
+  if (sheetKey && files[sheetKey]) {
+    const parser = new DOMParser();
+    const sheetDoc = parser.parseFromString(files[sheetKey], 'text/xml');
+    const rowNodes = sheetDoc.getElementsByTagName('row');
+
+    for (let i = 0; i < rowNodes.length; i++) {
+      const cNodes = rowNodes[i].getElementsByTagName('c');
+      for (let j = 0; j < cNodes.length; j++) {
+        const c = cNodes[j];
+        const r = c.getAttribute('r') || '';
+        if (r.startsWith('A') || j === 0) {
+          const t = c.getAttribute('t');
+          let val = '';
+          if (t === 's') {
+            const v = c.getElementsByTagName('v')[0]?.textContent;
+            const idx = parseInt(v, 10);
+            if (!isNaN(idx) && sharedStrings[idx] !== undefined) {
+              val = sharedStrings[idx];
+            }
+          } else if (t === 'inlineStr') {
+            val = c.getElementsByTagName('t')[0]?.textContent || '';
+          } else {
+            val = c.getElementsByTagName('v')[0]?.textContent || '';
+          }
+          val = val.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+          if (val) values.push(val);
+          break;
+        }
+      }
+    }
+  }
+
+  if (values.length === 0 && sharedStrings.length > 0) {
+    sharedStrings.forEach((s) => {
+      const clean = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+      if (clean) values.push(clean);
+    });
+  }
+
+  return values;
+}
+
+async function parseImportFile(file, kind) {
+  const fileName = (file.name || '').toLowerCase();
+
+  if (fileName.endsWith('.xls') && !fileName.endsWith('.xlsx')) {
+    throw new Error('Legacy Excel 97-2003 (.xls) format is not supported. Please save or export your file as modern Excel (.xlsx) or CSV (.csv).');
+  }
+
+  const buffer = await file.arrayBuffer();
+  const headerBytes = new Uint8Array(buffer.slice(0, 4));
+  const isZip = headerBytes[0] === 0x50 && headerBytes[1] === 0x4B && headerBytes[2] === 0x03 && headerBytes[3] === 0x04;
+
+  let rawNames = [];
+  if (fileName.endsWith('.xlsx') || isZip) {
+    rawNames = await parseXlsx(buffer);
+  } else {
+    const text = new TextDecoder('utf-8').decode(buffer);
+    rawNames = parseNamesCsv(text, kind);
+  }
+
+  const cleaned = rawNames
+    .map((name) => String(name || '').replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim())
+    .filter((name) => name.length > 0 && name.length <= 100);
+
+  const headers = ['name', 'names', 'category', 'categories', 'region', 'regions', 'business category', 'business categories', 'chapter', 'chapters'];
+  if (cleaned.length > 0 && headers.includes(cleaned[0].toLowerCase())) {
+    cleaned.shift();
+  }
+
+  if (cleaned.length === 0) {
+    throw new Error(`No valid ${kind} found in file. Please provide a file with one ${kind} per row.`);
+  }
+
+  return cleaned.map(capitalizeFirst);
 }
 
 /**
@@ -126,6 +278,19 @@ export default function Settings() {
         if (n) setNotif(n);
       } catch {}
     })();
+
+    // Listen to real-time cross-tab updates (e.g. category or region changed in another tab)
+    const unsubscribe = subscribeTabMessages((msg) => {
+      if (msg.type === 'SETTINGS_CHANGED') {
+        if (msg.kind === 'categories' && Array.isArray(msg.categories)) {
+          setCategories(msg.categories);
+        } else if (msg.kind === 'regions' && Array.isArray(msg.regions)) {
+          setRegions(msg.regions);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // --- Category Actions ---
@@ -136,7 +301,9 @@ export default function Settings() {
     setCatActionLoading(true);
     try {
       const r = await api.post('/admin/categories', { name: trimmed });
-      setCategories(r.categories || []);
+      const updated = r.categories || [];
+      setCategories(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
       setNewCatDraft('');
       setCatErr(false);
     } catch {
@@ -147,12 +314,18 @@ export default function Settings() {
   };
 
   const removeCategory = async (name) => {
+    const previous = categories;
+    const next = categories.filter((c) => c.toLowerCase() !== name.toLowerCase());
+    setCategories(next);
     setCatActionLoading(true);
     try {
       const r = await api.post('/admin/categories/remove', { name });
-      setCategories(r.categories || []);
+      const updated = r?.categories || next;
+      setCategories(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
       setCatErr(false);
     } catch {
+      setCategories(previous);
       setCatErr(true);
     } finally {
       setCatActionLoading(false);
@@ -177,7 +350,7 @@ export default function Settings() {
     else setRegState('saving');
 
     try {
-      const importedNames = parseNamesCsv(await file.text(), kind === 'category' ? 'categories' : 'regions');
+      const importedNames = await parseImportFile(file, kind === 'category' ? 'categories' : 'regions');
       const existing = new Set(currentNames.map((name) => name.toLocaleLowerCase()));
       const additions = [];
       for (const name of importedNames) {
@@ -196,18 +369,26 @@ export default function Settings() {
       if (kind === 'category') {
         const merged = [...currentNames, ...additions];
         const result = await api.put('/admin/categories', { categories: merged });
-        setCategories(result.categories || merged);
+        const updated = result.categories || merged;
+        setCategories(updated);
+        broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
         setCatErr(false);
       } else {
         const merged = [...currentNames, ...additions];
         const result = await api.put('/admin/settings/regions', { regions: merged });
-        setRegions(result.regions || merged);
+        const updated = result.regions || merged;
+        setRegions(updated);
+        broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'regions', regions: updated });
         setRegState('saved');
       }
       const skipped = importedNames.length - additions.length;
       setImportStatus(`Imported ${additions.length}${skipped ? `; skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`);
     } catch (error) {
-      setImportStatus(`Error: ${error.message || `Could not import ${kind}s.`}`);
+      let msg = error.message || `Could not import ${kind}s.`;
+      if (msg.includes('Failed query:') || msg.includes('insert into') || msg.includes('Internal Server Error')) {
+        msg = `Could not import ${kind}s. Please check the file contents and try again.`;
+      }
+      setImportStatus(`Error: ${msg}`);
       if (kind === 'region') setRegState('error');
     } finally {
       if (kind === 'category') setCatActionLoading(false);
@@ -221,13 +402,18 @@ export default function Settings() {
       const trimmed = region.trim();
       return trimmed ? capitalizeFirst(trimmed) : '';
     }).filter(Boolean);
+    const previous = regions;
+    setRegions(capitalizedRegions);
     setRegState('saving');
     try {
       const r = await api.put('/admin/settings/regions', { regions: capitalizedRegions });
-      setRegions(r.regions || capitalizedRegions);
+      const updated = r.regions || capitalizedRegions;
+      setRegions(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'regions', regions: updated });
       setRegState('saved');
       setNewRegionDraft('');
     } catch {
+      setRegions(previous);
       setRegState('error');
     }
     setTimeout(() => setRegState(''), 2500);
@@ -523,12 +709,15 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
-                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 ${catActionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label
+                  title="Import categories from Excel (.xlsx) or CSV (.csv)"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 ${catActionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
                   <Upload className="w-3.5 h-3.5" />
                   Import
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
                     disabled={catActionLoading}
                     className="hidden"
                     onChange={(event) => handleNamesImport('category', event)}
@@ -710,10 +899,18 @@ export default function Settings() {
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 cursor-pointer">
+                <label
+                  title="Import regions from Excel (.xlsx) or CSV (.csv)"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 cursor-pointer"
+                >
                   <Upload className="w-3.5 h-3.5" />
                   Import
-                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => handleNamesImport('region', event)} />
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
+                    className="hidden"
+                    onChange={(event) => handleNamesImport('region', event)}
+                  />
                 </label>
                 <StatusBadge state={regState} />
               </div>

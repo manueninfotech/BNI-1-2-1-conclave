@@ -8,19 +8,11 @@ import { calculateRoundTiming, formatTime } from '../../utils/roundTiming';
 import { formatUpcomingRoundRange } from '../../utils/timeFormat';
 
 export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyncData: propConclaveSyncData }) {
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 

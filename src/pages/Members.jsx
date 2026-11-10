@@ -24,6 +24,8 @@ import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
 import Avatar from '../components/Avatar';
+import { getConclaveDisplayStatus } from '../utils/statusUtils';
+import { subscribeTabMessages } from '../utils/syncBus';
 
 export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
   let state = (memberOrReg?.state || '').trim();
@@ -81,7 +83,7 @@ export function resolveLocationDetails(memberOrReg, fallbackRegion = '') {
   return { state, country };
 }
 
-export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'], initialRoleFilter = 'All' }) {
+export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin, allowedScopes = ['conclave', 'region', 'global'], initialRoleFilter = 'All', embedded = false }) {
   const isSuperadmin = useMemo(() => {
     const role = (loggedInAdmin?.role || '').toLowerCase();
     const email = (loggedInAdmin?.email || '').toLowerCase();
@@ -174,13 +176,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     }
   };
 
-  const [members, setMembers] = useState(() => {
-    const cached = localStorage.getItem('bni_admin_members_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return [];
-  });
+  const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [viewScope, setViewScope] = useState(allowedScopes[0]); // 'conclave', 'region', or 'global'
 
@@ -198,14 +194,36 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           });
         }
 
-        let targetConclaveId = activeConclaveId || selectedConclaveId;
-        if (viewScope === 'conclave' && !targetConclaveId) {
-          const conclavesList = await api.get('/admin/conclaves').catch(() => []);
-          if (Array.isArray(conclavesList) && conclavesList.length > 0) {
-            targetConclaveId = conclavesList[0].id;
-            setActiveConclaveId(targetConclaveId);
-          }
+        const conclavesList = await api.get('/admin/conclaves?global=true').catch(() => []);
+        const conclaveMap = new Map();
+        if (Array.isArray(conclavesList)) {
+          conclavesList.forEach(c => {
+            if (c.id) conclaveMap.set(c.id, c);
+          });
         }
+
+        const isConclaveLive = (c) => {
+          if (!c) return false;
+          const raw = String(c.status || '').toLowerCase().replace(/[\s_-]/g, '');
+          if (['completed', 'done', 'concluded', 'ended', 'finished', 'cancelled', 'canceled'].includes(raw)) {
+            return false;
+          }
+          const display = getConclaveDisplayStatus(c);
+          if (display === 'Completed' || display === 'Cancelled') {
+            return false;
+          }
+          return true;
+        };
+
+        let targetConclaveId = activeConclaveId || selectedConclaveId;
+        if (viewScope === 'conclave' && !targetConclaveId && conclavesList.length > 0) {
+          targetConclaveId = conclavesList[0].id;
+          setActiveConclaveId(targetConclaveId);
+        }
+
+        const currentConclave = conclaveMap.get(targetConclaveId) || null;
+        const isCurrentConclaveActive = currentConclave ? isConclaveLive(currentConclave) : true;
+        const currentConclaveName = currentConclave?.name || '';
 
         if (viewScope === 'conclave') {
           if (targetConclaveId) {
@@ -215,8 +233,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 rawList = res.registrations.map(r => {
                   const uid = r.userId || r.uid || r.id;
                   const master = userMap.get(uid) || {};
-                  const userRegion = r.region || master.region || (typeof r.location === 'string' ? r.location : '') || 'Global BNI Network';
+                  const userRegion = r.region || master.region || (typeof r.location === 'string' ? r.location : '') || currentConclave?.region || 'Global BNI Network';
                   const loc = resolveLocationDetails({ ...master, ...r }, userRegion);
+                  const isRegCaptain = r.role === 'captain' || r.isTableCaptain === true;
                   return {
                     ...master,
                     ...r,
@@ -231,7 +250,12 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     region: userRegion,
                     userRegion: userRegion,
                     state: r.state || master.state || loc.state,
-                    country: r.country || master.country || loc.country
+                    country: r.country || master.country || loc.country,
+                    activeCaptainConclave: (isRegCaptain && isCurrentConclaveActive) ? { id: targetConclaveId, name: currentConclaveName, status: currentConclave?.status, tableNumber: r.tableNumber ?? null } : null,
+                    pastCaptainConclaves: (isRegCaptain && !isCurrentConclaveActive) ? [{ id: targetConclaveId, name: currentConclaveName, status: currentConclave?.status, tableNumber: r.tableNumber ?? null }] : [],
+                    conclaveName: currentConclaveName,
+                    captainConclaveName: (isRegCaptain && isCurrentConclaveActive) ? currentConclaveName : null,
+                    pastCaptainConclaveName: (isRegCaptain && !isCurrentConclaveActive) ? currentConclaveName : null,
                   };
                 });
               }
@@ -240,13 +264,19 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             rawList = [];
           }
         } else {
-          const conclavesList = await api.get('/admin/conclaves?global=true').catch(() => []);
           const memberMap = new Map();
+          const emailToUidMap = new Map();
 
           if (Array.isArray(allUsers)) {
             allUsers.forEach(u => {
               const uid = u.id || u.uid;
-              if (uid) memberMap.set(uid, { ...u });
+              if (uid) {
+                memberMap.set(uid, { ...u, id: uid, uid });
+                const normEmail = (u.email || '').toLowerCase().trim();
+                if (normEmail && normEmail !== 'n/a') {
+                  emailToUidMap.set(normEmail, uid);
+                }
+              }
             });
           }
 
@@ -255,11 +285,57 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
               try {
                 const res = await api.get(`/admin/conclaves/${c.id}/registrations`);
                 if (res && Array.isArray(res.registrations)) {
+                  const isLiveConclave = isConclaveLive(c);
                   res.registrations.forEach(r => {
-                    const uid = r.userId || r.uid || r.id;
+                    let uid = r.userId || r.uid || r.id;
+                    const regEmail = (r.email || '').toLowerCase().trim();
+                    if (regEmail && regEmail !== 'n/a' && emailToUidMap.has(regEmail)) {
+                      uid = emailToUidMap.get(regEmail);
+                    } else if (regEmail && regEmail !== 'n/a' && uid) {
+                      emailToUidMap.set(regEmail, uid);
+                    }
+
                     const existing = memberMap.get(uid) || {};
-                    const userRegion = r.region || existing.region || (typeof r.location === 'string' ? r.location : '') || 'Global';
+                    const userRegion = r.region || existing.region || (typeof r.location === 'string' ? r.location : '') || c.region || 'Global';
                     const loc = resolveLocationDetails({ ...existing, ...r }, userRegion);
+
+                    const isRegCaptain = r.role === 'captain' || r.isTableCaptain === true;
+
+                    let activeCaptainConclave = existing.activeCaptainConclave || null;
+                    let pastCaptainConclaves = existing.pastCaptainConclaves ? [...existing.pastCaptainConclaves] : [];
+                    let conclavesParticipated = existing.conclavesParticipated ? [...existing.conclavesParticipated] : [];
+
+                    if (isRegCaptain) {
+                      if (isLiveConclave) {
+                        activeCaptainConclave = {
+                          id: c.id,
+                          name: c.name || 'Conclave',
+                          status: c.status,
+                          tableNumber: r.tableNumber ?? null
+                        };
+                      } else {
+                        if (!pastCaptainConclaves.some(p => p.id === c.id)) {
+                          pastCaptainConclaves.push({
+                            id: c.id,
+                            name: c.name || 'Conclave',
+                            status: c.status,
+                            tableNumber: r.tableNumber ?? null
+                          });
+                        }
+                      }
+                    }
+
+                    if (!conclavesParticipated.some(cp => cp.id === c.id)) {
+                      conclavesParticipated.push({
+                        id: c.id,
+                        name: c.name || 'Conclave',
+                        status: c.status,
+                        isLive: isLiveConclave,
+                        role: r.role,
+                        tableNumber: r.tableNumber ?? null
+                      });
+                    }
+
                     memberMap.set(uid, {
                       ...r,
                       ...existing,
@@ -273,7 +349,11 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       chapter: existing.chapter || r.chapter || 'N/A',
                       state: existing.state || r.state || loc.state,
                       country: existing.country || r.country || loc.country,
-                      userRegion: userRegion
+                      userRegion: userRegion,
+                      activeCaptainConclave,
+                      pastCaptainConclaves,
+                      conclavesParticipated,
+                      latestConclaveName: activeCaptainConclave?.name || conclavesParticipated[0]?.name || c.name
                     });
                   });
                 }
@@ -316,6 +396,24 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           const paymentAmount = pay.amount !== undefined ? pay.amount : (r.paymentAmount || 0);
           const transactionId = pay.transactionId || r.transactionId || '';
 
+          // Determine captain and conclave associations
+          const isCaptain = viewScope === 'conclave'
+            ? ((r.role === 'captain' || r.isTableCaptain === true) && isCurrentConclaveActive)
+            : Boolean(r.activeCaptainConclave);
+
+          const captainConclaveName = viewScope === 'conclave'
+            ? (isCaptain ? (currentConclaveName || 'This Conclave') : null)
+            : (r.activeCaptainConclave?.name || null);
+
+          const pastCaptainConclaveName = viewScope === 'conclave'
+            ? ((r.role === 'captain' || r.isTableCaptain === true) && !isCurrentConclaveActive ? (currentConclaveName || 'This Conclave') : null)
+            : (r.pastCaptainConclaves?.[0]?.name || null);
+
+          const conclaveName = captainConclaveName || pastCaptainConclaveName || r.latestConclaveName || r.conclaveName || (viewScope === 'conclave' ? currentConclaveName : null);
+          const tableNumber = isCaptain
+            ? (r.activeCaptainConclave?.tableNumber ?? r.tableNumber ?? null)
+            : (r.tableNumber ?? null);
+
           return {
             id: r.id || r.uid || `mem_${Math.random()}`,
             name: displayName,
@@ -338,8 +436,14 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             paymentMethod,
             paymentAmount,
             transactionId,
-            isCaptain: r.role === 'captain' || r.isTableCaptain === true,
-            tableNumber: r.tableNumber ?? null,
+            isCaptain,
+            captainConclaveName,
+            pastCaptainConclaveName,
+            conclaveName,
+            activeCaptainConclave: r.activeCaptainConclave || null,
+            pastCaptainConclaves: r.pastCaptainConclaves || [],
+            conclavesParticipated: r.conclavesParticipated || [],
+            tableNumber,
             // Online = the app is open on their phone right now (it checks in
             // every 2 minutes). Older backends without presence fall back.
             status: (r.isOnline ?? isActiveMember) ? 'Active' : 'Inactive',
@@ -348,11 +452,10 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             avatar: displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
             photoUrl: r.photoUrl || null,
             conclaveIds: [selectedConclaveId],
-            history: [{ event: 'Registered', date: historyDateFormatted, role: r.role === 'captain' ? 'Captain' : 'Member' }]
+            history: [{ event: 'Registered', date: historyDateFormatted, role: isCaptain ? 'Captain' : 'Member' }]
           };
         });
         setMembers(mapped);
-        localStorage.setItem('bni_admin_members_cache', JSON.stringify(mapped));
       } catch (err) {
         console.error("Failed to load members from API:", err);
       } finally {
@@ -434,9 +537,6 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   const searchVal = searchTerm;
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [captainFilter, setCaptainFilter] = useState(initialRoleFilter);
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [stateFilter, setStateFilter] = useState('All');
-  const [countryFilter, setCountryFilter] = useState('All');
   const [selectedMember, setSelectedMember] = useState(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -490,34 +590,9 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   // Reset to first page when search or filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchVal, categoryFilter, captainFilter, statusFilter, stateFilter, countryFilter, viewScope]);
+  }, [searchVal, categoryFilter, captainFilter, viewScope]);
 
-  const [categories, setCategories] = useState(() => {
-    try {
-      const cached = localStorage.getItem('bni_categories_cache');
-      if (cached) return JSON.parse(cached);
-    } catch { }
-    return [
-      'Advertising',
-      'Architecture',
-      'Banking',
-      'Builder',
-      'Business Consultant',
-      'CA',
-      'Catering',
-      'Corporate Gifting',
-      'Digital Marketing',
-      'Finance',
-      'Financial Consultant',
-      'Graphic Design',
-      'HR Services',
-      'IT Services',
-      'Interiors',
-      'Legal Services',
-      'Marketing',
-      'Real Estate'
-    ];
-  });
+  const [categories, setCategories] = useState([]);
 
   useEffect(() => {
     async function loadCategories() {
@@ -527,13 +602,20 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         const list = Array.isArray(res?.categories) ? res.categories : (Array.isArray(res) ? res : []);
         if (list.length > 0) {
           setCategories(list);
-          localStorage.setItem('bni_categories_cache', JSON.stringify(list));
         }
       } catch (err) {
         console.error("Failed to load categories:", err);
       }
     }
     loadCategories();
+
+    const unsubscribe = subscribeTabMessages((msg) => {
+      if (msg.type === 'SETTINGS_CHANGED' && msg.kind === 'categories' && Array.isArray(msg.categories)) {
+        setCategories(msg.categories);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const [formData, setFormData] = useState({
@@ -763,61 +845,32 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   const activePercentage = totalCount > 0 ? ((activeCount / totalCount) * 100).toFixed(1) : '0';
   const captainCount = conclaveMembers.filter(m => m.isCaptain).length;
 
-  // Get distinct filter options dynamically from member data
+  // Category options fetched from backend database and active members
   const categoriesList = useMemo(() => {
-    const list = new Set(members.map(m => m.category).filter(v => v && v !== 'N/A' && v !== 'General'));
-    return ['All', ...Array.from(list).sort()];
-  }, [members]);
+    const set = new Set();
+    // 1. Categories of members directly loaded from database
+    members.forEach(m => {
+      const cat = (m.category || m.businessCategory || '').trim();
+      if (cat && cat !== 'N/A' && cat !== 'General' && cat !== 'Uncategorized') {
+        set.add(cat);
+      }
+    });
 
-  const statesList = useMemo(() => {
-    const defaultStates = [
-      'Andhra Pradesh',
-      'Telangana',
-      'Karnataka',
-      'Tamil Nadu',
-      'Maharashtra',
-      'Gujarat',
-      'Delhi',
-      'Kerala',
-      'Goa',
-      'Madhya Pradesh',
-      'Rajasthan',
-      'Uttar Pradesh',
-      'West Bengal',
-      'Punjab',
-      'Haryana',
-      'Central Region',
-      'Greater London',
-      'Dubai'
-    ];
-    const memberStates = members
-      .map(m => m.state)
-      .filter(v => v && v !== 'N/A' && v.trim() !== '');
+    // 2. Categories returned by backend categories API
+    if (Array.isArray(categories)) {
+      categories.forEach(c => {
+        if (typeof c === 'string') {
+          const cat = c.trim();
+          if (cat && cat !== 'All' && cat !== 'N/A' && cat !== 'General' && cat !== 'Uncategorized') {
+            set.add(cat);
+          }
+        }
+      });
+    }
 
-    const combined = new Set([...memberStates, ...defaultStates]);
-    const sorted = Array.from(combined).sort((a, b) => a.localeCompare(b));
+    const sorted = Array.from(set).sort((a, b) => a.localeCompare(b));
     return ['All', ...sorted];
-  }, [members]);
-
-  const countriesList = useMemo(() => {
-    const defaultCountries = [
-      'India',
-      'Singapore',
-      'United Arab Emirates',
-      'United States',
-      'United Kingdom',
-      'Australia',
-      'Canada',
-      'Malaysia'
-    ];
-    const memberCountries = members
-      .map(m => m.country)
-      .filter(v => v && v !== 'N/A' && v.trim() !== '');
-
-    const combined = new Set([...memberCountries, ...defaultCountries]);
-    const sorted = Array.from(combined).sort((a, b) => a.localeCompare(b));
-    return ['All', ...sorted];
-  }, [members]);
+  }, [categories, members]);
 
   const chaptersList = useMemo(() => {
     const list = new Set(members.map(m => m.chapter).filter(v => v && v !== 'N/A'));
@@ -840,22 +893,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         (captainFilter === 'Captain' && member.isCaptain) ||
         (captainFilter === 'Member' && !member.isCaptain);
 
-      const matchesStatus = statusFilter === 'All' || (statusFilter === 'Online now') === (member.status === 'Active');
       const adminReg = (loggedInAdmin?.region || loggedInAdmin?.scope || '').toLowerCase().trim();
       const memberReg = (member.region || getMemberRegion(member) || '').toLowerCase().trim();
       const matchesViewScope = viewScope === 'conclave' || viewScope === 'global' || !adminReg || adminReg === 'global' || adminReg.includes('global') || memberReg.includes(adminReg) || adminReg.includes(memberReg);
 
-      const matchesState = stateFilter === 'All' ||
-        (member.state && member.state.toLowerCase() === stateFilter.toLowerCase()) ||
-        (!member.state && stateFilter === 'Andhra Pradesh');
-
-      const matchesCountry = countryFilter === 'All' ||
-        (member.country && member.country.toLowerCase() === countryFilter.toLowerCase()) ||
-        (!member.country && countryFilter === 'India');
-
-      return matchesSearch && matchesCategory && matchesCaptain && matchesStatus && matchesViewScope && matchesState && matchesCountry;
+      return matchesSearch && matchesCategory && matchesCaptain && matchesViewScope;
     });
-  }, [conclaveMembers, searchVal, categoryFilter, captainFilter, statusFilter, stateFilter, countryFilter, viewScope, loggedInAdmin]);
+  }, [conclaveMembers, searchVal, categoryFilter, captainFilter, viewScope, loggedInAdmin]);
 
   // Paginated members slice
   const paginatedMembers = useMemo(() => {
@@ -871,7 +915,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       showToast('No members found to export!', 'error');
       return;
     }
-    const headers = ['Member ID', 'Name', 'Category', 'Email', 'Phone', 'Role', 'Status', 'Join Date', 'Company', 'Chapter', 'Region'];
+    const headers = ['Member ID', 'Name', 'Category', 'Email', 'Phone', 'Role', 'Conclave', 'Status', 'Join Date', 'Company', 'Chapter', 'Region'];
     const rows = filteredMembers.map(m => [
       m.id,
       `"${m.name}"`,
@@ -879,6 +923,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       m.email,
       m.phone,
       m.isCaptain ? 'Captain' : 'Member',
+      `"${m.captainConclaveName || m.conclaveName || '—'}"`,
       m.status,
       m.joinDate,
       `"${m.company}"`,
@@ -903,7 +948,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     const selectedList = members.filter(m => selectedRows.has(m.id));
     if (selectedList.length === 0) return;
 
-    const headers = ['Member ID', 'Name', 'Category', 'Email', 'Phone', 'Role', 'Status', 'Join Date', 'Company', 'Chapter'];
+    const headers = ['Member ID', 'Name', 'Category', 'Email', 'Phone', 'Role', 'Conclave', 'Status', 'Join Date', 'Company', 'Chapter'];
     const rows = selectedList.map(m => [
       m.id,
       `"${m.name}"`,
@@ -911,6 +956,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       m.email,
       m.phone,
       m.isCaptain ? 'Captain' : 'Member',
+      `"${m.captainConclaveName || m.conclaveName || '—'}"`,
       m.status,
       m.joinDate,
       `"${m.company}"`,
@@ -1026,9 +1072,6 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     setSearchTerm('');
     setCategoryFilter('All');
     setCaptainFilter('All');
-    setStatusFilter('All');
-    setStateFilter('All');
-    setCountryFilter('All');
     setSelectedRows(new Set());
   };
 
@@ -1058,13 +1101,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-6 sm:gap-7 animate-fade-in pb-10 sm:pb-14">
+    <div className={`max-w-[1600px] mx-auto w-full flex flex-col ${embedded ? 'gap-3.5 sm:gap-4.5 pt-0.5' : 'gap-6 sm:gap-7'} animate-fade-in pb-10 sm:pb-14`}>
 
       {/* Page Header & Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-end ${embedded ? 'gap-2 pt-0' : 'gap-4'}`}>
         <div>
           <h2 className="text-dashboard-title text-zinc-955 font-extrabold tracking-tight">{viewScope === 'conclave' ? 'Members' : 'People'}</h2>
-          <p className="text-body-text text-zinc-500 mt-2">
+          <p className="text-body-text text-zinc-500 mt-0.5">
             {viewScope === 'conclave'
               ? 'Everyone registered for this conclave: role, table, payment and referrals.'
               : 'Every member who has signed up, across conclaves.'}
@@ -1254,33 +1297,6 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
               onChange={setCaptainFilter}
               placeholder="Search role..."
             />
-
-            {/* Status */}
-            <SearchableDropdown
-              label="App"
-              options={['All', 'Online now', 'Not online']}
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Search status..."
-            />
-
-            {/* State Filter */}
-            <SearchableDropdown
-              label="State"
-              options={statesList}
-              value={stateFilter}
-              onChange={setStateFilter}
-              placeholder="Search state..."
-            />
-
-            {/* Country Filter */}
-            <SearchableDropdown
-              label="Country"
-              options={countriesList}
-              value={countryFilter}
-              onChange={setCountryFilter}
-              placeholder="Search country..."
-            />
           </div>
         </div>
         <button
@@ -1373,9 +1389,16 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     </td>
                     <td className="px-5 py-4">
                       {member.isCaptain ? (
-                        <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide whitespace-nowrap">
-                          Captain{viewScope === 'conclave' && member.tableNumber ? ` · Table ${member.tableNumber}` : ''}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide whitespace-nowrap">
+                            Captain{member.tableNumber ? ` · Table ${member.tableNumber}` : ''}
+                          </span>
+                          {member.captainConclaveName && (
+                            <span className="text-[10px] text-zinc-600 font-semibold tracking-tight truncate max-w-[130px]" title={member.captainConclaveName}>
+                              {member.captainConclaveName}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="px-2.5 py-0.5 border border-zinc-200 text-zinc-500 bg-zinc-50 font-semibold rounded-md text-[9px] uppercase tracking-wide">
                           Member
@@ -1492,25 +1515,32 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     <div>
                       <h4 className="text-headline-md font-bold text-zinc-950 leading-tight">{selectedMember.name}</h4>
                       <p className="text-body-text text-zinc-500 font-semibold">{selectedMember.company}</p>
-                      <div className="flex gap-2 mt-2.5 justify-center">
-                        {selectedMember.isCaptain ? (
-                          <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide">
-                            Captain
+                      <div className="flex flex-col items-center gap-1.5 mt-2.5 justify-center">
+                        <div className="flex gap-2 justify-center">
+                          {selectedMember.isCaptain ? (
+                            <span className="px-2.5 py-0.5 border border-brand-red/35 text-brand-red bg-brand-red/5 font-extrabold rounded-md text-[9px] uppercase tracking-wide">
+                              Captain{selectedMember.tableNumber ? ` · Table ${selectedMember.tableNumber}` : ''}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 border border-zinc-200 text-zinc-500 bg-white font-semibold rounded-md text-[9px] uppercase tracking-wide">
+                              Member
+                            </span>
+                          )}
+                          {selectedMember.status === 'Active' ? (
+                            <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-md text-[9px] font-extrabold uppercase">
+                              Online now
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 bg-zinc-100 text-zinc-500 border border-zinc-200 rounded-md text-[9px] font-semibold uppercase">
+                              {lastSeenText(selectedMember.lastSeenAt)}
+                            </span>
+                          )}
+                        </div>
+                        {selectedMember.isCaptain && selectedMember.captainConclaveName ? (
+                          <span className="text-[11px] text-zinc-600 font-semibold">
+                            Captain for: {selectedMember.captainConclaveName}
                           </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 border border-zinc-200 text-zinc-500 bg-white font-semibold rounded-md text-[9px] uppercase tracking-wide">
-                            Member
-                          </span>
-                        )}
-                        {selectedMember.status === 'Active' ? (
-                          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-md text-[9px] font-extrabold uppercase">
-                            Online now
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 bg-zinc-100 text-zinc-500 border border-zinc-200 rounded-md text-[9px] font-semibold uppercase">
-                            {lastSeenText(selectedMember.lastSeenAt)}
-                          </span>
-                        )}
+                        ) : null}
                       </div>
                       {viewScope === 'conclave' && (
                         <div className="flex gap-2.5 mt-3 justify-center border-t border-zinc-100 pt-2.5 w-full">
@@ -1544,6 +1574,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       <div>
                         <span className="text-[10px] text-zinc-400 font-bold uppercase block">Joined</span>
                         <span className="text-body-sm font-bold text-zinc-800">{selectedMember.joinDate === 'N/A' ? '—' : selectedMember.joinDate}</span>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">Conclave</span>
+                        <span className="text-body-sm font-bold text-zinc-800 break-words">
+                          {selectedMember.captainConclaveName || selectedMember.conclaveName || '—'}
+                          {(selectedMember.isCaptain && selectedMember.tableNumber) ? ` (Table ${selectedMember.tableNumber})` : ''}
+                        </span>
                       </div>
                     </div>
                   </section>
