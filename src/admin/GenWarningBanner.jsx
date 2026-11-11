@@ -8,12 +8,12 @@ export default function GenWarningBanner({ genWarning, onClose }) {
   {genWarning && (
     <div
       role="alert"
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-[90vw] max-w-xl flex items-start gap-3 rounded-xl border px-4 py-3.5 shadow-lg ${genWarning.type === 'captain'
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-[90vw] max-w-xl flex items-start gap-3 rounded-xl border px-4 py-3.5 shadow-lg ${genWarning.type === 'captain' || genWarning.type === 'notice'
           ? 'bg-amber-50 border-amber-300 text-amber-900'
           : 'bg-red-50 border-red-300 text-red-900'
         }`}
     >
-      <ShieldAlert className={`w-5 h-5 mt-0.5 shrink-0 ${genWarning.type === 'captain' ? 'text-amber-500' : 'text-red-500'}`} />
+      <ShieldAlert className={`w-5 h-5 mt-0.5 shrink-0 ${genWarning.type === 'captain' || genWarning.type === 'notice' ? 'text-amber-500' : 'text-red-500'}`} />
       <div className="flex-1 min-w-0">
         <p className="font-bold text-[13px] leading-snug">{genWarning.title}</p>
         <p className="text-[12px] mt-0.5 leading-relaxed opacity-90">{genWarning.message}</p>

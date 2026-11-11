@@ -3,6 +3,32 @@ import { createPortal } from 'react-dom';
 import { X, ChevronDown } from 'lucide-react';
 import { api } from '../services/api';
 
+// The organiser's seating rules for a conclave (backend: engine SeatingRules).
+export const DEFAULT_SEATING_RULES = { category: 'separate', chapter: 'off', balancedTables: true };
+const SEATING_RULES = [
+  {
+    key: 'category',
+    title: 'Keep business categories apart',
+    hint: 'Never two people of the same business category at one table.',
+    isOn: (v) => v !== 'off',
+    toValue: (on) => (on ? 'separate' : 'off'),
+  },
+  {
+    key: 'chapter',
+    title: 'Keep chapters apart',
+    hint: 'One member of a chapter per table while the chapter has no more people than tables; a bigger chapter is spread evenly.',
+    isOn: (v) => v === 'separate',
+    toValue: (on) => (on ? 'separate' : 'off'),
+  },
+  {
+    key: 'balancedTables',
+    title: 'Balance table sizes',
+    hint: 'Table sizes differ by at most one person.',
+    isOn: (v) => v !== false,
+    toValue: (on) => on,
+  },
+];
+
 /**
  * Create / edit a conclave. Kept to what an organiser actually decides:
  *
@@ -150,6 +176,35 @@ export default function ConclaveForm({ mode, formData, setFormData, onSubmit, on
             )}
           </div>
 
+          {/* Seating rules (used when the tables are generated) */}
+          <div className="rounded-xl border border-zinc-200 p-4 space-y-1">
+            <span className="block text-sm font-bold text-zinc-900">Seating rules</span>
+            <p className="text-[11px] text-zinc-500">Applied when the tables are generated, and to walk-ins after that.</p>
+            {SEATING_RULES.map(({ key, title, hint, isOn, toValue }) => {
+              const rules = { ...DEFAULT_SEATING_RULES, ...(formData.seatingRules || {}) };
+              const on = isOn(rules[key]);
+              const fixed = Boolean(formData.hasSchedule);
+              return (
+                <label key={key} className={`flex items-start justify-between gap-4 py-2 ${fixed ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <span>
+                    <span className="block text-sm font-semibold text-zinc-900">{title}</span>
+                    <span className="block text-[11px] text-zinc-500 mt-0.5">{hint}</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="mt-1 w-5 h-5 accent-zinc-900 shrink-0"
+                    disabled={fixed}
+                    checked={on}
+                    onChange={(e) => set({ seatingRules: { ...rules, [key]: toValue(e.target.checked) } })}
+                  />
+                </label>
+              );
+            })}
+            {formData.hasSchedule && (
+              <p className="text-[11px] text-zinc-400">Tables are already generated. Regenerate them to change these.</p>
+            )}
+          </div>
+
           {FeeSection && <FeeSection formData={formData} setFormData={setFormData} />}
 
           {/* More options */}
@@ -226,6 +281,7 @@ export function conclavePayload(fd, { isSuperadmin, assignedAdminRegion, loggedI
     regEndTime: auto ? fd.regEndTime || '23:59' : undefined,
     memberLimit: Number(fd.memberLimit) || 100,
     captainMode: fd.captainMode === 'none' ? 'none' : 'required',
+    seatingRules: { ...DEFAULT_SEATING_RULES, ...(fd.seatingRules || {}) },
     paymentDetails: {
       registrationFee: Number(fd.registrationFee) || 0,
       bankName: (fd.bankName || '').trim(),

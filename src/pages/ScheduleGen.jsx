@@ -393,13 +393,16 @@ export default function ScheduleGen({
       setProgress(simProgress);
       setElapsed(prev => prev + 1);
       setProcessed(prev => Math.min(prev + 5, effectiveAttendees || 48));
-      if (simProgress === 30) setGenStep('Separating members from same chapter...');
+      if (simProgress === 30) {
+        const rules = selectedConclave?.seatingRules || {};
+        setGenStep(rules.chapter === 'separate' ? 'Keeping chapters apart...' : rules.category === 'off' ? 'Seating everyone...' : 'Keeping business categories apart...');
+      }
       if (simProgress === 60) setGenStep('Balancing tables...');
       if (simProgress === 80) setGenStep('Checking for repeat meetings...');
     }, 250);
 
     try {
-      await api.post(`/admin/conclaves/${selectedConclaveId}/generate-schedule`, {
+      const result = await api.post(`/admin/conclaves/${selectedConclaveId}/generate-schedule`, {
         activeOnly,
         // Auto-assign captains when none are designated, so a chapter/region with
         // no captain format can still generate and run the conclave instead of
@@ -418,6 +421,17 @@ export default function ScheduleGen({
       }
 
       clearInterval(simInterval);
+
+      // Generated, but with things the organiser should know (e.g. a chapter
+      // bigger than the table count, so some chapter members share a table).
+      if (Array.isArray(result?.warnings) && result.warnings.length > 0 && typeof showGenWarning === 'function') {
+        showGenWarning({
+          type: 'notice',
+          title: 'Tables generated, with notes',
+          message: 'The schedule is ready. Please check these before you lock it.',
+          warnings: result.warnings,
+        });
+      }
 
       try {
         const data = await api.get('/admin/conclaves');

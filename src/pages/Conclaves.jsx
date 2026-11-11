@@ -24,7 +24,7 @@ import { api } from '../services/api';
 import { extractTextFromPdfDataUrl, createFreshAgendaPdfDataUrl } from '../utils/documentUtils';
 import { generateUpiUri, generateQrCodeUrl } from '../utils/paymentUtils';
 import { formatStatus } from '../utils/statusUtils';
-import ConclaveForm, { conclavePayload } from '../admin/ConclaveForm';
+import ConclaveForm, { conclavePayload, DEFAULT_SEATING_RULES } from '../admin/ConclaveForm';
 
 const parseDate = (val) => {
   if (!val) return null;
@@ -833,6 +833,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       coordinator: defaultCoord,
       allowAdminAddMembers: true,
       captainMode: 'required',
+      seatingRules: { ...DEFAULT_SEATING_RULES },
       description: '',
       registrationFee: 0,
       bankName: '',
@@ -958,6 +959,7 @@ export default function Conclaves({ searchQuery, setActiveTab, loggedInAdmin, on
       isRegistrationOpen: c.isScheduleLocked ? false : (c.registrationOverride ? c.registrationOverride !== 'closed' : (c.isRegistrationOpen ?? true)),
       allowAdminAddMembers: Boolean(c.allowAdminAddMembers),
       captainMode: c.captainMode === 'none' ? 'none' : 'required',
+      seatingRules: { ...DEFAULT_SEATING_RULES, ...(c.seatingRules || {}) },
       hasSchedule: Boolean(c.schedule),
       memberCount: c.memberCount || 0,
       memberLimit: c.memberLimit ?? 100,
