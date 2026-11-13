@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, User, LogOut } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
 import { getInitials, getProfilePhotoUrl } from '../utils/initials';
 import { fileUrl } from '../services/api';
@@ -17,6 +17,7 @@ export default function CaptainHeader({
   const conclaveId = conclaveSyncData?.conclaveStatus?.id || conclaveSyncData?.conclaveId;
 
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [notifications, setNotifications] = useState(() => getNotifications({ userUid, conclaveId }));
   const [imgBroken, setImgBroken] = useState(false);
 
@@ -25,11 +26,15 @@ export default function CaptainHeader({
   }, [loggedInCaptain]);
 
   const dropdownRef = useRef(null);
+  const profileDropdownRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowNotifications(false);
+      }
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
+        setShowProfileDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -173,40 +178,68 @@ export default function CaptainHeader({
             const captainInitials = getInitials(captainName, 'U');
 
             return (
-              <div className="group relative flex items-center gap-2 cursor-pointer shrink-0">
-                <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0 overflow-hidden">
-                  {avatarSrc ? (
-                    <img
-                      src={avatarSrc}
-                      alt={captainName}
-                      onError={() => setImgBroken(true)}
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  ) : (
-                    <span>{captainInitials}</span>
-                  )}
-                </div>
+              <div className="relative shrink-0" ref={profileDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowProfileDropdown(prev => !prev)}
+                  aria-label="Captain Profile Menu"
+                  aria-expanded={showProfileDropdown}
+                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-zinc-100/80 transition-smooth cursor-pointer text-left group"
+                >
+                  <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0 overflow-hidden">
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt={captainName}
+                        onError={() => setImgBroken(true)}
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : (
+                      <span>{captainInitials}</span>
+                    )}
+                  </div>
 
-                <div className="hidden lg:flex flex-col">
-                  <span className="text-[11.5px] xl:text-[12.5px] font-extrabold text-zinc-955 leading-none whitespace-nowrap">{captainName}</span>
-                  <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider mt-0.5">Captain</span>
-                </div>
+                  <div className="hidden lg:flex flex-col">
+                    <span className="text-[11.5px] xl:text-[12.5px] font-extrabold text-zinc-955 leading-none whitespace-nowrap">{captainName}</span>
+                    <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider mt-0.5">Captain</span>
+                  </div>
+                </button>
 
-                {/* Hover dropdown list */}
-                <div className="absolute right-0 top-full pt-2 opacity-0 translate-y-1 invisible group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible transition-smooth z-50">
-                  <div className="bg-white border border-zinc-200 rounded-xl shadow-xl w-40 overflow-hidden py-1">
+                {/* Dropdown list (Click on mobile & hover/click on desktop) */}
+                <div
+                  className={`absolute right-0 top-full mt-1.5 z-50 transition-smooth ${
+                    showProfileDropdown
+                      ? 'opacity-100 translate-y-0 visible pointer-events-auto'
+                      : 'opacity-0 translate-y-1 invisible pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible group-hover:pointer-events-auto'
+                  }`}
+                >
+                  <div className="bg-white border border-zinc-200 rounded-xl shadow-xl w-44 overflow-hidden py-1 animate-scale-up">
+                    <div className="px-3.5 py-2 border-b border-zinc-100">
+                      <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">Signed in as</p>
+                      <p className="text-xs font-black text-zinc-900 truncate mt-0.5">{captainName}</p>
+                    </div>
                     <button
-                      onClick={() => onTabChange && onTabChange('profile')}
-                      className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-zinc-650 hover:bg-zinc-50 hover:text-zinc-900 transition-smooth cursor-pointer"
+                      type="button"
+                      onClick={() => {
+                        setShowProfileDropdown(false);
+                        if (onTabChange) onTabChange('profile');
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-[11.5px] font-bold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-955 transition-smooth cursor-pointer flex items-center gap-2"
                     >
-                      My Profile
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>My Profile</span>
                     </button>
-                    <div className="h-px bg-zinc-100 my-1"></div>
+                    <div className="h-px bg-zinc-100 my-0.5"></div>
                     <button
-                      onClick={onLogout}
-                      className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-brand-red hover:bg-red-50/50 transition-smooth cursor-pointer"
+                      type="button"
+                      onClick={() => {
+                        setShowProfileDropdown(false);
+                        if (onLogout) onLogout();
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-[11.5px] font-bold text-brand-red hover:bg-red-50/60 transition-smooth cursor-pointer flex items-center gap-2"
                     >
-                      Sign Out
+                      <LogOut className="w-3.5 h-3.5 text-brand-red" />
+                      <span>Sign Out</span>
                     </button>
                   </div>
                 </div>
