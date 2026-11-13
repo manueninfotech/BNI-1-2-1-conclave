@@ -150,6 +150,12 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
             </Route>
             <Route path="*" element={<Navigate to={base} replace />} />
           </Routes>
+          {/* Admin & Superadmin Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <p className="text-[11px] text-zinc-400 font-medium">
+              Powered by <strong className="font-extrabold text-zinc-650">Manuen Infotech</strong>
+            </p>
+          </footer>
         </main>
       </div>
     </div>

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, User, LogOut } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
 import { getInitials, getProfilePhotoUrl } from '../utils/initials';
-import { fileUrl } from '../services/api';
+import { api, fileUrl } from '../services/api';
 
 export default function CaptainHeader({
   loggedInCaptain,
@@ -42,20 +42,49 @@ export default function CaptainHeader({
   }, []);
 
   useEffect(() => {
-    const syncNotifs = () => {
+    let active = true;
+    const syncNotifs = async () => {
+      try {
+        const res = await api.get('/me/notifications');
+        const notifList = Array.isArray(res) ? res : (Array.isArray(res?.notifications) ? res.notifications : []);
+        if (notifList.length > 0) {
+          const mapped = notifList.map(n => ({
+            id: n.id,
+            title: n.title,
+            desc: n.body || n.desc || n.message,
+            time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            unread: !n.read,
+            type: n.type || 'info',
+            conclaveId: n.data?.conclaveId
+          }));
+          if (active) setNotifications(mapped);
+          return;
+        }
+      } catch (e) {
+        // Fallback to local
+      }
+
       const fresh = getNotifications({ userUid, conclaveId });
-      setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
+      if (active) setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
     };
     syncNotifs();
     window.addEventListener('storage', syncNotifs);
-    return () => window.removeEventListener('storage', syncNotifs);
+    return () => {
+      active = false;
+      window.removeEventListener('storage', syncNotifs);
+    };
   }, [userUid, conclaveId]);
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
-  const markAllAsRead = () => {
-    markAllRead({ userUid });
+  const markAllAsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+    markAllRead({ userUid });
+    try {
+      await api.post('/me/notifications/read');
+    } catch (e) {
+      // silent
+    }
   };
 
 

@@ -161,7 +161,7 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
     toMemberId: myUid,
     toUserId: myUid,
     toName: loggedInUser?.name,
-    description: r.notes || 'Referral lead shared during seating round',
+    description: r.notes || '',
     status: r.status || 'Pending',
     date: r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
   }));
@@ -408,7 +408,7 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
 
                     {/* Middle: Message */}
                     <p className="text-[11.5px] font-semibold text-zinc-650 leading-relaxed italic">
-                      "{ref.description || ref.notes || 'Referral lead'}"
+                      {(ref.description || ref.notes) ? `"${ref.description || ref.notes}"` : 'No note attached'}
                     </p>
                   </div>
 

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Check,
   LogOut,
   Edit2,
   Save,
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Camera
 } from 'lucide-react';
 import { api, fileUrl } from '../../services/api';
 import { getInitials, getProfilePhotoUrl } from '../../utils/initials';
@@ -46,8 +46,10 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
   // Local editable state for profile info
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [toast, setToast] = useState(null);
   const [imgBroken, setImgBroken] = useState(false);
+  const fileInputRef = useRef(null);
 
   const showToast = (title, desc, type = 'success') => {
     setToast({ title, desc, type });
@@ -114,6 +116,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
             organization: fresh.organization || prev.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),
             region: isSuperadmin ? 'All Regions (Global)' : (fresh.region || fresh.scope || prev.region),
             joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate),
+            photoUrl: fresh.photoUrl || prev.photoUrl,
             uid: fresh.uid || fresh.id || prev.uid
           }));
         }
@@ -154,6 +157,56 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast("Invalid File", "Please select an image file (JPEG, PNG, or WebP).", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("File Too Large", "Profile photo must be 5 MB or smaller.", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setIsUploadingPhoto(true);
+      try {
+        let uploadedUrl = null;
+        try {
+          const res = await api.put('/me/photo', { dataUrl });
+          uploadedUrl = res?.photoUrl;
+        } catch {
+          const res = await api.put('/me', { ...profileData, photoUrl: dataUrl });
+          uploadedUrl = res?.profile?.photoUrl || dataUrl;
+        }
+
+        const finalUrl = uploadedUrl || dataUrl;
+        setProfileData(prev => ({ ...prev, photoUrl: finalUrl }));
+        setImgBroken(false);
+
+        if (isSuperadmin) {
+          const cached = localStorage.getItem('bni_superadmin_profile');
+          const parsed = cached ? JSON.parse(cached) : {};
+          localStorage.setItem('bni_superadmin_profile', JSON.stringify({ ...parsed, photoUrl: finalUrl }));
+        } else {
+          const logged = localStorage.getItem('bni_logged_admin');
+          const loggedParsed = logged ? JSON.parse(logged) : {};
+          localStorage.setItem('bni_logged_admin', JSON.stringify({ ...loggedParsed, photoUrl: finalUrl }));
+        }
+
+        window.dispatchEvent(new Event('storage'));
+        showToast("Photo Updated", "Your profile photo has been updated successfully.", "success");
+      } catch (err) {
+        showToast("Upload Failed", err.message || "Failed to update profile photo.", "error");
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -215,7 +268,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           {/* Profile Hero Card */}
           <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
             <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4">
+              <div className="relative mb-4 group/avatar">
                 <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none overflow-hidden">
                   {avatarSrc ? (
                     <img
@@ -228,9 +281,29 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
                     <span>{displayInitials}</span>
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 bg-brand-red text-white p-1 rounded-full border-2 border-white flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white stroke-[3.5]" />
-                </span>
+
+                {/* Upload camera button for mobile & desktop */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingPhoto}
+                  title="Upload profile photo"
+                  aria-label="Upload profile photo"
+                  className="absolute bottom-0 right-0 bg-brand-red hover:bg-red-750 text-white p-2 rounded-full border-2 border-white flex items-center justify-center shadow-md transition-smooth cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingPhoto ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
 
               <h2 className="text-lg font-black text-zinc-900 leading-tight">{profileData.name}</h2>

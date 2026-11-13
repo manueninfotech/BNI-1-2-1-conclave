@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, User, LogOut } from 'lucide-react';
-import { getNotifications, markAllRead, addNotification } from '../utils/notifications';
+import { getNotifications, markAllRead } from '../utils/notifications';
 import { api, fileUrl } from '../services/api';
 import { getInitials, getProfilePhotoUrl } from '../utils/initials';
 
@@ -42,26 +42,28 @@ export default function MemberHeader({
   useEffect(() => {
     let active = true;
     const syncNotifs = async () => {
-      const fresh = getNotifications({ userUid, conclaveId });
-      if (active) setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
-
       try {
         const res = await api.get('/me/notifications');
-        if (res && Array.isArray(res.notifications)) {
-          res.notifications.forEach(n => {
-            addNotification(n.title, n.body, n.type || 'info', {
-              id: n.id,
-              conclaveId: n.data?.conclaveId,
-              timestamp: n.createdAt,
-              read: n.read
-            });
-          });
-          const updated = getNotifications({ userUid, conclaveId });
-          if (active) setNotifications(updated);
+        const notifList = Array.isArray(res) ? res : (Array.isArray(res?.notifications) ? res.notifications : []);
+        if (notifList.length > 0) {
+          const mapped = notifList.map(n => ({
+            id: n.id,
+            title: n.title,
+            desc: n.body || n.desc || n.message,
+            time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            unread: !n.read,
+            type: n.type || 'info',
+            conclaveId: n.data?.conclaveId
+          }));
+          if (active) setNotifications(mapped);
+          return;
         }
       } catch (e) {
         // Fallback silently to local cache
       }
+
+      const fresh = getNotifications({ userUid, conclaveId });
+      if (active) setNotifications(prev => (JSON.stringify(prev) !== JSON.stringify(fresh) ? fresh : prev));
     };
     syncNotifs();
     window.addEventListener('storage', syncNotifs);
@@ -73,10 +75,14 @@ export default function MemberHeader({
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
-  const markAllAsRead = () => {
-    markAllRead({ userUid });
+  const markAllAsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-    api.post('/me/notifications/read').catch(() => { });
+    markAllRead({ userUid });
+    try {
+      await api.post('/me/notifications/read');
+    } catch (e) {
+      // silent
+    }
   };
 
 
@@ -228,11 +234,10 @@ export default function MemberHeader({
 
             {/* Dropdown list (Click on mobile & hover/click on desktop) */}
             <div
-              className={`absolute right-0 top-full mt-1.5 z-50 transition-smooth ${
-                showProfileDropdown
+              className={`absolute right-0 top-full mt-1.5 z-50 transition-smooth ${showProfileDropdown
                   ? 'opacity-100 translate-y-0 visible pointer-events-auto'
                   : 'opacity-0 translate-y-1 invisible pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible group-hover:pointer-events-auto'
-              }`}
+                }`}
             >
               <div className="bg-white border border-zinc-200 rounded-xl shadow-xl w-44 overflow-hidden py-1 animate-scale-up">
                 <div className="px-3.5 py-2 border-b border-zinc-100">

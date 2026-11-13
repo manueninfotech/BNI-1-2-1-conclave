@@ -1,22 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Check,
   LogOut,
   Edit2,
   Save,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  Camera
 } from 'lucide-react';
 import { api, fileUrl } from '../../services/api';
 import { getInitials, getProfilePhotoUrl } from '../../utils/initials';
 
-export default function MemberProfile({ loggedInMember, onTabChange, onLogout }) {
+export default function MemberProfile({ loggedInMember, memberConclaves, onTabChange, onLogout }) {
   // Local editable state for profile info
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [toast, setToast] = useState(null);
   const [imgBroken, setImgBroken] = useState(false);
+  const fileInputRef = useRef(null);
 
   const showToast = (title, desc, type = 'success') => {
     setToast({ title, desc, type });
@@ -34,10 +36,11 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
       name: mem?.name || mem?.displayName || 'Member',
       email: (mem?.email && mem.email !== 'N/A') ? mem.email : '',
       phone: (mem?.phone && mem.phone !== 'N/A') ? mem.phone : ((mem?.mobile && mem.mobile !== 'N/A') ? mem.mobile : ''),
-      designation: mem?.designation || '1-2-1 Connect Member',
-      company: mem?.company || mem?.businessName || 'Self Employed',
-      category: mem?.category || mem?.businessCategory || 'General',
-      chapter: mem?.chapter || '1-2-1 Connect Chapter',
+      membership: mem?.membership || (mem?.designation === 'Non-BNI' ? 'Non-BNI' : (mem?.designation ? mem.designation : 'Non-BNI')),
+      designation: mem?.designation || mem?.membership || 'Non-BNI',
+      company: mem?.company || mem?.businessName || '',
+      category: mem?.category || mem?.businessCategory || '',
+      chapter: mem?.chapter ?? '',
       registrationDate: mem?.registrationDate || mem?.joinedDate || 'N/A'
     };
   });
@@ -50,13 +53,17 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
           setProfileData(prev => {
             const updated = {
               ...prev,
-              name: fresh.name || prev.name,
+              name: (fresh.name !== undefined && fresh.name !== null) ? fresh.name : prev.name,
               email: (fresh.email && fresh.email !== 'N/A') ? fresh.email : prev.email,
               phone: (fresh.phone && fresh.phone !== 'N/A') ? fresh.phone : (fresh.mobile || prev.phone),
-              designation: fresh.designation || prev.designation,
-              company: fresh.company || fresh.businessName || prev.company,
-              category: fresh.category || fresh.businessCategory || prev.category,
-              chapter: fresh.chapter || prev.chapter,
+              membership: (fresh.membership !== undefined && fresh.membership !== null && fresh.membership !== '')
+                ? fresh.membership
+                : (fresh.designation === 'Non-BNI' ? 'Non-BNI' : (prev.membership || 'Non-BNI')),
+              designation: (fresh.designation !== undefined && fresh.designation !== null) ? fresh.designation : prev.designation,
+              company: (fresh.company !== undefined && fresh.company !== null) ? fresh.company : (fresh.businessName ?? prev.company),
+              category: (fresh.category !== undefined && fresh.category !== null) ? fresh.category : (fresh.businessCategory ?? prev.category),
+              chapter: (fresh.chapter !== undefined && fresh.chapter !== null) ? fresh.chapter : '',
+              photoUrl: fresh.photoUrl !== undefined ? fresh.photoUrl : prev.photoUrl,
               registrationDate: fresh.createdAt ? (typeof fresh.createdAt === 'string' ? fresh.createdAt : new Date(fresh.createdAt).toLocaleDateString([], { month: 'long', year: 'numeric' })) : prev.registrationDate
             };
             localStorage.setItem('bni_member_profile_cache', JSON.stringify(updated));
@@ -68,10 +75,35 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
     loadFreshProfile();
   }, []);
 
+  const [conclavesCount, setConclavesCount] = useState(() => {
+    if (Array.isArray(memberConclaves)) {
+      return memberConclaves.filter(c => c.isRegistered || c.registered || c.myRole).length;
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    if (Array.isArray(memberConclaves) && memberConclaves.length > 0) {
+      setConclavesCount(memberConclaves.filter(c => c.isRegistered || c.registered || c.myRole).length);
+      return;
+    }
+    async function loadStats() {
+      try {
+        const res = await api.get('/conclaves');
+        if (Array.isArray(res)) {
+          const registered = res.filter(c => c.isRegistered || c.registered || c.myRole);
+          setConclavesCount(registered.length);
+        }
+      } catch (e) { }
+    }
+    loadStats();
+  }, [memberConclaves]);
+
   const handleInputChange = (field, value) => {
     setProfileData(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
+      ...(field === 'membership' && value === 'Non-BNI' ? { chapter: '' } : {})
     }));
   };
 
@@ -95,6 +127,54 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast("Invalid File", "Please select an image file (JPEG, PNG, or WebP).", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("File Too Large", "Profile photo must be 5 MB or smaller.", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setIsUploadingPhoto(true);
+      try {
+        let uploadedUrl = null;
+        try {
+          const res = await api.put('/me/photo', { dataUrl });
+          uploadedUrl = res?.photoUrl;
+        } catch {
+          const res = await api.put('/me', { ...profileData, photoUrl: dataUrl });
+          uploadedUrl = res?.profile?.photoUrl || dataUrl;
+        }
+
+        const finalUrl = uploadedUrl || dataUrl;
+        setProfileData(prev => ({ ...prev, photoUrl: finalUrl }));
+        setImgBroken(false);
+
+        const cached = localStorage.getItem('bni_member_profile_cache');
+        const parsed = cached ? JSON.parse(cached) : {};
+        localStorage.setItem('bni_member_profile_cache', JSON.stringify({ ...parsed, photoUrl: finalUrl }));
+
+        const logged = localStorage.getItem('bni_logged_member');
+        const loggedParsed = logged ? JSON.parse(logged) : {};
+        localStorage.setItem('bni_logged_member', JSON.stringify({ ...loggedParsed, photoUrl: finalUrl }));
+
+        window.dispatchEvent(new Event('storage'));
+        showToast("Photo Updated", "Your profile photo has been updated successfully.", "success");
+      } catch (err) {
+        showToast("Upload Failed", err.message || "Failed to update profile photo.", "error");
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -121,7 +201,7 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
           {/* Profile Hero Card */}
           <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
             <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4">
+              <div className="relative mb-4 group/avatar">
                 <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none overflow-hidden">
                   {avatarSrc ? (
                     <img
@@ -134,9 +214,29 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
                     <span>{displayInitials}</span>
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 bg-brand-red text-white p-1 rounded-full border-2 border-white flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white stroke-[3.5]" />
-                </span>
+
+                {/* Upload camera button for mobile & desktop */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingPhoto}
+                  title="Upload profile photo"
+                  aria-label="Upload profile photo"
+                  className="absolute bottom-0 right-0 bg-brand-red hover:bg-red-750 text-white p-2 rounded-full border-2 border-white flex items-center justify-center shadow-md transition-smooth cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingPhoto ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
 
               <h2 className="text-lg font-black text-zinc-900 leading-tight">{profileData.name}</h2>
@@ -195,9 +295,9 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
           {/* Networking Summary KPIs */}
           <section className="grid grid-cols-2 gap-3">
             {[
-              { label: "Conclaves", value: loggedInMember?.conclaveIds?.length || 0 },
-              { label: "Total Rounds", value: loggedInMember?.conclaveIds?.length ? (loggedInMember.conclaveIds.length * 4) : 0 },
-              { label: "Members Met", value: loggedInMember?.conclaveIds?.length ? (loggedInMember.conclaveIds.length * 20) : 0 },
+              { label: "Conclaves", value: conclavesCount },
+              { label: "Total Rounds", value: conclavesCount ? conclavesCount * 4 : 0 },
+              { label: "Members Met", value: conclavesCount ? conclavesCount * 20 : 0 },
               { label: "Active Status", value: "Verified" }
             ].map((kpi, idx) => (
               <div key={idx} className="bg-white border border-zinc-200 p-4 rounded-xl shadow-2xs">
@@ -258,21 +358,34 @@ export default function MemberProfile({ loggedInMember, onTabChange, onLogout })
                 { label: "Full Name", key: "name", type: "text" },
                 { label: "Email Address", key: "email", type: "email" },
                 { label: "Phone Number", key: "phone", type: "text" },
-                { label: "Designation", key: "designation", type: "text" },
+                { label: "Membership", key: "membership", type: "select", options: ["BNI", "Non-BNI"] },
                 { label: "Company", key: "company", type: "text" },
                 { label: "Business Category", key: "category", type: "text" },
-                { label: "Chapter", key: "chapter", type: "text", disabled: true },
+                { label: "Chapter", key: "chapter", type: "text" },
                 { label: "Registration Date", key: "registrationDate", type: "text", disabled: true }
               ].map((field) => (
                 <div key={field.key}>
                   <label className="block text-[9.5px] font-black text-zinc-700 uppercase tracking-wider mb-1.5">{field.label}</label>
                   {isEditing && !field.disabled ? (
-                    <input
-                      type={field.type}
-                      value={profileData[field.key] || ''}
-                      onChange={(e) => handleInputChange(field.key, e.target.value)}
-                      className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 placeholder-zinc-400 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
-                    />
+                    field.options ? (
+                      <select
+                        value={profileData[field.key] || ''}
+                        onChange={(e) => handleInputChange(field.key, e.target.value)}
+                        className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 bg-white focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="">Select Membership</option>
+                        {field.options.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type}
+                        value={profileData[field.key] || ''}
+                        onChange={(e) => handleInputChange(field.key, e.target.value)}
+                        className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 placeholder-zinc-400 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
+                      />
+                    )
                   ) : (
                     <p className="text-body-sm font-bold text-zinc-800 leading-tight">{profileData[field.key] || 'Not specified'}</p>
                   )}

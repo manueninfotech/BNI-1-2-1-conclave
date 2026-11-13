@@ -656,6 +656,12 @@ export default function App() {
               setSearchQuery={setSearchQuery}
             />
           )}
+          {/* Captain Portal Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <p className="text-[11px] text-zinc-400 font-medium">
+              Powered by <strong className="font-extrabold text-zinc-650">Manuen Infotech</strong>
+            </p>
+          </footer>
         </main>
       </div>
     );
@@ -719,6 +725,7 @@ export default function App() {
           ) : activeTab === 'profile' ? (
             <MemberProfile
               loggedInMember={memberProfile || loggedInMember}
+              memberConclaves={memberConclaves}
               onTabChange={handleTabChange}
               onLogout={handleLogout}
             />
@@ -741,6 +748,12 @@ export default function App() {
               </div>
             </div>
           )}
+          {/* Member Portal Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <p className="text-[11px] text-zinc-400 font-medium">
+              Powered by <strong className="font-extrabold text-zinc-650">Manuen Infotech</strong>
+            </p>
+          </footer>
         </main>
       </div>
     );
