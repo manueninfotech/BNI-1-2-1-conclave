@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Lock, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 
@@ -105,18 +105,8 @@ export default function ResetPassword({ onBackToLogin }) {
         <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px]"></div>
 
         {/* Top brand logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center shadow-lg shadow-brand-red/20">
-            <Award className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-white tracking-wider leading-none">
-              BNI CONCLAVE PORTAL
-            </h1>
-            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">
-              High-Performance Networking Platform
-            </p>
-          </div>
+        <div className="relative z-10 flex items-center">
+          <img src="/lockup-horizontal-white.png" alt="1-2-1 Connect" className="h-12 w-auto object-contain" />
         </div>
 
         {/* Ambient content highlights */}
@@ -162,10 +152,7 @@ export default function ResetPassword({ onBackToLogin }) {
 
           {/* Mobile brand header */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 bg-brand-red rounded-lg flex items-center justify-center">
-              <Award className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-sm font-black text-zinc-900 tracking-wider">BNI CONCLAVE</span>
+            <img src="/lockup-horizontal-colour.png" alt="1-2-1 Connect" className="h-8 w-auto object-contain" />
           </div>
 
           <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xl shadow-zinc-200/40 p-7 md:p-8">
@@ -351,7 +338,7 @@ export default function ResetPassword({ onBackToLogin }) {
           </div>
 
           <p className="text-[10px] text-zinc-450 text-center leading-relaxed font-semibold pt-6">
-            BNI 1-to-1 Conclave • Protected by Firebase Enterprise Authentication
+            1-2-1 Connect • Protected by Firebase Enterprise Authentication
           </p>
         </div>
       </div>

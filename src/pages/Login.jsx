@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, Lock, Mail, Eye, EyeOff, ShieldCheck, Sparkles, KeyRound, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, KeyRound, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { getPortalContext, isMemberRegistrationAllowed } from '../utils/portalDetection';
@@ -230,7 +230,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
     };
 
     return (
-      <div className="min-h-screen w-full bg-zinc-50 flex items-stretch font-sans overflow-hidden">
+      <div className="min-h-screen w-full bg-paper text-ink flex items-stretch font-sans overflow-hidden">
 
         {/* Left side: Premium branding & stats panel */}
         <div className="hidden lg:flex lg:w-1/2 bg-zinc-900 relative flex-col justify-between p-12 overflow-hidden select-none">
@@ -238,34 +238,37 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
           <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px]"></div>
 
           {/* Top brand logo */}
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center shadow-lg shadow-brand-red/20">
-              <Award className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-white tracking-wider leading-none">
-                BNI CONCLAVE PORTAL
-              </h1>
-              <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">
-                High-Performance Networking Platform
-              </p>
-            </div>
+          <div className="relative z-10 flex items-center">
+            <img src="/lockup-horizontal-white.png" alt="1-2-1 Connect" className="h-12 w-auto object-contain" />
           </div>
 
           {/* Ambient content highlights */}
           <div className="relative z-10 space-y-6 max-w-md my-auto">
-            <h2 className="text-3xl font-extrabold text-white leading-tight">
-              High-Performance Networking &amp; Seating Assignments.
-            </h2>
+            <div>
+              <p className="text-coral text-xs font-bold uppercase tracking-wider mb-2">
+                Every table. Every round. Every referral.
+              </p>
+              <h2 className="text-3xl font-extrabold text-white leading-tight tracking-tight">
+                Your table for every round, and where to go next.
+              </h2>
+            </div>
 
-            <p className="text-zinc-400 text-body-md font-medium leading-relaxed">
-              Sign in with your registered account credentials to view your table seating, track round schedules, and connect with fellow chapter members.
+            <p className="text-zinc-300 text-body-md font-medium leading-relaxed">
+              1-2-1 Connect runs your 1-2-1 Connect conclave from your phone: where to sit, who is speaking, when to pass business, and everyone you met, saved when the day is done.
             </p>
+
+            <div className="pt-2">
+              <div className="p-3.5 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-zinc-300 font-medium leading-relaxed">
+                Pass business in one tap, right at the table.
+              </div>
+            </div>
           </div>
 
-          {/* Brand footer */}
-          <div className="relative z-10 flex items-center justify-center text-[10.5px] text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
-            <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
+          {/* Brand boilerplate footer */}
+          <div className="relative z-10 flex flex-col gap-1 text-[11px] text-zinc-400 font-medium border-t border-zinc-800 pt-5">
+            <p className="text-zinc-400 leading-normal">
+              1-2-1 Connect is a networking app for 1-2-1 Connect conclaves, built by Manuen Infotech in Guntur, Andhra Pradesh. It handles seating, live rounds, referrals and follow-ups for members, guests and organisers, on iPhone and Android. Learn more at <a href="https://manuen.com/conclave" target="_blank" rel="noopener noreferrer" className="text-white font-semibold underline hover:text-coral transition-colors">manuen.com/conclave</a>.
+            </p>
           </div>
 
           {/* Ambient background glows */}
@@ -282,19 +285,15 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
             {/* Form Header */}
             <div className="space-y-2">
               {/* Mobile logo */}
-              <div className="lg:hidden w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center mb-6">
-                <Award className="w-5 h-5 text-white" />
+              <div className="lg:hidden mb-6">
+                <img src="/lockup-horizontal-colour.png" alt="1-2-1 Connect" className="h-8 w-auto object-contain" />
               </div>
 
               <h3 className="text-2xl font-black text-zinc-955 tracking-tight">
-                {portalContext === 'superadmin' ? 'Superadmin Login' : portalContext === 'admin' ? 'Admin Portal Login' : 'Portal Login'}
+                {portalContext === 'superadmin' ? 'Superadmin Login' : portalContext === 'admin' ? 'Admin Login' : 'Login'}
               </h3>
-              <p className="text-body-md text-zinc-500 font-medium">
-                {portalContext === 'superadmin'
-                  ? 'Enter your executive credentials to access the global console.'
-                  : portalContext === 'admin'
-                    ? 'Enter your administrator credentials to access your chapter.'
-                    : 'Enter your account credentials to access your portal.'}
+              <p className="text-body-md text-zinc-600 font-medium">
+                Structured 1-2-1 networking for 1-2-1 Connect conclaves: your table, referrals, contacts.
               </p>
             </div>
 
@@ -488,7 +487,7 @@ export default function Login({ onLogin, onSwitchToSignUp }) {
               ) : (
                 <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
                   <p className="text-xs text-zinc-600 leading-relaxed font-medium">
-                    Enter the email address associated with your BNI member account. We will send you an official reset link.
+                    Enter the email address associated with your 1-2-1 Connect member account. We will send you an official reset link.
                   </p>
 
                   {forgotError && (

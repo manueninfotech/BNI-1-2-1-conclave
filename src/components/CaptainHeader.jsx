@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X, Check, Award, Clock, Users } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { getNotifications, markAllRead } from '../utils/notifications';
+import { getInitials, getProfilePhotoUrl } from '../utils/initials';
+import { fileUrl } from '../services/api';
 
 export default function CaptainHeader({
   loggedInCaptain,
@@ -16,6 +18,11 @@ export default function CaptainHeader({
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState(() => getNotifications({ userUid, conclaveId }));
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [loggedInCaptain]);
 
   const dropdownRef = useRef(null);
 
@@ -64,11 +71,11 @@ export default function CaptainHeader({
     <>
       <header className="w-full bg-white border-b border-zinc-200 sticky top-0 z-40 px-4 sm:px-6 h-16 flex items-center justify-between shadow-xs font-sans">
 
-        {/* Left section: Official BNI Logo & Title */}
-        <div className="flex items-center gap-2 border-b border-transparent shrink-0">
+        {/* Left section: Official Logo & Title */}
+        <div className="flex items-center gap-2.5 border-b border-transparent shrink-0">
           <img
-            src="/bni-conclave.png"
-            alt="BNI Logo"
+            src="/lockup-horizontal-colour.png"
+            alt="1-2-1 Connect"
             className="h-8 w-auto object-contain shrink-0"
           />
           <div className="hidden lg:flex items-center border-l border-zinc-200 pl-2.5 h-6">
@@ -159,35 +166,53 @@ export default function CaptainHeader({
           </div>
 
           {/* Captain User Profile Avatar / Logout Dropdown */}
-          <div className="group relative flex items-center gap-2 cursor-pointer shrink-0">
-            <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0">
-              {loggedInCaptain.name.split(' ').map(n => n[0]).join('')}
-            </div>
+          {(() => {
+            const rawPhoto = getProfilePhotoUrl(loggedInCaptain);
+            const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+            const captainName = loggedInCaptain?.name || 'Captain';
+            const captainInitials = getInitials(captainName, 'U');
 
-            <div className="hidden lg:flex flex-col">
-              <span className="text-[11.5px] xl:text-[12.5px] font-extrabold text-zinc-955 leading-none whitespace-nowrap">{loggedInCaptain.name}</span>
-              <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider mt-0.5">Captain</span>
-            </div>
+            return (
+              <div className="group relative flex items-center gap-2 cursor-pointer shrink-0">
+                <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0 overflow-hidden">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={captainName}
+                      onError={() => setImgBroken(true)}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span>{captainInitials}</span>
+                  )}
+                </div>
 
-            {/* Hover dropdown list */}
-            <div className="absolute right-0 top-full pt-2 opacity-0 translate-y-1 invisible group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible transition-smooth z-50">
-              <div className="bg-white border border-zinc-200 rounded-xl shadow-xl w-40 overflow-hidden py-1">
-                <button
-                  onClick={() => onTabChange && onTabChange('profile')}
-                  className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-zinc-650 hover:bg-zinc-50 hover:text-zinc-900 transition-smooth cursor-pointer"
-                >
-                  My Profile
-                </button>
-                <div className="h-px bg-zinc-100 my-1"></div>
-                <button
-                  onClick={onLogout}
-                  className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-brand-red hover:bg-red-50/50 transition-smooth cursor-pointer"
-                >
-                  Sign Out
-                </button>
+                <div className="hidden lg:flex flex-col">
+                  <span className="text-[11.5px] xl:text-[12.5px] font-extrabold text-zinc-955 leading-none whitespace-nowrap">{captainName}</span>
+                  <span className="text-[8px] text-zinc-450 font-bold uppercase tracking-wider mt-0.5">Captain</span>
+                </div>
+
+                {/* Hover dropdown list */}
+                <div className="absolute right-0 top-full pt-2 opacity-0 translate-y-1 invisible group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible transition-smooth z-50">
+                  <div className="bg-white border border-zinc-200 rounded-xl shadow-xl w-40 overflow-hidden py-1">
+                    <button
+                      onClick={() => onTabChange && onTabChange('profile')}
+                      className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-zinc-650 hover:bg-zinc-50 hover:text-zinc-900 transition-smooth cursor-pointer"
+                    >
+                      My Profile
+                    </button>
+                    <div className="h-px bg-zinc-100 my-1"></div>
+                    <button
+                      onClick={onLogout}
+                      className="w-full text-left px-3.5 py-2 text-[11px] font-bold text-brand-red hover:bg-red-50/50 transition-smooth cursor-pointer"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
         </div>
       </header>

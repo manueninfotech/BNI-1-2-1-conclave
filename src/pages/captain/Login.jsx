@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, Lock, Mail, Eye, EyeOff, ShieldCheck, Sparkles, Server } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, Server } from 'lucide-react';
 import { auth } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
@@ -68,47 +68,37 @@ export default function CaptainLogin({ onLogin }) {
         <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px]"></div>
         
         {/* Top Brand Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center shadow-lg shadow-brand-red/20">
-            <Award className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-white tracking-wider leading-none">BNI CAPTAINS</h1>
-            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">Table Attendance Portal</p>
-          </div>
+        <div className="relative z-10 flex items-center">
+          <img src="/lockup-horizontal-white.png" alt="1-2-1 Connect" className="h-12 w-auto object-contain" />
         </div>
 
         {/* Center Content */}
         <div className="relative z-10 my-auto max-w-md space-y-6">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-red/10 border border-brand-red/20 rounded-full text-brand-red text-[10px] font-bold uppercase tracking-wider">
-            <Sparkles className="w-3 h-3" /> Live Seating Optimizer
+          <div>
+            <p className="text-coral text-xs font-bold uppercase tracking-wider mb-2">
+              Every table. Every round. Every referral.
+            </p>
+            <h2 className="text-3xl font-extrabold text-white leading-tight tracking-tight">
+              Your table for every round, and where to go next.
+            </h2>
           </div>
           
-          <h2 className="text-3xl font-extrabold text-white leading-tight">
-            Captain Attendance Log &amp; Seating Verification.
-          </h2>
-          
-          <p className="text-zinc-400 text-body-md font-medium leading-relaxed">
-            Quickly check-in members, view category pairings, clear conflicts, and lock round seats directly from your mobile or desktop device.
+          <p className="text-zinc-300 text-body-md font-medium leading-relaxed">
+            1-2-1 Connect runs your 1-2-1 Connect conclave from your phone: where to sit, who is speaking, when to pass business, and everyone you met, saved when the day is done.
           </p>
 
-          <div className="grid grid-cols-2 gap-4 pt-4">
-            <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-md">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-widest block">Accuracy</span>
-              <span className="text-display-sm text-white font-extrabold block mt-1">99.8%</span>
-              <span className="text-[9px] text-emerald-500 font-semibold mt-1 block">Real-time Sync</span>
-            </div>
-            <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-md">
-              <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-widest block">Control</span>
-              <span className="text-display-sm text-white font-extrabold block mt-1">1-Tap</span>
-              <span className="text-[9px] text-zinc-400 font-semibold mt-1 block">Check-in Status</span>
+          <div className="pt-2">
+            <div className="p-3.5 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-zinc-300 font-medium leading-relaxed">
+              Pass business in one tap, right at the table.
             </div>
           </div>
         </div>
 
-        {/* Bottom Note */}
-        <div className="relative z-10 flex items-center justify-center text-[11px] text-zinc-500 font-semibold border-t border-white/[0.06] pt-6">
-          <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
+        {/* Brand boilerplate footer */}
+        <div className="relative z-10 flex flex-col gap-1 text-[11px] text-zinc-400 font-medium border-t border-zinc-800 pt-5">
+          <p className="text-zinc-400 leading-normal">
+            1-2-1 Connect is a networking app for 1-2-1 Connect conclaves, built by Manuen Infotech in Guntur, Andhra Pradesh. Learn more at <a href="https://manuen.com/conclave" target="_blank" rel="noopener noreferrer" className="text-white font-semibold underline hover:text-coral transition-colors">manuen.com/conclave</a>.
+          </p>
         </div>
 
         <div className="absolute top-1/4 right-0 w-80 h-80 rounded-full bg-brand-red/10 blur-[100px] pointer-events-none"></div>
@@ -120,12 +110,12 @@ export default function CaptainLogin({ onLogin }) {
         
         <div className="w-full max-w-sm space-y-6 relative z-10">
           <div className="space-y-2">
-            <div className="lg:hidden w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center mb-6">
-              <Award className="w-5 h-5 text-white" />
+            <div className="lg:hidden mb-6">
+              <img src="/lockup-horizontal-colour.png" alt="1-2-1 Connect" className="h-8 w-auto object-contain" />
             </div>
             <h3 className="text-2xl font-black text-zinc-950 tracking-tight">Captain Login</h3>
-            <p className="text-body-md text-zinc-500 font-medium">
-              Enter your registered Email to access your table.
+            <p className="text-body-md text-zinc-600 font-medium">
+              Structured 1-2-1 networking for 1-2-1 Connect conclaves: your table, referrals, contacts.
             </p>
           </div>
 

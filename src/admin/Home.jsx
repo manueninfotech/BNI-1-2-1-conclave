@@ -610,8 +610,6 @@ function ActiveConclaveHero({ c, base, stats, loggedInAdmin }) {
 
   return (
     <section className="w-full bg-white rounded-2xl border border-zinc-200/90 shadow-2xs p-4 sm:p-5 relative overflow-hidden flex flex-col gap-3.5">
-      {/* Background soft red brand aura */}
-      <div className="absolute -right-20 -bottom-24 w-80 h-80 rounded-full bg-brand-red/5 blur-3xl pointer-events-none" />
 
       {/* Top Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

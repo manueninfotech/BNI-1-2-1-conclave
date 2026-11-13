@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, X, Check, AlertTriangle, AlertCircle, Sparkles, Menu, ChevronDown, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { getNotifications, markAllRead, saveNotifications } from '../utils/notifications';
+import { getInitials, getProfilePhotoUrl } from '../utils/initials';
+import { fileUrl } from '../services/api';
 
 export default function Header({
   setActiveTab,
@@ -19,6 +21,12 @@ export default function Header({
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [loggedInAdmin]);
+
   const profileDropdownRef = useRef(null);
   const [notifications, setNotifications] = useState(() => getNotifications({
     userUid: adminUid,
@@ -209,28 +217,43 @@ export default function Header({
 
         {/* Profile Avatar Dropdown */}
         <div className="relative" ref={profileDropdownRef}>
-          <button
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className="flex items-center gap-2.5 p-1 sm:px-2.5 sm:py-1 rounded-xl hover:bg-zinc-100/80 transition-smooth cursor-pointer group text-left"
-          >
-            <div className="w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-xs border border-brand-red/10 shadow-xs shrink-0 select-none">
-              {(() => {
-                const name = loggedInAdmin?.name || 'Admin';
-                return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-              })()}
-            </div>
+          {(() => {
+            const rawPhoto = getProfilePhotoUrl(loggedInAdmin);
+            const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+            const adminName = loggedInAdmin?.name || 'Admin';
+            const adminInitials = getInitials(adminName, 'AD');
 
-            <div className="hidden sm:flex flex-col min-w-0">
-              <span className="text-[12px] font-bold text-zinc-900 leading-tight truncate max-w-[130px] group-hover:text-brand-red transition-colors">
-                {loggedInAdmin?.name || 'Admin'}
-              </span>
-              <span className="text-[9.5px] text-zinc-650 font-semibold uppercase tracking-wider leading-none mt-0.5 truncate">
-                {loggedInAdmin?.region ? `${loggedInAdmin.region} Admin` : (loggedInAdmin?.role || 'Admin')}
-              </span>
-            </div>
+            return (
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="flex items-center gap-2.5 p-1 sm:px-2.5 sm:py-1 rounded-xl hover:bg-zinc-100/80 transition-smooth cursor-pointer group text-left"
+              >
+                <div className="w-8 h-8 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-xs border border-brand-red/10 shadow-xs shrink-0 select-none overflow-hidden">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={adminName}
+                      onError={() => setImgBroken(true)}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span>{adminInitials}</span>
+                  )}
+                </div>
 
-            <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform duration-200 hidden sm:block ${showProfileDropdown ? 'rotate-180 text-zinc-700' : 'group-hover:text-zinc-600'}`} />
-          </button>
+                <div className="hidden sm:flex flex-col min-w-0">
+                  <span className="text-[12px] font-bold text-zinc-900 leading-tight truncate max-w-[130px] group-hover:text-brand-red transition-colors">
+                    {adminName}
+                  </span>
+                  <span className="text-[9.5px] text-zinc-650 font-semibold uppercase tracking-wider leading-none mt-0.5 truncate">
+                    {loggedInAdmin?.region ? `${loggedInAdmin.region} Admin` : (loggedInAdmin?.role || 'Admin')}
+                  </span>
+                </div>
+
+                <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform duration-200 hidden sm:block ${showProfileDropdown ? 'rotate-180 text-zinc-700' : 'group-hover:text-zinc-600'}`} />
+              </button>
+            );
+          })()}
 
           {showProfileDropdown && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1 text-zinc-700 animate-fade-in font-medium">

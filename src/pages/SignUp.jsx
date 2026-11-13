@@ -54,7 +54,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
     }
 
     if (!formData.membership) {
-      setError('Choose whether you are a BNI or Non-BNI member.');
+      setError('Choose whether you are a member or guest attendee.');
       return;
     }
 
@@ -169,39 +169,37 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
         <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px]"></div>
         
         {/* Top brand logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center shadow-lg shadow-brand-red/20">
-            <Award className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-white tracking-wider leading-none">
-              BNI CONCLAVE PORTAL
-            </h1>
-            <p className="text-[9px] text-zinc-700 font-bold uppercase tracking-widest mt-1">
-              High-Performance Networking Platform
-            </p>
-          </div>
+        <div className="relative z-10 flex items-center">
+          <img src="/lockup-horizontal-white.png" alt="1-2-1 Connect" className="h-12 w-auto object-contain" />
         </div>
 
         {/* Ambient content highlights */}
         <div className="relative z-10 space-y-6 max-w-md my-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase text-brand-red tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            Member Registration
+          <div>
+            <p className="text-coral text-xs font-bold uppercase tracking-wider mb-2">
+              Every table. Every round. Every referral.
+            </p>
+            <h2 className="text-3xl font-extrabold text-white leading-tight tracking-tight">
+              Pass business in one tap, right at the table.
+            </h2>
           </div>
-          
-          <h2 className="text-3xl font-extrabold text-white leading-tight">
-            Join Your Chapter Conclave &amp; Connect.
-          </h2>
-          
-          <p className="text-zinc-400 text-body-md font-medium leading-relaxed">
-            Register your member account to access 1-on-1 meeting schedules, view table seating assignments, and track your referral business.
+
+          <p className="text-zinc-300 text-body-md font-medium leading-relaxed">
+            1-2-1 Connect runs your 1-2-1 Connect conclave from your phone: where to sit, who is speaking, when to pass business, and everyone you met, saved when the day is done.
           </p>
+
+          <div className="pt-2">
+            <div className="p-3.5 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-zinc-300 font-medium leading-relaxed">
+              Your table for every round, and where to go next.
+            </div>
+          </div>
         </div>
 
-        {/* Brand footer */}
-        <div className="relative z-10 flex items-center justify-center text-[10.5px] text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
-          <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
+        {/* Brand boilerplate footer */}
+        <div className="relative z-10 flex flex-col gap-1 text-[11px] text-zinc-400 font-medium border-t border-zinc-800 pt-5">
+          <p className="text-zinc-400 leading-normal">
+            1-2-1 Connect is a networking app for 1-2-1 Connect conclaves, built by Manuen Infotech in Guntur, Andhra Pradesh. It handles seating, live rounds, referrals and follow-ups for members, guests and organisers, on iPhone and Android. Learn more at <a href="https://manuen.com/conclave" target="_blank" rel="noopener noreferrer" className="text-white font-semibold underline hover:text-coral transition-colors">manuen.com/conclave</a>.
+          </p>
         </div>
 
         {/* Ambient background glows */}
@@ -216,13 +214,13 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
           {/* Form Header */}
           <div className="space-y-1">
             {/* Mobile logo */}
-            <div className="lg:hidden w-10 h-10 bg-brand-red rounded-xl flex items-center justify-center mb-4">
-              <Award className="w-5 h-5 text-white" />
+            <div className="lg:hidden mb-4">
+              <img src="/lockup-horizontal-colour.png" alt="1-2-1 Connect" className="h-8 w-auto object-contain" />
             </div>
             
             <h3 className="text-2xl font-black text-zinc-955 tracking-tight">Create Member Account</h3>
-            <p className="text-body-md text-zinc-500 font-medium">
-              Enter your details to register for BNI Conclaves.
+            <p className="text-body-md text-zinc-600 font-medium">
+              Structured 1-2-1 networking for 1-2-1 Connect conclaves: your table, referrals, contacts.
             </p>
           </div>
 
@@ -269,7 +267,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    placeholder="member@bni.com"
+                    placeholder="member@121connect.com"
                     required
                     className="w-full pl-10 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-body-md font-semibold outline-none focus:border-zinc-800 transition-smooth placeholder-zinc-400 text-zinc-900"
                   />
@@ -344,7 +342,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
               <label className="text-[10px] text-zinc-450 font-extrabold uppercase tracking-widest flex items-center justify-between">
                 <span>Membership Status <span className="text-brand-red">*</span></span>
                 <span className="text-[10px] font-bold text-zinc-500">
-                  {formData.membership === 'BNI' ? 'BNI Member' : formData.membership === 'Non-BNI' ? 'Non-BNI Member' : 'Please choose'}
+                  {formData.membership === 'BNI' ? '1-2-1 Connect Member' : formData.membership === 'Non-BNI' ? 'Guest Attendee' : 'Please choose'}
                 </span>
               </label>
               <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100/90 rounded-xl border border-zinc-200">
@@ -358,7 +356,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                   }`}
                 >
                   <Award className="w-3.5 h-3.5" />
-                  <span>BNI Member</span>
+                  <span>1-2-1 Connect Member</span>
                 </button>
                 <button
                   type="button"
@@ -370,7 +368,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                   }`}
                 >
                   <User className="w-3.5 h-3.5" />
-                  <span>Non-BNI Member</span>
+                  <span>Guest Attendee</span>
                 </button>
               </div>
             </div>
@@ -409,7 +407,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                     name="chapter"
                     value={formData.chapter}
                     onChange={handleChange}
-                    placeholder={formData.membership === 'BNI' ? 'e.g. Titans / Express' : 'Optional for Non-BNI'}
+                    placeholder={formData.membership === 'BNI' ? 'e.g. Titans / Express' : 'Optional for guests'}
                     className="w-full pl-10 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-body-md font-semibold outline-none focus:border-zinc-800 transition-smooth placeholder-zinc-400 text-zinc-900"
                   />
                 </div>
@@ -417,8 +415,8 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
             </div>
             <p className="text-[9.5px] text-zinc-400 font-medium -mt-1">
               {formData.membership === 'Non-BNI'
-                ? 'For Non-BNI attendees, Region and Chapter are optional.'
-                : 'Enter Region and Chapter separately (do not include "BNI" in chapter name).'}
+                ? 'For guest attendees, Region and Chapter are optional.'
+                : 'Enter Region and Chapter separately .'}
             </p>
 
             {/* Password */}

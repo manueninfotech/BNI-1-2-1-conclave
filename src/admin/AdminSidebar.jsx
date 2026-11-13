@@ -23,30 +23,30 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 h-screen flex flex-col pt-4 pb-5 bg-zinc-50 border-r border-red-100 shrink-0 transition-all duration-300 ease-in-out lg:static ${
+      className={`fixed inset-y-0 left-0 z-50 h-screen flex flex-col pt-4 pb-5 bg-deep-red border-r border-[#8F0B21] text-white shrink-0 transition-all duration-300 ease-in-out lg:static ${
         isOpen ? 'translate-x-0 shadow-2xl w-[250px]' : '-translate-x-full'
       } lg:translate-x-0 ${isCollapsed ? 'lg:w-[72px]' : 'lg:w-[232px]'}`}
     >
       {/* Brand Header */}
       <div className="px-3 mb-5 shrink-0 flex items-center justify-between relative">
         {!isCollapsed ? (
-          <div className="flex items-center justify-center w-full px-2">
-            <img src="/bni-conclave.png" alt="BNI 121 Conclave" className="h-12 w-auto object-contain transition-all" />
+          <div className="flex items-center justify-center w-full px-1">
+            <img src="/lockup-horizontal-white.png" alt="1-2-1 Connect" className="h-12 w-auto max-w-[200px] object-contain transition-all" />
           </div>
         ) : (
           <div className="flex items-center justify-center w-full">
-            <div
-              className="w-10 h-10 rounded-xl bg-brand-red flex items-center justify-center text-white font-black text-sm shadow-xs tracking-wider"
-              title="BNI 121 Conclave"
-            >
-              BNI
-            </div>
+            <img
+              src="/mark-white.png"
+              alt="1-2-1 Connect"
+              className="w-10 h-10 object-contain transition-all"
+              title="1-2-1 Connect"
+            />
           </div>
         )}
         <button
           onClick={onClose}
           aria-label="Close menu"
-          className="lg:hidden absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-zinc-200 text-zinc-500 cursor-pointer"
+          className="lg:hidden absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-white/15 text-white/80 hover:text-white cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -63,7 +63,7 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
             title={isCollapsed ? label : undefined}
             className={({ isActive }) =>
               `flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2.5 rounded-xl text-[13px] font-semibold transition-all group relative ${
-                isActive ? 'bg-brand-red text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950'
+                isActive ? 'bg-white text-deep-red shadow-sm font-bold' : 'text-white/85 hover:bg-white/12 hover:text-white'
               }`
             }
           >
@@ -79,11 +79,11 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
       </nav>
 
       {/* Footer area */}
-      <div className="mt-auto px-2 pt-3 border-t border-zinc-200 shrink-0 space-y-1">
-                {/* Logout Button */}
+      <div className="mt-auto px-2 pt-3 border-t border-white/15 shrink-0 space-y-1">
+        {/* Logout Button */}
         <button
           onClick={onLogout}
-          className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-semibold text-zinc-700 hover:bg-red-50 hover:text-brand-red cursor-pointer transition-colors group relative`}
+          className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-xl text-[13px] font-semibold text-white/85 hover:bg-white/12 hover:text-white cursor-pointer transition-colors group relative`}
           title={isCollapsed ? "Log out" : undefined}
         >
           <LogOut className="w-[18px] h-[18px] shrink-0" />
@@ -96,8 +96,8 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
         </button>
 
         {!isCollapsed && (
-          <p className="pt-2 text-center text-[9.5px] text-zinc-400 font-semibold truncate">
-            Powered by <span className="text-zinc-600 font-extrabold">Manuen Infotech</span>
+          <p className="pt-2 text-center text-[9.5px] text-white/60 font-semibold truncate">
+            Powered by <span className="text-white/95 font-extrabold">Manuen Infotech</span>
           </p>
         )}
       </div>

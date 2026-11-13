@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { broadcastTabMessage } from '../utils/syncBus';
+import { getInitials } from '../utils/initials';
 import {
   X,
   Lock,
@@ -84,7 +85,7 @@ export default function ScheduleGen({
             };
           });
           setConclaves(mapped);
-          localStorage.setItem('bni_schedule_gen_conclaves_cache', JSON.stringify(mapped));
+          localStorage.setItem('connect_schedule_gen_conclaves_cache', JSON.stringify(mapped));
         }
       } catch (err) {
         console.error('API load failed for conclaves:', err);
@@ -296,7 +297,7 @@ export default function ScheduleGen({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `bni_schedule_${(selectedConclave?.name || 'conclave').replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `connect_schedule_${(selectedConclave?.name || 'conclave').replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -308,7 +309,7 @@ export default function ScheduleGen({
   const [activeOnly, setActiveOnly] = useState(() => {
     if (selectedConclaveId) {
       try {
-        const stored = sessionStorage.getItem(`bni_schedule_active_only_${selectedConclaveId}`);
+        const stored = sessionStorage.getItem(`connect_schedule_active_only_${selectedConclaveId}`);
         if (stored === 'true') return true;
         if (stored === 'false') return false;
       } catch { }
@@ -321,7 +322,7 @@ export default function ScheduleGen({
     setActiveOnly(val);
     if (selectedConclaveId) {
       try {
-        sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, val ? 'true' : 'false');
+        sessionStorage.setItem(`connect_schedule_active_only_${selectedConclaveId}`, val ? 'true' : 'false');
       } catch { }
     }
   };
@@ -334,7 +335,7 @@ export default function ScheduleGen({
       setActiveOnly(isStored);
       if (selectedConclave.id) {
         try {
-          sessionStorage.setItem(`bni_schedule_active_only_${selectedConclave.id}`, isStored ? 'true' : 'false');
+          sessionStorage.setItem(`connect_schedule_active_only_${selectedConclave.id}`, isStored ? 'true' : 'false');
         } catch { }
       }
     }
@@ -548,7 +549,7 @@ export default function ScheduleGen({
 
       if (selectedConclaveId) {
         try {
-          sessionStorage.setItem(`bni_schedule_active_only_${selectedConclaveId}`, activeOnly ? 'true' : 'false');
+          sessionStorage.setItem(`connect_schedule_active_only_${selectedConclaveId}`, activeOnly ? 'true' : 'false');
         } catch { }
       }
 
@@ -656,143 +657,6 @@ export default function ScheduleGen({
     } catch (err) {
       console.error('Failed to start round:', err.message || err);
       showToast('Start Round Failed', err.message || 'Could not start round.');
-    }
-  };
-
-  const [isAddingDemo, setIsAddingDemo] = useState(false);
-
-  const handleAdd6DemoMembers = async () => {
-    if (!selectedConclaveId || isAddingDemo) return;
-    setIsAddingDemo(true);
-    try {
-      const timestamp = Date.now().toString().slice(-4);
-      const demoMembers = [
-        {
-          name: "Aarav Sharma",
-          category: "Information Technology",
-          email: `aarav.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "Apex Cloud Solutions",
-          chapter: "Alpha Titans",
-          role: "captain",
-          isCaptain: true,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        },
-        {
-          name: "Bhavna Patel",
-          category: "Chartered Accountant",
-          email: `bhavna.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "Patel & Associates Tax",
-          chapter: "Alpha Titans",
-          role: "captain",
-          isCaptain: true,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        },
-        {
-          name: "Chirag Reddy",
-          category: "Real Estate",
-          email: `chirag.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "Prime Skyline Realty",
-          chapter: "Bravo Champions",
-          role: "member",
-          isCaptain: false,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        },
-        {
-          name: "Deepika Verma",
-          category: "Digital Marketing",
-          email: `deepika.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "Nexus Growth Agency",
-          chapter: "Bravo Champions",
-          role: "member",
-          isCaptain: false,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        },
-        {
-          name: "Eshwar Rao",
-          category: "Corporate Law",
-          email: `eshwar.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "Rao & Co Legal",
-          chapter: "Charlie Pioneers",
-          role: "member",
-          isCaptain: false,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        },
-        {
-          name: "Farhan Khan",
-          category: "Healthcare",
-          email: `farhan.${timestamp}@demo-conclave.com`,
-          phone: `98765${Math.floor(10000 + Math.random() * 90000)}`,
-          company: "CareWell Diagnostics",
-          chapter: "Charlie Pioneers",
-          role: "member",
-          isCaptain: false,
-          paymentStatus: "paid",
-          paymentMethod: "Online",
-          status: "confirmed"
-        }
-      ];
-
-      for (const m of demoMembers) {
-        await api.post(`/admin/conclaves/${selectedConclaveId}/members`, m);
-      }
-
-      // Automatically configure recommended settings for 6 members:
-      // 3 seats per table (gives 2 tables of 3, each with 1 captain)
-      // 4 rounds (engine requires between 4 and 8 rounds)
-      setPersonsPerTable(3);
-      setRoundCount(4);
-
-      // Refresh registrations, stats, and conclaves from backend
-      const [regsRes, statsRes, conclavesRes] = await Promise.all([
-        api.get(`/admin/conclaves/${selectedConclaveId}/registrations`).catch(() => null),
-        api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
-        api.get('/admin/conclaves').catch(() => null)
-      ]);
-
-      if (regsRes) {
-        const list = regsRes.registrations || (Array.isArray(regsRes) ? regsRes : []);
-        setMembersList(list);
-      }
-      if (statsRes) {
-        setStats(statsRes);
-        try {
-          localStorage.setItem(`bni_admin_stats_cache_${selectedConclaveId}`, JSON.stringify(statsRes));
-        } catch { }
-      }
-      if (conclavesRes && conclavesRes.length > 0) {
-        setConclaves(conclavesRes.map(c => {
-          const s = (c.status || '').toLowerCase();
-          const hasSched = Boolean(c.scheduleSummary || c.schedule || ['running', 'completed', 'locked'].includes(s));
-          return {
-            ...c,
-            venueShort: (c.venueLocation || c.venue || 'N/A').split(',')[0] || 'N/A',
-            dateRange: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : (c.dateRange || 'N/A'),
-            progress: hasSched ? 100 : s === 'running' ? 60 : 0
-          };
-        }));
-      }
-
-      showToast('6 Demo Members Added', 'Added 6 members with 6 distinct categories and 2 captains. Seats per table set to 3.');
-    } catch (err) {
-      console.error('Failed to add demo members:', err);
-      showToast('Add Members Failed', err.message || 'Could not add demo members.');
-    } finally {
-      setIsAddingDemo(false);
     }
   };
 
@@ -924,7 +788,7 @@ export default function ScheduleGen({
         const name = m.name || m.userName || m.fullName || 'Member';
         const role = (m.role || '').toLowerCase() === 'captain' || m.isCaptain ? 'Table Captain' : 'Member';
         const isAct = Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || (m.status?.toLowerCase() === 'active'));
-        const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'M';
+        const initials = getInitials(name, 'U');
         return { id: m.id || m.uid || name, name, role, active: isAct, initials };
       });
     } else if (selectedConclave?.participants && selectedConclave.participants.length > 0) {
@@ -932,7 +796,7 @@ export default function ScheduleGen({
         const name = m.name || 'Member';
         const role = (m.role || '').toLowerCase() === 'captain' || m.isCaptain ? 'Table Captain' : 'Member';
         const isAct = Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || (m.status?.toLowerCase() === 'active'));
-        const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'M';
+        const initials = getInitials(name, 'U');
         return { id: m.id || name, name, role, active: isAct, initials };
       });
     } else {

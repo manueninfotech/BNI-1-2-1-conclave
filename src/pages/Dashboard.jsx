@@ -5,12 +5,9 @@ import {
   Award,
   Calendar,
   Clock,
-  ChevronRight,
   UserCheck,
   MapPin,
   Send,
-  Shield,
-  CheckCircle2,
   Handshake
 } from 'lucide-react';
 
@@ -19,6 +16,7 @@ import { api } from '../services/api';
 import { colors } from '../config/theme';
 import { formatStatus, getStatusBadgeClasses, getStatusDotClasses } from '../utils/statusUtils';
 import { useConclaveReferrals } from '../hooks/useConclaveReferrals';
+import { useConclaveStats } from '../hooks/useConclaveStats';
 
 export default function Dashboard({ setActiveTab, selectedConclaveId, setSelectedConclaveId, loggedInAdmin, embedded = false }) {
   // TanStack React Query: Conclaves list
@@ -30,15 +28,8 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     },
   });
 
-  // TanStack React Query: Conclave stats
-  const { data: stats = null } = useQuery({
-    queryKey: ['stats', selectedConclaveId],
-    queryFn: async () => {
-      if (!selectedConclaveId) return null;
-      return await api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null);
-    },
-    enabled: Boolean(selectedConclaveId),
-  });
+  // TanStack React Query: Conclave stats (shared cache with RoundRunner)
+  const { data: stats = null } = useConclaveStats(selectedConclaveId);
 
   // TanStack React Query: Real-time Conclave Referrals
   const { data: referrals = [] } = useConclaveReferrals(selectedConclaveId);
@@ -113,7 +104,7 @@ export default function Dashboard({ setActiveTab, selectedConclaveId, setSelecte
     const counts = {};
     filteredReferrals.forEach(r => {
       const giverId = r.fromMemberId || r.fromUserId || r.fromName;
-      const rawName = r.fromName || 'BNI Member';
+      const rawName = r.fromName || '1-2-1 Connect Member';
       const cleanName = rawName.replace(/\s*\(Active\)/gi, '').trim();
       if (!giverId) return;
       if (!counts[giverId]) {

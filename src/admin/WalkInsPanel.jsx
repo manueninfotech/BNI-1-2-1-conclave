@@ -139,9 +139,7 @@ export default function WalkInsPanel({ conclave, showToast }) {
                       {w.name}
                     </span>
                     {isBni(w) && (
-                      <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded">
-                        BNI
-                      </span>
+                      <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.2 rounded">1-2-1</span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-500 truncate mt-0.5">
@@ -191,10 +189,10 @@ export default function WalkInsPanel({ conclave, showToast }) {
                       onChange={(e) => setCaptainUid(e.target.value)}
                     >
                       <option value="">Pick a captain</option>
-                      <option value={w.uid}>{w.name} (this walk-in){isBni(w) ? ' · BNI' : ''}</option>
+                      <option value={w.uid}>{w.name} (this walk-in){isBni(w) ? ' · 1-2-1' : ''}</option>
                       {captainOptions.map((p) => (
                         <option key={p._originalUid} value={p._originalUid}>
-                          {p.name}{isBni(p) ? ' · BNI' : ''}
+                          {p.name}{isBni(p) ? ' · 1-2-1' : ''}
                         </option>
                       ))}
                     </select>

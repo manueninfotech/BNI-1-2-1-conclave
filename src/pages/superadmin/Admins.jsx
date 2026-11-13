@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { getInitials } from '../../utils/initials';
 import {
   Plus,
   Edit,
@@ -113,7 +114,7 @@ export default function SuperadminAdmins({ searchQuery }) {
     for (let i = 0; i < 6; i++) {
       randStr += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `BNI-R${randStr}`;
+    return `CON-R${randStr}`;
   };
 
   const generateDefaultPassword = (fullName) => {
@@ -304,14 +305,14 @@ export default function SuperadminAdmins({ searchQuery }) {
     const regionObj = regions.find(r => r.id === id);
     const regionName = regionObj ? regionObj.name : 'this region';
     setConfirmModal({
-      title: "Delete BNI Region",
+      title: "Delete 1-2-1 Connect Region",
       message: `Are you sure you want to delete the region "${regionName}"? All linked coordinators and conclaves will lose their region reference.`,
       onConfirm: async () => {
         try {
           await api.delete(`/admin/regions/${id}`);
           if (activeRegion?.id === id) setActiveRegion(null);
           loadData();
-          showToast('Region Deleted', 'BNI Region has been removed from the database.', 'warning');
+          showToast('Region Deleted', '1-2-1 Connect Region has been removed from the database.', 'warning');
         } catch (err) {
           console.error("Failed to delete region:", err);
           showToast('Failed to delete region', err.message || "Failed to delete region.", 'error');
@@ -326,8 +327,8 @@ export default function SuperadminAdmins({ searchQuery }) {
       {/* Header tabs */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Admins &amp; BNI Regions</h1>
-          <p className="text-xs text-zinc-500 font-semibold">Manage regional administrator accounts and BNI regional network nodes.</p>
+          <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Admins &amp; 1-2-1 Connect Regions</h1>
+          <p className="text-xs text-zinc-500 font-semibold">Manage regional administrator accounts and 1-2-1 Connect regional network nodes.</p>
         </div>
 
         <div className="flex gap-2">
@@ -369,7 +370,7 @@ export default function SuperadminAdmins({ searchQuery }) {
             : 'text-zinc-450 hover:text-zinc-700'
             }`}
         >
-          BNI Regions ({regions.length})
+          1-2-1 Connect Regions ({regions.length})
         </button>
       </div>
 
@@ -545,7 +546,7 @@ export default function SuperadminAdmins({ searchQuery }) {
               const adminRegion = activeAdmin.region || (activeAdmin.email?.includes('admin') || activeAdmin.email?.includes('super') ? 'Global (Superadmin)' : 'Guntur Region');
               const adminMobile = activeAdmin.mobile || 'N/A';
               const adminStatus = activeAdmin.status || 'Active';
-              const adminInitials = adminName.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'AD';
+              const adminInitials = getInitials(adminName, 'AD');
 
               return (
                 <>
@@ -797,7 +798,7 @@ export default function SuperadminAdmins({ searchQuery }) {
                   value={adminForm.name}
                   onChange={(e) => setAdminForm(prev => ({ ...prev, name: e.target.value }))}
                   className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
-                  placeholder="e.g. Sanjay Joshi"
+                  placeholder="Enter full name"
                 />
               </div>
 
@@ -809,7 +810,7 @@ export default function SuperadminAdmins({ searchQuery }) {
                   value={adminForm.email}
                   onChange={(e) => setAdminForm(prev => ({ ...prev, email: e.target.value }))}
                   className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
-                  placeholder="e.g. sanjay@bni.com"
+                  placeholder="admin@121connect.com"
                 />
               </div>
 
@@ -827,7 +828,7 @@ export default function SuperadminAdmins({ searchQuery }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-[9.5px] font-black text-zinc-450 uppercase tracking-widest">BNI Region</label>
+                  <label className="block text-[9.5px] font-black text-zinc-450 uppercase tracking-widest">1-2-1 Connect Region</label>
                   <select
                     value={adminForm.region}
                     onChange={(e) => setAdminForm(prev => ({ ...prev, region: e.target.value }))}
@@ -878,7 +879,7 @@ export default function SuperadminAdmins({ searchQuery }) {
           <div className="bg-white border border-zinc-250 rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] relative z-10 overflow-hidden animate-scale-up flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50">
               <h3 className="text-body-md font-black text-zinc-900 leading-tight">
-                {editingRegion ? 'Edit BNI Region' : 'Add BNI Region'}
+                {editingRegion ? 'Edit 1-2-1 Connect Region' : 'Add 1-2-1 Connect Region'}
               </h3>
               <button
                 onClick={() => setShowRegionModal(false)}

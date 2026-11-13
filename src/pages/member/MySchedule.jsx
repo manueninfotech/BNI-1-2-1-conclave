@@ -188,7 +188,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
   if (isConclaveCompleted || !conclaveSyncData || rounds.length === 0) {
     // Pull available info from fetchedConclave list or syncData metadata
     const conclaveTitle = conclaveSyncData?.conclaveStatus?.name ||
-      conclaveSyncData?.conclaveStatus?.title || 'BNI Conclave';
+      conclaveSyncData?.conclaveStatus?.title || '1-2-1 Connect Conclave';
     const venueStr = conclaveSyncData?.conclaveStatus?.venue || '';
     // sync service returns: date (date string), startTime / endTime (ISO or HH:MM strings)
     const startDateStr = conclaveSyncData?.conclaveStatus?.date || '';

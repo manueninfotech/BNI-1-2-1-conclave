@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { fileUrl } from '../services/api';
+import { getInitials } from '../utils/initials';
 
 /** A member's photo, or their initials when there is none (or it fails to load). */
 export default function Avatar({ name, photoUrl, size = 32, className = '' }) {
   const [broken, setBroken] = useState(false);
+
+  useEffect(() => {
+    setBroken(false);
+  }, [photoUrl]);
+
   const src = !broken && fileUrl(photoUrl);
-  const initials = String(name || '?').trim().split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase() || '?';
+  const initials = getInitials(name, 'U');
   const style = { width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.36)) };
   return src ? (
     <img

@@ -287,7 +287,7 @@ export default function App() {
         setLoggedInAdmin(payload);
       } else {
         localStorage.removeItem('bni_logged_admin');
-        setLoggedInAdmin({ name: "Sanjay Wagle", email: "admin@bni.com", region: "All Regions" });
+        setLoggedInAdmin({ name: "Admin", email: "admin@121connect.com", region: "All Regions" });
       }
 
       setLoggedInCaptain(null);
@@ -583,7 +583,7 @@ export default function App() {
   // If logged in as a Captain, render the Captain portal layout
   if (userRole === 'captain') {
     return (
-      <div className="flex flex-col h-screen w-screen bg-zinc-50 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen w-screen bg-paper text-ink overflow-hidden font-sans">
         <CaptainHeader
           loggedInCaptain={loggedInCaptain}
           conclaveSyncData={conclaveSyncData}
@@ -664,7 +664,7 @@ export default function App() {
   // If logged in as a Member, render the Member portal layout with MemberHeader
   if (userRole === 'member') {
     return (
-      <div className="flex flex-col h-screen w-screen bg-zinc-50 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen w-screen bg-paper text-ink overflow-hidden font-sans">
         <MemberHeader
           loggedInMember={loggedInMember}
           conclaveSyncData={conclaveSyncData}

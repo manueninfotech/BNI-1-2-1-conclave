@@ -10,6 +10,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { api } from '../services/api';
+import { getInitials } from '../utils/initials';
 
 export default function Referrals({ loggedInUser, userType, conclaveSyncData }) {
   const [referrals, setReferrals] = useState([]);
@@ -392,7 +393,7 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
                     <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-zinc-100 text-zinc-700 rounded-full flex items-center justify-center text-[10px] font-extrabold shadow-3xs">
-                          {activeSubTab === 'received' ? (ref.fromName || 'M').split(' ').map(n => n[0]).join('') : (ref.toName || 'M').split(' ').map(n => n[0]).join('')}
+                          {getInitials(activeSubTab === 'received' ? ref.fromName : ref.toName, 'U')}
                         </div>
                         <div>
                           <p className="text-[11px] font-black text-zinc-850">
@@ -508,13 +509,13 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
 
               {/* Recipient Selection */}
               <div className="space-y-1 relative">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">BNI Recipient</label>
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">1-2-1 Connect Recipient</label>
 
                 {selectedRecipient ? (
                   <div className="p-2.5 border border-brand-red bg-red-50/5 rounded-lg flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 bg-brand-red text-white rounded-full flex items-center justify-center text-[9px] font-bold">
-                        {selectedRecipient.name.split(' ').map(n => n[0]).join('')}
+                        {getInitials(selectedRecipient.name, 'U')}
                       </div>
                       <div>
                         <p className="text-[11.5px] font-extrabold text-zinc-900 leading-none">{selectedRecipient.name}</p>
@@ -540,7 +541,7 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
                           setShowRecipientDropdown(true);
                         }}
                         onFocus={() => setShowRecipientDropdown(true)}
-                        placeholder="Search BNI member or category..."
+                        placeholder="Search 1-2-1 Connect member or category..."
                         className="w-full pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-[11px] font-semibold text-zinc-750 focus:outline-none focus:border-brand-red/50 focus:ring-2 focus:ring-brand-red/10 transition-smooth placeholder-zinc-400 bg-zinc-50/30"
                       />
                     </div>
@@ -561,7 +562,7 @@ export default function Referrals({ loggedInUser, userType, conclaveSyncData }) 
                               className="w-full text-left p-2.5 hover:bg-zinc-50 flex items-center gap-2 transition-smooth cursor-pointer"
                             >
                               <div className="w-6 h-6 bg-zinc-100 text-zinc-650 rounded-full flex items-center justify-center text-[8.5px] font-bold">
-                                {p.name.split(' ').map(n => n[0]).join('')}
+                                {getInitials(p.name, 'U')}
                               </div>
                               <div>
                                 <p className="text-[11.5px] font-bold text-zinc-800 leading-none">{p.name}</p>

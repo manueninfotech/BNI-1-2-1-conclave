@@ -1,21 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Phone, Mail, Building, Tag, Award, Send, ExternalLink, ShieldCheck } from 'lucide-react';
+import { getInitials, getProfilePhotoUrl } from '../utils/initials';
+import { fileUrl } from '../services/api';
 
 export default function MemberProfileModal({ member, onClose, onSendReferral, isReferralDisabled = false, referralDisabledReason = '' }) {
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [member]);
+
   if (!member) return null;
 
-  const initials = (member.name || 'Member')
-    .split(' ')
-    .map(n => n[0])
-    .filter(Boolean)
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
+  const initials = getInitials(member.name, 'U');
+  const rawPhoto = getProfilePhotoUrl(member);
+  const avatarSrc = !imgBroken && fileUrl(rawPhoto);
 
   const formattedPhone = member.phone || member.mobile || '+91 98765 43210';
-  const formattedEmail = member.email || `${member.name.toLowerCase().replace(/\s+/g, '.')}@bni.com`;
-  const chapter = member.chapter || 'BNI Chapter';
+  const formattedEmail = member.email || `${member.name.toLowerCase().replace(/\s+/g, '.')}@121connect.com`;
+  const chapter = member.chapter || '1-2-1 Connect Chapter';
   const company = member.company || member.businessName || 'Business Partner';
   const category = member.category || member.businessCategory || 'Business Professional';
 
@@ -33,8 +37,17 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
           </button>
 
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-brand-red text-white border-2 border-white/20 flex items-center justify-center font-black text-xl shadow-lg shrink-0 select-none">
-              {initials}
+            <div className="w-16 h-16 rounded-full bg-brand-red text-white border-2 border-white/20 flex items-center justify-center font-black text-xl shadow-lg shrink-0 select-none overflow-hidden">
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={member.name}
+                  onError={() => setImgBroken(true)}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span>{initials}</span>
+              )}
             </div>
 
             <div className="min-w-0 flex-1">
@@ -107,7 +120,7 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
           <div className="space-y-1.5">
             <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Business Profile</span>
             <div className="p-3.5 bg-zinc-50 border border-zinc-200/70 rounded-xl text-[11.5px] text-zinc-650 leading-relaxed font-semibold">
-              Specialized in {category} solutions and high-quality services for BNI members and corporate clients. Seated for active business networking.
+              Specialized in {category} solutions and high-quality services for 1-2-1 Connect members and corporate clients. Seated for active business networking.
             </div>
           </div>
 

@@ -49,7 +49,7 @@ export default function ConclaveForm({ mode, formData, setFormData, onSubmit, on
           <div className="space-y-3">
             <div>
               <label className={lbl} htmlFor="cf-name">Name</label>
-              <input id="cf-name" className={input} required value={formData.name} onChange={(e) => set({ name: e.target.value })} placeholder="BNI Guntur 121 Conclave" />
+              <input id="cf-name" className={input} required value={formData.name} onChange={(e) => set({ name: e.target.value })} placeholder="1-2-1 Connect Conclave" />
             </div>
             <div>
               <label className={lbl} htmlFor="cf-venue">Venue</label>

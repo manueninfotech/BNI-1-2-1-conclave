@@ -6,6 +6,7 @@ import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
 import { calculateRoundTiming, formatTime } from '../../utils/roundTiming';
 import { formatUpcomingRoundRange } from '../../utils/timeFormat';
+import { getInitials } from '../../utils/initials';
 
 export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyncData: propConclaveSyncData }) {
   const [syncData, setSyncData] = useState(propConclaveSyncData || null);
@@ -239,11 +240,11 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
               </div>
             ) : (
               filteredMembers.map((member) => {
-                const initials = member.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                const initials = getInitials(member.name, 'U');
                 const bgClass = member.isCaptain
                   ? 'bg-red-50/90 border-red-100/90 text-brand-red'
                   : 'bg-zinc-100/90 border-zinc-200/80 text-zinc-700';
-                const bniTag = 'BNI';
+                const bniTag = '1-2-1';
                 return (
                   <div
                     key={member.uid || member.name}
@@ -269,7 +270,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                     </div>
 
                     <div className="pt-3 border-t border-zinc-100 flex justify-between items-center text-[10px]">
-                      <span className="text-zinc-500 font-extrabold uppercase text-[9px] tracking-wider truncate">{member.chapter || 'BNI Chapter'}</span>
+                      <span className="text-zinc-500 font-extrabold uppercase text-[9px] tracking-wider truncate">{member.chapter || '1-2-1 Connect Chapter'}</span>
                       <span className="text-brand-red bg-red-50 border border-red-100 px-2 py-0.5 rounded font-black text-[9px] uppercase tracking-wider">
                         {bniTag}
                       </span>
@@ -535,7 +536,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                           <div key={member.uid || member.id || idx} className="flex items-center justify-between p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-[11.5px]">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded bg-white border border-zinc-200 flex items-center justify-center font-bold text-zinc-500 text-xs shrink-0">
-                                {(member.name || 'M').split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase()}
+                                {getInitials(member.name, 'U')}
                               </div>
                               <div>
                                 <span className="font-black text-zinc-850 block leading-tight">{member.name}</span>

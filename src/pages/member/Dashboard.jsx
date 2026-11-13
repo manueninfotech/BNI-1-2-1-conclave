@@ -18,6 +18,7 @@ import MemberProfileModal from '../../components/MemberProfileModal';
 import { api } from '../../services/api';
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
 import { formatUpcomingRoundStartTime } from '../../utils/timeFormat';
+import { getInitials } from '../../utils/initials';
 
 const formatTimeNice = (val, fallback = '') => {
   if (!val) return fallback;
@@ -425,7 +426,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-zinc-900 tracking-tight">Upcoming Conclaves</h2>
-              <p className="text-xs text-zinc-500 font-medium">Register for upcoming BNI networking conclaves.</p>
+              <p className="text-xs text-zinc-500 font-medium">Register for upcoming 1-2-1 Connect conclaves.</p>
             </div>
             <button
               onClick={() => onTabChange && onTabChange('registrations')}
@@ -439,7 +440,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
             <div className="bg-white p-8 rounded-xl border border-zinc-200 text-center">
               <Building2 className="w-10 h-10 text-zinc-300 mx-auto mb-2" />
               <p className="text-sm font-extrabold text-zinc-700">No upcoming conclaves scheduled at the moment</p>
-              <p className="text-xs text-zinc-500 mt-1">Please check back soon for upcoming regional BNI conclave announcements.</p>
+              <p className="text-xs text-zinc-500 mt-1">Please check back soon for upcoming regional 1-2-1 Connect conclave announcements.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -450,9 +451,9 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                       <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                         REGISTRATION OPEN
                       </span>
-                      <span className="text-[10px] text-zinc-400 font-semibold">{c.region || 'BNI Region'}</span>
+                      <span className="text-[10px] text-zinc-400 font-semibold">{c.region || '1-2-1 Connect Region'}</span>
                     </div>
-                    <h3 className="text-base font-black text-zinc-900 leading-snug">{c.title || c.name || 'BNI Conclave'}</h3>
+                    <h3 className="text-base font-black text-zinc-900 leading-snug">{c.title || c.name || '1-2-1 Connect Conclave'}</h3>
                     {c.dateRange && (
                       <p className="text-xs text-zinc-500 font-medium flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -776,7 +777,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
               <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest block mb-2.5">Networking In Progress</span>
               <div className="flex -space-x-2.5 overflow-hidden">
                 {(conclaveSyncData?.tableOccupants || []).map((m, idx) => {
-                  const initials = m.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                  const initials = getInitials(m.name, 'U');
                   return (
                     <div
                       key={idx}
@@ -885,7 +886,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredOccupants.map((member) => {
-              const initials = member.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+              const initials = getInitials(member.name, 'U');
               return (
                 <div
                   key={member.uid}
@@ -1004,7 +1005,7 @@ export default function MemberDashboard({ loggedInMember, onTabChange, conclaveS
                 <div className="flex items-center gap-2 mt-4 pt-3.5 border-t border-zinc-100">
                   <div className="flex -space-x-1.5">
                     {nextRoundSeating.participants.slice(0, 3).map((p, pIdx) => {
-                      const initials = p.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                      const initials = getInitials(p.name, 'U');
                       return (
                         <div key={pIdx} className="w-6 h-6 rounded-full bg-zinc-100 border border-white text-[7.5px] font-bold flex items-center justify-center" title={p.name}>
                           {initials}

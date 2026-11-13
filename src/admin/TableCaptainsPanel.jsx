@@ -34,7 +34,7 @@ export default function TableCaptainsPanel({ conclave, activeRound, onChanged, s
         .filter((id) => id !== null && id !== undefined)
         .map((id) => byId.get(id))
         .filter(Boolean);
-      // BNI members first: organisers prefer a BNI member as stand-in.
+      // 1-2-1 Connect members first: organisers prefer a 1-2-1 Connect member as stand-in.
       const options = [...seated].sort((a, b) => {
         const ab = String(a.membership || '').toUpperCase() === 'BNI' ? 0 : 1;
         const bb = String(b.membership || '').toUpperCase() === 'BNI' ? 0 : 1;
@@ -199,7 +199,7 @@ export default function TableCaptainsPanel({ conclave, activeRound, onChanged, s
                       const isBni = String(p.membership || '').toUpperCase() === 'BNI';
                       return (
                         <option key={val} value={val}>
-                          {p.name} {isBni ? '• BNI' : ''} ({p.businessCategory || p.category || 'Member'})
+                          {p.name} {isBni ? '• 1-2-1' : ''} ({p.businessCategory || p.category || 'Member'})
                         </option>
                       );
                     })}

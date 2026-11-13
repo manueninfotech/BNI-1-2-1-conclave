@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell } from 'lucide-react';
 import { getNotifications, markAllRead, addNotification } from '../utils/notifications';
-import { api } from '../services/api';
+import { api, fileUrl } from '../services/api';
+import { getInitials, getProfilePhotoUrl } from '../utils/initials';
 
 export default function MemberHeader({
   loggedInMember,
@@ -15,6 +16,11 @@ export default function MemberHeader({
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState(() => getNotifications({ userUid, conclaveId }));
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [loggedInMember]);
 
   const dropdownRef = useRef(null);
 
@@ -84,23 +90,20 @@ export default function MemberHeader({
     { id: 'referrals', label: 'Referrals' }
   ];
 
-  const displayName = loggedInMember?.name || 'BNI Member';
-  const displayInitials = displayName
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
+  const rawPhoto = getProfilePhotoUrl(loggedInMember);
+  const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+  const displayName = loggedInMember?.name || '1-2-1 Connect Member';
+  const displayInitials = getInitials(displayName, 'U');
 
   return (
     <>
       <header className="w-full bg-white border-b border-zinc-200 sticky top-0 z-40 px-4 sm:px-6 h-16 flex items-center justify-between shadow-xs font-sans">
 
-        {/* Left section: Official BNI Logo & Title */}
-        <div className="flex items-center gap-2 border-b border-transparent shrink-0">
+        {/* Left section: Official Logo & Title */}
+        <div className="flex items-center gap-2.5 border-b border-transparent shrink-0">
           <img
-            src="/bni-conclave.png"
-            alt="BNI Logo"
+            src="/lockup-horizontal-colour.png"
+            alt="1-2-1 Connect"
             className="h-8 w-auto object-contain shrink-0"
           />
           <div className="hidden lg:flex items-center border-l border-zinc-200 pl-2.5 h-6">
@@ -192,8 +195,17 @@ export default function MemberHeader({
 
           {/* Member User Profile Avatar / Logout Dropdown */}
           <div className="group relative flex items-center gap-2 cursor-pointer shrink-0">
-            <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0">
-              {displayInitials}
+            <div className="w-7.5 h-7.5 rounded-full bg-brand-red text-white flex items-center justify-center font-bold text-[10.5px] border border-brand-red/10 shadow-sm shrink-0 overflow-hidden">
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={displayName}
+                  onError={() => setImgBroken(true)}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              ) : (
+                <span>{displayInitials}</span>
+              )}
             </div>
 
             <div className="hidden lg:flex flex-col">

@@ -1,44 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,700&display=swap');
 @import "tailwindcss";
 
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: local('Helvetica Neue'), local('HelveticaNeue'), local('Helvetica'), url('/fonts/arial.ttf') format('truetype');
-  font-weight: 100 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: local('Helvetica Neue Bold'), local('HelveticaNeue-Bold'), local('Helvetica-Bold'), url('/fonts/arialbd.ttf') format('truetype');
-  font-weight: 500 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Arial';
-  src: local('Arial'), url('/fonts/arial.ttf') format('truetype');
-  font-weight: 100 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Arial';
-  src: local('Arial Bold'), local('Arial-Bold'), url('/fonts/arialbd.ttf') format('truetype');
-  font-weight: 500 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 @theme {
-  --color-brand-red: #CF2030;
-  --color-bni-red: #CF2030;
+  --color-brand-red: #D8061B;
+  --color-bni-red: #D8061B;
+  --color-connect-red: #D8061B;
+  --color-deep-red: #B00E29;
+  --color-coral: #F04E66;
+  --color-ink: #17110F;
+  --color-paper: #FAF7F6;
+  --color-graphite: #3A3F4A;
+  --color-gold: #F4B740;
   --color-sterling-grey: #C8C8C8;
   --color-cool-grey-light: #F2F2F2;
   --color-cool-grey-dark: #64666A;
-  --color-process-black: #000000;
+  --color-process-black: #17110F;
   --color-zinc-55: #f7f7f8;
   --color-zinc-150: #ececec;
   --color-zinc-250: #e2e2e5;
@@ -51,24 +27,40 @@
   --color-zinc-755: #27272a;
   --color-zinc-850: #18181b;
   --color-zinc-955: #000000;
-  --font-display: "Helvetica Neue", Arial, sans-serif;
-  --font-sans: "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Enforce official theme.js typography ("Helvetica Neue", Arial, sans-serif) universally */
+/* Enforce official Plus Jakarta Sans typography universally */
 html,
 body,
 #root,
 .admin-panel,
 .admin-panel * {
-  font-family: "Helvetica Neue", Arial, sans-serif !important;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 body {
-  font-family: "Helvetica Neue", Arial, sans-serif !important;
+  background-color: #FAF7F6;
+  color: #17110F;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Headlines: ExtraBold (800) with slightly tight spacing (-2% / -0.02em) */
+h1, h2, h3, .headline {
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Subhead: Bold (700) */
+h4, h5, h6, .subhead {
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700;
 }
 
 button,
@@ -76,7 +68,7 @@ input,
 optgroup,
 select,
 textarea {
-  font-family: "Helvetica Neue", Arial, sans-serif !important;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 
@@ -324,33 +316,4 @@ main>div.admin-home-dashboard>*:first-child {
   display: none;
   width: 0;
   height: 0;
-}
-
-/* Global Card Styling: Subtle, elegant BNI red outline border and shadow removal, keeping original backgrounds */
-*[class*="rounded-xl"].border,
-*[class*="rounded-lg"].border,
-*[class*="rounded-2xl"].border,
-*[class*="rounded-3xl"].border,
-*[class*="rounded-xl"][class*="border-zinc-"],
-*[class*="rounded-lg"][class*="border-zinc-"],
-*[class*="rounded-2xl"][class*="border-zinc-"],
-*[class*="rounded-3xl"][class*="border-zinc-"],
-select[class*="border-zinc-"],
-input[class*="border-zinc-"],
-button[class*="border-zinc-"] {
-  border-color: rgba(207, 32, 48, 0.22) !important;
-  box-shadow: none !important;
-}
-
-/* Quick Actions Buttons: Keep light grey shade but add the BNI red border */
-.quick-action-btn {
-  border-color: rgba(207, 32, 48, 0.22) !important;
-  background-color: #ffffff !important;
-  /* bg-white */
-  box-shadow: none !important;
-}
-
-.quick-action-btn:hover {
-  background-color: #fef2f2 !important;
-  /* hover:bg-red-50/50 */
 }

@@ -91,13 +91,13 @@ export default function SuperadminDashboard({ setActiveTab }) {
       {/* Welcome Banner */}
       <div>
         <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Superadmin Dashboard</h1>
-        <p className="text-xs text-zinc-500 font-semibold mt-0.5">Global BNI Conclave directory network oversight &amp; regional admin statistics.</p>
+        <p className="text-xs text-zinc-500 font-semibold mt-0.5">Global 1-2-1 Connect Conclave directory network oversight &amp; regional admin statistics.</p>
       </div>
 
       {/* KPI Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
         {[
-          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]", icon: Globe, iconBg: "bg-emerald-50 text-[#00875A]" },
+          { label: "Total 1-2-1 Connect Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]", icon: Globe, iconBg: "bg-emerald-50 text-[#00875A]" },
           { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", tab: "admins", color: "text-zinc-600", icon: ShieldCheck, iconBg: "bg-zinc-100 text-zinc-700" },
           { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", tab: "conclaves", color: "text-[#00875A]", icon: CalendarRange, iconBg: "bg-red-50 text-brand-red" },
           { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", tab: "members", color: "text-brand-red", icon: Users, iconBg: "bg-blue-50 text-blue-600" }
@@ -132,7 +132,7 @@ export default function SuperadminDashboard({ setActiveTab }) {
           <div className="space-y-4">
             <div>
               <h2 className="text-body-md font-black text-zinc-900 leading-tight">Conclaves per Region</h2>
-              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">Events count grouped by BNI region.</p>
+              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">Events count grouped by regional network.</p>
             </div>
 
             <div className="space-y-3.5 pt-2">

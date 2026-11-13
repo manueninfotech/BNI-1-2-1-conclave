@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, fileUrl } from '../../services/api';
+import { getInitials, getProfilePhotoUrl } from '../../utils/initials';
 import {
   CheckCircle,
   Check,
@@ -19,6 +20,7 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [imgBroken, setImgBroken] = useState(false);
 
   const showToast = (title, desc, type = 'success') => {
     setToast({ title, desc, type });
@@ -39,7 +41,7 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
       designation: cap?.designation || 'Table Captain',
       company: cap?.company || cap?.businessName || 'Self Employed',
       category: cap?.category || cap?.businessCategory || 'General',
-      chapter: cap?.chapter || 'BNI Chapter',
+      chapter: cap?.chapter || '1-2-1 Connect Chapter',
       registrationDate: cap?.registrationDate || cap?.joinedDate || 'N/A'
     };
   });
@@ -99,13 +101,13 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
     }
   };
 
-  const displayInitials = (profileData.name || 'Captain')
-    .split(' ')
-    .map(n => n[0])
-    .filter(Boolean)
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
+  useEffect(() => {
+    setImgBroken(false);
+  }, [profileData?.photoUrl, profileData?.photo, loggedInCaptain]);
+
+  const rawPhoto = getProfilePhotoUrl(profileData) || getProfilePhotoUrl(loggedInCaptain);
+  const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+  const displayInitials = getInitials(profileData.name, 'U');
 
   const captainId = loggedInCaptain?.uid || loggedInCaptain?.id || loggedInCaptain?.bniId;
 
@@ -126,8 +128,17 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
           <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
             <div className="flex flex-col items-center text-center">
               <div className="relative mb-4">
-                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none">
-                  {displayInitials}
+                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none overflow-hidden">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={profileData.name}
+                      onError={() => setImgBroken(true)}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span>{displayInitials}</span>
+                  )}
                 </div>
                 <span className="absolute bottom-0 right-0 bg-brand-red text-white p-1 rounded-full border-2 border-white flex items-center justify-center">
                   <Check className="w-3 h-3 text-white stroke-[3.5]" />
@@ -261,7 +272,7 @@ export default function CaptainProfile({ loggedInCaptain, onTabChange, onLogout 
                 { label: "Designation", key: "designation", type: "text" },
                 { label: "Company", key: "company", type: "text" },
                 { label: "Business Category", key: "category", type: "text" },
-                { label: "BNI Chapter", key: "chapter", type: "text", disabled: true },
+                { label: "Chapter", key: "chapter", type: "text", disabled: true },
                 { label: "Registration Date", key: "registrationDate", type: "text", disabled: true }
               ].map((field) => (
                 <div key={field.key}>

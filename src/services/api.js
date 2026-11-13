@@ -28,11 +28,13 @@ const defaultBackendUrl = typeof window !== 'undefined' && (window.location.host
 
 export const BASE_URL = import.meta.env.VITE_API_URL || defaultBackendUrl;
 
-export async function getAuthToken() {
+export async function getAuthToken(forceRefresh = false) {
   try {
     const user = await getAuthenticatedUser();
-    if (user) return await user.getIdToken(false);
-  } catch (e) {}
+    if (user) return await user.getIdToken(forceRefresh);
+  } catch (e) {
+    console.warn('[auth] Failed to retrieve fresh auth token:', e?.message || e);
+  }
   return localStorage.getItem('bni_auth_token') || null;
 }
 
@@ -113,7 +115,7 @@ async function getAuthHeaders() {
   } else if (role === 'superadmin') {
     activeSession = localStorage.getItem('bni_superadmin_profile') || localStorage.getItem('bni_logged_admin');
     if (!headers['X-User-Id']) headers['X-User-Id'] = 'superadmin';
-    if (!headers['X-User-Email']) headers['X-User-Email'] = 'superadmin@bni.com';
+    if (!headers['X-User-Email']) headers['X-User-Email'] = 'superadmin@121connect.com';
   } else {
     activeSession = localStorage.getItem('bni_logged_admin');
   }

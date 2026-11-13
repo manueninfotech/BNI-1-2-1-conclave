@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useConclave } from '../hooks/useConclave';
+import { useConclaveReferrals } from '../hooks/useConclaveReferrals';
+import { useConclaveStats } from '../hooks/useConclaveStats';
+import { useConclaveLive } from '../hooks/useConclaveLive';
 import { broadcastTabMessage } from '../utils/syncBus';
 import {
   CheckCircle2,
@@ -26,6 +30,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { getInitials } from '../utils/initials';
 import confetti from 'canvas-confetti';
 import { colors } from '../config/theme';
 
@@ -54,125 +59,41 @@ export default function RoundRunner({
   const queryClient = useQueryClient();
   const roundRunnerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [conclaves, setConclaves] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [filteredReferrals, setFilteredReferrals] = useState([]);
-  const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [confirmModal, setConfirmModal] = useState(null);
 
-  // Initial load of conclaves list
-  useEffect(() => {
-    async function loadConclaves() {
-      try {
-        const data = await api.get('/admin/conclaves');
-        if (Array.isArray(data)) {
-          setConclaves(data);
-        }
-      } catch (err) {
-        console.error("Failed to load conclaves:", err);
-      }
-    }
-    loadConclaves();
-  }, []);
+  // TanStack Query shared cache hooks (deduplicated across ConclaveWorkspace & tabs)
+  const { data: selectedConclave = null } = useConclave(selectedConclaveId);
+  const { data: rawReferrals = [] } = useConclaveReferrals(selectedConclaveId);
+  const { data: stats = null } = useConclaveStats(selectedConclaveId);
+  useConclaveLive(selectedConclaveId);
 
-  // Real-time backend synchronization (fast 1.5s cadence for live referrals, 4s for general stats)
+  // Derives filtered referrals array cleanly from shared query cache
+  const filteredReferrals = useMemo(() => {
+    return Array.isArray(rawReferrals) ? rawReferrals : (rawReferrals?.referrals || []);
+  }, [rawReferrals]);
+
+  // Event listeners for instant 0ms update when referrals are submitted locally or in another tab
   useEffect(() => {
     if (!selectedConclaveId) return;
-    let isMounted = true;
-    let isFetchingRefs = false;
-    let isFetchingMeta = false;
 
-    // Fast-path referrals sync for instantaneous chart & stats updates
-    const fetchReferralsOnly = async () => {
-      if (isFetchingRefs || !isMounted) return;
-      isFetchingRefs = true;
-      try {
-        const refData = await api.get(`/admin/conclaves/${selectedConclaveId}/referrals`).catch(() => null);
-        if (isMounted && Array.isArray(refData)) {
-          setFilteredReferrals(prev => {
-            if (prev.length === refData.length && JSON.stringify(prev) === JSON.stringify(refData)) {
-              return prev;
-            }
-            return refData;
-          });
-        }
-      } catch (err) {
-        console.warn("Live referrals sync error:", err);
-      } finally {
-        isFetchingRefs = false;
-      }
-    };
-
-    // Metadata & stats sync (attendance, counts, conclave status)
-    const syncConclaveMetadata = async () => {
-      if (isFetchingMeta || !isMounted) return;
-      isFetchingMeta = true;
-      try {
-        const [statsData, freshConclave, attData] = await Promise.all([
-          api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null),
-          api.get(`/admin/conclaves/${selectedConclaveId}`).catch(() => null),
-          api.get(`/admin/conclaves/${selectedConclaveId}/attendance`).catch(() => null),
-        ]);
-
-        if (isMounted) {
-          if (statsData) setStats(statsData);
-          if (Array.isArray(attData)) setAttendanceRecords(attData);
-          if (freshConclave && freshConclave.id) {
-            setConclaves(prev => prev.map(c => c.id === freshConclave.id ? { ...c, ...freshConclave } : c));
-          }
-        }
-      } catch (err) {
-        console.warn("Conclave metadata sync error:", err);
-      } finally {
-        isFetchingMeta = false;
-      }
-    };
-
-    // Initial immediate fetch
-    fetchReferralsOnly();
-    syncConclaveMetadata();
-
-    // Referrals poll on a rapid 1.5s interval so slips appear almost instantly
-    const refInterval = setInterval(fetchReferralsOnly, 1500);
-    // General metadata polls every 4s
-    const metaInterval = setInterval(syncConclaveMetadata, 4000);
-
-    // Event listeners for instant 0ms update when referrals are submitted locally or in another tab
     const handleInstantReferral = () => {
-      fetchReferralsOnly();
+      queryClient.invalidateQueries({ queryKey: ['referrals', selectedConclaveId] });
     };
 
     const handleStorageChange = (e) => {
       if (e.key === 'bni_referrals') {
-        fetchReferralsOnly();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchReferralsOnly();
-        syncConclaveMetadata();
+        queryClient.invalidateQueries({ queryKey: ['referrals', selectedConclaveId] });
       }
     };
 
     window.addEventListener('bni_referral_sent', handleInstantReferral);
     window.addEventListener('storage', handleStorageChange);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      isMounted = false;
-      clearInterval(refInterval);
-      clearInterval(metaInterval);
       window.removeEventListener('bni_referral_sent', handleInstantReferral);
       window.removeEventListener('storage', handleStorageChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedConclaveId]);
-
-  const selectedConclave = useMemo(() =>
-    conclaves.find(c => c.id === selectedConclaveId),
-    [conclaves, selectedConclaveId]
-  );
+  }, [selectedConclaveId, queryClient]);
 
   const conclaveName = selectedConclave?.name || 'Mega 1-to-1 Conclave';
   const statusLower = (selectedConclave?.status || '').toLowerCase();
@@ -255,7 +176,7 @@ export default function RoundRunner({
               anchorCaptainName: anchorCaptain?.name,
               category: effectiveCaptain?.businessCategory || effectiveCaptain?.category || 'Captain',
               chapter: effectiveCaptain?.chapter || '',
-              initials: effectiveCaptain?.name ? effectiveCaptain.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'TC'
+              initials: getInitials(effectiveCaptain?.name, 'TC')
             },
             members
           };
@@ -492,13 +413,13 @@ export default function RoundRunner({
       timingState.isEnded ||
       clock.phase === 'waiting' ||
       clock.phase === 'done' ||
-      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral' && timingState.phase !== 'paused')
+      (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0 && timingState.phase !== 'active' && timingState.phase !== 'referral' && timingState.phase !== 'paused' && timingState.phase !== 'transition')
     );
   }, [isCompleted, isUpcoming, activeRound, isMovePhase, timingState.phase, timingState.isEnded, timingState.totalRemaining, clock.phase]);
 
   // Round is actively running only when unpaused, not ended, not upcoming, and has time remaining
   const isRoundRunning = useMemo(() => {
-    if (isCompleted || isUpcoming || activeRound === 0 || isRoundEnded) return false;
+    if (isCompleted || isUpcoming || activeRound === 0 || isRoundEnded || isRoundPaused) return false;
     if (isMovePhase) return true;
     if (timingState.totalRemaining !== undefined && timingState.totalRemaining <= 0) return false;
     if (timingState.phase === 'ended' || timingState.phase === 'not_started' || timingState.phase === 'ready') return false;
@@ -511,7 +432,7 @@ export default function RoundRunner({
       timingState.phase === 'referral' ||
       timingState.phase === 'transition'
     );
-  }, [isCompleted, isUpcoming, activeRound, isRoundEnded, isMovePhase, timerRunning, timingState]);
+  }, [isCompleted, isUpcoming, activeRound, isRoundEnded, isRoundPaused, isMovePhase, timerRunning, timingState]);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -670,9 +591,9 @@ export default function RoundRunner({
           ? r.fromName
           : (participant?.name || r.giverName || 'Member');
 
-        const resolvedCategory = (r.fromCategory && r.fromCategory !== 'BNI Member' && r.fromCategory !== 'Uncategorized')
+        const resolvedCategory = (r.fromCategory && r.fromCategory !== '1-2-1 Connect Member' && r.fromCategory !== 'Uncategorized')
           ? r.fromCategory
-          : (participant?.businessCategory || participant?.category || r.fromCategory || 'BNI Member');
+          : (participant?.businessCategory || participant?.category || r.fromCategory || '1-2-1 Connect Member');
 
         counts[giverId] = {
           name: resolvedName.replace(/\s*\(Active\)/gi, '').trim(),
@@ -733,15 +654,13 @@ export default function RoundRunner({
 
     if (selectedConclaveId) {
       const mode = nextVal ? 'automatic' : 'manual';
-      setConclaves(prev => prev.map(c => {
-        if (c.id === selectedConclaveId) {
-          return { ...c, roundProgressionMode: mode };
-        }
-        return c;
-      }));
+      queryClient.setQueryData(['conclave', selectedConclaveId], old => (
+        old ? { ...old, roundProgressionMode: mode } : old
+      ));
 
       try {
         await api.post(`/admin/conclaves/${selectedConclaveId}/progression-mode`, { mode });
+        queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
         showToast('Progression Mode', `Auto progression set to ${nextVal ? 'ON' : 'OFF'}.`);
       } catch (err) {
         console.warn("Failed to update progression mode on server:", err);
@@ -750,34 +669,28 @@ export default function RoundRunner({
         try {
           localStorage.setItem('bni_auto_advance_enabled', String(previousVal));
         } catch { }
-        setConclaves(prev => prev.map(c => {
-          if (c.id === selectedConclaveId) {
-            return { ...c, roundProgressionMode: previousVal ? 'automatic' : 'manual' };
-          }
-          return c;
-        }));
+        queryClient.setQueryData(['conclave', selectedConclaveId], old => (
+          old ? { ...old, roundProgressionMode: previousVal ? 'automatic' : 'manual' } : old
+        ));
         showToast('Progression Mode Failed', err.message || 'Cannot update progression mode.');
       }
     }
   };
 
-  const handleStartNextRound = async (customRoundNum = null) => {
+  const executeStartNextRound = async (customRoundNum = null) => {
     if (isStartingRound) return; // ignore rapid double-clicks (bug #12)
     setIsStartingRound(true);
     const nextRoundVal = customRoundNum !== null ? customRoundNum : (activeRound + 1);
     const now = new Date();
 
-    setConclaves(prev => prev.map(c => {
-      if (c.id === selectedConclaveId) {
-        return {
-          ...c,
-          currentRound: nextRoundVal,
-          currentRoundStartedAt: now,
-          status: 'running'
-        };
-      }
-      return c;
-    }));
+    queryClient.setQueryData(['conclave', selectedConclaveId], old => (
+      old ? {
+        ...old,
+        currentRound: nextRoundVal,
+        currentRoundStartedAt: now,
+        status: 'running'
+      } : old
+    ));
     setTimerRunning(true);
     setTimeLeft(ROUND_BLOCK_DURATION_SECS);
 
@@ -786,11 +699,9 @@ export default function RoundRunner({
         roundNumber: nextRoundVal
       });
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
-      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', selectedConclaveId] });
+      queryClient.invalidateQueries({ queryKey: ['referrals', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
-      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
-      const data = await api.get('/admin/conclaves');
-      if (Array.isArray(data)) setConclaves(data);
       playBellSound('double');
       showToast('Round Started', `Round ${nextRoundVal} is live! Tables synced.`);
     } catch (err) {
@@ -801,17 +712,45 @@ export default function RoundRunner({
     }
   };
 
+  const handleStartNextRound = (customRoundNum = null) => {
+    if (isCompleted) {
+      showToast('Conclave Concluded', 'This conclave is already finished.');
+      return;
+    }
+
+    if (activeRound >= totalRounds && !isUpcoming) {
+      setConfirmModal({
+        title: 'All Rounds Completed',
+        message: `All ${totalRounds} scheduled rounds have been completed. Would you like to conclude and finish the conclave now?`,
+        confirmText: 'Yes, Finish Conclave',
+        confirmColor: 'brand',
+        onConfirm: executeFinishConclave
+      });
+      return;
+    }
+
+    const nextRoundVal = customRoundNum !== null ? customRoundNum : (activeRound + 1);
+    const isRound1 = activeRound === 0 || isUpcoming;
+
+    setConfirmModal({
+      title: isRound1 ? 'Start Round 1?' : `Start Round ${nextRoundVal}?`,
+      message: isRound1
+        ? 'Are you sure you want to begin Round 1? Seated members will be notified and the round timer will begin.'
+        : `Are you sure you want to start Round ${nextRoundVal}? All tables will sync and members will move to their next assignments.`,
+      confirmText: isRound1 ? 'Yes, Start Round 1' : `Yes, Start Round ${nextRoundVal}`,
+      confirmColor: 'emerald',
+      onConfirm: () => executeStartNextRound(customRoundNum)
+    });
+  };
+
   const executeFinishConclave = async () => {
-    setConclaves(prev => prev.map(c => {
-      if (c.id === selectedConclaveId) {
-        return {
-          ...c,
-          status: 'completed',
-          currentRound: totalRounds
-        };
-      }
-      return c;
-    }));
+    queryClient.setQueryData(['conclave', selectedConclaveId], old => (
+      old ? {
+        ...old,
+        status: 'completed',
+        currentRound: totalRounds
+      } : old
+    ));
     setTimerRunning(false);
     setTimeLeft(0);
     confetti({
@@ -823,11 +762,8 @@ export default function RoundRunner({
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/complete`);
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
-      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
-      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
-      const data = await api.get('/admin/conclaves');
-      if (Array.isArray(data)) setConclaves(data);
       showToast('Conclave Concluded', 'Live conclave finished successfully.');
     } catch (err) {
       console.error("Failed to conclude conclave:", err);
@@ -836,74 +772,87 @@ export default function RoundRunner({
   };
 
   const handleFinishConclave = () => {
+    if (isCompleted) {
+      showToast('Conclave Concluded', 'This conclave is already finished.');
+      return;
+    }
     setConfirmModal({
       title: 'Finish Entire Conclave?',
       message: 'Are you sure you want to conclude the conclave? This will complete all rounds and finalize participation.',
       confirmText: 'Yes, Finish Conclave',
+      confirmColor: 'brand',
       onConfirm: executeFinishConclave
     });
   };
 
   const handlePauseRound = async () => {
-    if (!isRoundRunning && !isMovePhase) return;
+    if (!selectedConclaveId || !isRoundRunning) return;
+
+    await queryClient.cancelQueries({ queryKey: ['conclave', selectedConclaveId] });
+    const previousConclave = queryClient.getQueryData(['conclave', selectedConclaveId]);
+    const previousTimerRunning = timerRunning;
+
     try {
       const now = new Date();
-      setConclaves(prev => prev.map(c => {
-        if (c.id === selectedConclaveId) {
-          const startedAt = c.currentRoundStartedAt ? new Date(c.currentRoundStartedAt).getTime() : Date.now();
-          const elapsed = Math.max(0, now.getTime() - startedAt);
-          return {
-            ...c,
-            isRoundPaused: true,
-            roundPausedAt: now,
-            roundElapsedMsBeforePause: elapsed,
-          };
-        }
-        return c;
-      }));
+      queryClient.setQueryData(['conclave', selectedConclaveId], old => {
+        if (!old) return old;
+        const startedAt = old.currentRoundStartedAt ? new Date(old.currentRoundStartedAt).getTime() : Date.now();
+        const elapsed = Math.max(0, now.getTime() - startedAt);
+        return {
+          ...old,
+          isRoundPaused: true,
+          roundPausedAt: now,
+          roundElapsedMsBeforePause: elapsed,
+        };
+      });
       setTimerRunning(false);
 
       await api.post(`/admin/conclaves/${selectedConclaveId}/pause-round`);
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
-      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
-      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
-      const data = await api.get('/admin/conclaves');
-      if (Array.isArray(data)) setConclaves(data);
       showToast('Round Paused', `Round ${activeRound} timer paused.`);
     } catch (err) {
+      if (previousConclave !== undefined) {
+        queryClient.setQueryData(['conclave', selectedConclaveId], previousConclave);
+      }
+      setTimerRunning(previousTimerRunning);
       console.error("Failed to pause round:", err);
       showToast('Pause Failed', err.message || "Could not pause round.");
     }
   };
 
   const handleResumeRound = async () => {
+    if (!selectedConclaveId || !isRoundPaused) return;
+
+    await queryClient.cancelQueries({ queryKey: ['conclave', selectedConclaveId] });
+    const previousConclave = queryClient.getQueryData(['conclave', selectedConclaveId]);
+    const previousTimerRunning = timerRunning;
+
     try {
       const now = Date.now();
-      setConclaves(prev => prev.map(c => {
-        if (c.id === selectedConclaveId) {
-          const elapsed = c.roundElapsedMsBeforePause || 0;
-          return {
-            ...c,
-            isRoundPaused: false,
-            roundPausedAt: null,
-            roundElapsedMsBeforePause: null,
-            currentRoundStartedAt: new Date(now - elapsed),
-          };
-        }
-        return c;
-      }));
+      queryClient.setQueryData(['conclave', selectedConclaveId], old => {
+        if (!old) return old;
+        const elapsed = old.roundElapsedMsBeforePause || 0;
+        return {
+          ...old,
+          isRoundPaused: false,
+          roundPausedAt: null,
+          roundElapsedMsBeforePause: null,
+          currentRoundStartedAt: new Date(now - elapsed),
+        };
+      });
+      setTimerRunning(true);
 
       await api.post(`/admin/conclaves/${selectedConclaveId}/resume-round`);
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
-      queryClient.invalidateQueries({ queryKey: ['conclaves'] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
-      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
-      const data = await api.get('/admin/conclaves');
-      if (Array.isArray(data)) setConclaves(data);
       playBellSound('single');
       showToast('Round Resumed', `Round ${activeRound} timer resumed.`);
     } catch (err) {
+      if (previousConclave !== undefined) {
+        queryClient.setQueryData(['conclave', selectedConclaveId], previousConclave);
+      }
+      setTimerRunning(previousTimerRunning);
       console.error("Failed to resume round:", err);
       showToast('Resume Failed', err.message || "Could not resume round.");
     }
@@ -947,12 +896,6 @@ export default function RoundRunner({
     if (count > 0) return count;
     return selectedConclave?.participants?.length || 0;
   }, [stats, tables, selectedConclave]);
-
-  const verifiedAttendanceCount = useMemo(() => {
-    const present = attendanceRecords.filter(a => a.status === 'present' || a.attended || a.checkedIn);
-    if (present.length > 0) return present.length;
-    return totalParticipantsSeated;
-  }, [attendanceRecords, totalParticipantsSeated]);
 
   const activeTablesCount = tables.length || selectedConclave?.scheduleSummary?.tableCount || stats?.counts?.captains || 0;
 
@@ -1007,11 +950,15 @@ export default function RoundRunner({
     }
 
     if (isRoundEnded) {
+      const nextRoundNum = activeRound + 1;
+      const isFinalRound = activeRound >= totalRounds;
       return {
         icon: <CheckCircle2 className="w-5 h-5 text-white" />,
         iconBg: 'bg-amber-600',
-        title: `Round ${activeRound} Finished`,
-        subtitle: activeRound < totalRounds ? `Ready for Round ${activeRound + 1}` : 'Ready to conclude conclave',
+        title: isFinalRound ? 'Final Round Completed' : `Next Round (R${nextRoundNum})`,
+        subtitle: isFinalRound
+          ? 'All rounds completed • Ready to conclude conclave'
+          : `Round ${activeRound} completed • Ready for Round ${nextRoundNum}`,
         timeText: '00:00',
         timeSub: 'Time Left',
         showProgress: false,
@@ -1030,12 +977,48 @@ export default function RoundRunner({
       };
     }
 
+    const pausedAt = selectedConclave?.roundPausedAt ? new Date(selectedConclave.roundPausedAt) : null;
+    const pausedAtTime = pausedAt && !isNaN(pausedAt.getTime())
+      ? pausedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : null;
+
+    const isMoveTime = isMovePhase || clock.phase === 'move' || timingState.phase === 'transition';
+    const isReferralTime = (timingState.phase === 'referral' || clock.phase === 'referral') && !isMoveTime;
+
+    if (isMoveTime) {
+      return {
+        icon: <RotateCcw className="w-5 h-5 text-white" />,
+        iconBg: isRoundPaused
+          ? 'bg-gradient-to-br from-amber-500 to-amber-700'
+          : 'bg-gradient-to-br from-emerald-500 to-teal-600',
+        title: 'Move to Next Table',
+        subtitle: isRoundPaused
+          ? `Move paused${pausedAtTime ? ` at ${pausedAtTime}` : ''} • Table Move`
+          : (activeRound < totalRounds ? 'Please move to your next table' : 'All rounds completed'),
+        timeText: formatTime(displayedTimeLeft),
+        timeSub: isRoundPaused ? (pausedAtTime ? `Paused at ${pausedAtTime}` : 'Paused') : 'Move Time',
+        showProgress: false,
+      };
+    }
+
+    if (isReferralTime) {
+      return {
+        icon: <Handshake className="w-5 h-5 text-white" />,
+        iconBg: isRoundPaused
+          ? 'bg-gradient-to-br from-amber-500 to-amber-700'
+          : 'bg-gradient-to-br from-blue-600 to-blue-700',
+        title: 'Referral Exchange',
+        subtitle: isRoundPaused
+          ? `Referrals paused${pausedAtTime ? ` at ${pausedAtTime}` : ''} • Referral Window`
+          : 'Give referrals and log them on your phone',
+        timeText: formatTime(timingState.phaseRemaining || 0),
+        timeSub: isRoundPaused ? (pausedAtTime ? `Paused at ${pausedAtTime}` : 'Paused') : 'Time Left',
+        showProgress: false,
+      };
+    }
+
     if (isRoundPaused) {
       const sNum = timingState.speakerNumber || 1;
-      const pausedAt = selectedConclave?.roundPausedAt ? new Date(selectedConclave.roundPausedAt) : null;
-      const pausedAtTime = pausedAt && !isNaN(pausedAt.getTime())
-        ? pausedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : null;
       return {
         icon: <Pause className="w-5 h-5 text-white" />,
         iconBg: 'bg-gradient-to-br from-amber-500 to-amber-700',
@@ -1043,30 +1026,6 @@ export default function RoundRunner({
         subtitle: `Round ${activeRound || 1} • All Tables Paused${pausedAtTime ? ` (Paused at ${pausedAtTime})` : ''}`,
         timeText: formatTime(timeLeft),
         timeSub: pausedAtTime ? `Paused at ${pausedAtTime}` : 'Paused',
-        showProgress: false,
-      };
-    }
-
-    if (timingState.phase === 'referral') {
-      return {
-        icon: <Handshake className="w-5 h-5 text-white" />,
-        iconBg: 'bg-gradient-to-br from-blue-600 to-blue-700',
-        title: 'Referral Exchange',
-        subtitle: 'Give referrals and log them on your phone',
-        timeText: formatTime(timingState.phaseRemaining || 0),
-        timeSub: 'Time Left',
-        showProgress: false,
-      };
-    }
-
-    if (timingState.phase === 'transition') {
-      return {
-        icon: <RotateCcw className="w-5 h-5 text-white" />,
-        iconBg: 'bg-gradient-to-br from-amber-500 to-amber-700',
-        title: 'Move to Next Table',
-        subtitle: 'Please move to your next table',
-        timeText: formatTime(timingState.phaseRemaining || 0),
-        timeSub: 'Time Left',
         showProgress: false,
       };
     }
@@ -1093,8 +1052,12 @@ export default function RoundRunner({
     timingState.speakerTimeLeft,
     timingState.speakerNumber,
     isRoundPaused,
+    selectedConclave?.roundPausedAt,
     currentTotalBlock,
     timeLeft,
+    isMovePhase,
+    clock.phase,
+    displayedTimeLeft,
   ]);
 
   // Referrals by Round for Chart
@@ -1401,7 +1364,9 @@ export default function RoundRunner({
                 if (isCompleted || (isRoundEnded && !isMoveTime)) {
                   speakerTimeSeconds = 0;
                   phaseTitle = `Round ${activeRound || 1} Completed`;
-                  phaseSubtitle = isCompleted ? 'Conclave Completed' : 'All turns & referrals finished';
+                  phaseSubtitle = isCompleted
+                    ? 'Conclave Completed'
+                    : (activeRound >= totalRounds ? 'All rounds completed' : `Next Round (R${activeRound + 1})`);
                   phaseBadge = 'DONE';
                 } else if (isTransitionPhase) {
                   speakerTimeSeconds = displayedTimeLeft;
@@ -1507,7 +1472,7 @@ export default function RoundRunner({
                   <button
                     type="button"
                     onClick={handlePauseRound}
-                    disabled={!isRoundRunning && !isMovePhase}
+                    disabled={!isRoundRunning}
                     className="h-10 px-4 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs"
                   >
                     <Pause className="w-3.5 h-3.5 fill-zinc-900 text-zinc-900" />
@@ -1519,16 +1484,20 @@ export default function RoundRunner({
                 <button
                   type="button"
                   onClick={() => handleStartNextRound()}
-                  disabled={isStartingRound || isCompleted || (activeRound >= totalRounds && !isUpcoming)}
-                  className="h-10 px-4 rounded-xl bg-[#00875A] hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-xs cursor-pointer disabled:opacity-40"
+                  disabled={isStartingRound || isCompleted}
+                  className={`h-10 px-4 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-xs cursor-pointer disabled:opacity-40 ${
+                    activeRound >= totalRounds && !isUpcoming
+                      ? 'bg-zinc-700 hover:bg-zinc-800'
+                      : 'bg-[#00875A] hover:bg-emerald-600'
+                  }`}
                 >
                   <Play className="w-3.5 h-3.5 fill-white text-white" />
                   <span>
-                    {activeRound === 0
-                      ? 'Start Round 1'
-                      : isRoundEnded || isUpcoming
-                        ? `Start Round ${activeRound + 1}`
-                        : `Next Round (R${activeRound + 1})`}
+                    {(() => {
+                      if (activeRound === 0 || isUpcoming) return 'Start Round 1';
+                      if (activeRound >= totalRounds) return 'All Rounds Completed';
+                      return `Next Round (R${activeRound + 1})`;
+                    })()}
                   </span>
                 </button>
 
@@ -1816,30 +1785,16 @@ export default function RoundRunner({
               <WalkInsPanel
                 conclave={selectedConclave}
                 showToast={showToast}
-                onChanged={async () => {
-                  try {
-                    const fresh = await api.get(`/admin/conclaves/${selectedConclaveId}`);
-                    if (fresh && fresh.id) {
-                      setConclaves(prev => prev.map(c => c.id === fresh.id ? { ...c, ...fresh } : c));
-                    }
-                  } catch (err) {
-                    console.warn("Failed to reload conclave after walk-in update:", err);
-                  }
+                onChanged={() => {
+                  queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
                 }}
               />
               <TableCaptainsPanel
                 conclave={selectedConclave}
                 activeRound={activeRound}
                 showToast={showToast}
-                onChanged={async () => {
-                  try {
-                    const fresh = await api.get(`/admin/conclaves/${selectedConclaveId}`);
-                    if (fresh && fresh.id) {
-                      setConclaves(prev => prev.map(c => c.id === fresh.id ? { ...c, ...fresh } : c));
-                    }
-                  } catch (err) {
-                    console.warn("Failed to reload conclave after stand-in captain change:", err);
-                  }
+                onChanged={() => {
+                  queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
                 }}
               />
             </div>
@@ -1853,8 +1808,16 @@ export default function RoundRunner({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[10002] animate-fade-in p-4">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-sm w-full p-5 space-y-4 animate-scale-up font-sans">
             <div className="flex gap-3.5 items-start">
-              <div className="p-2.5 bg-red-50 text-brand-red rounded-xl shrink-0 border border-red-100">
-                <AlertCircle className="w-5 h-5" />
+              <div className={`p-2.5 rounded-xl shrink-0 border ${
+                confirmModal.confirmColor === 'emerald'
+                  ? 'bg-emerald-50 text-[#00875A] border-emerald-100'
+                  : 'bg-red-50 text-brand-red border-red-100'
+              }`}>
+                {confirmModal.confirmColor === 'emerald' ? (
+                  <Play className="w-5 h-5 fill-current" />
+                ) : (
+                  <AlertCircle className="w-5 h-5" />
+                )}
               </div>
               <div className="space-y-1">
                 <h3 className="font-black text-zinc-900 text-sm leading-tight">{confirmModal.title}</h3>
@@ -1876,7 +1839,11 @@ export default function RoundRunner({
                   setConfirmModal(null);
                   if (onConfirm) onConfirm();
                 }}
-                className="px-4 py-2 bg-brand-red hover:bg-[#b51c2a] text-white text-xs font-bold rounded-xl transition-smooth cursor-pointer shadow-xs"
+                className={`px-4 py-2 text-white text-xs font-bold rounded-xl transition-smooth cursor-pointer shadow-xs ${
+                  confirmModal.confirmColor === 'emerald'
+                    ? 'bg-[#00875A] hover:bg-emerald-700'
+                    : 'bg-brand-red hover:bg-[#b51c2a]'
+                }`}
               >
                 {confirmModal.confirmText || 'Confirm'}
               </button>

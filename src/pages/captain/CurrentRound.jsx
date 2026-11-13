@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatTimeNice, formatUpcomingRoundStartTime, formatUpcomingRoundRange } from '../../utils/timeFormat';
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import { getInitials } from '../../utils/initials';
 import MemberProfileModal from '../../components/MemberProfileModal';
 
 export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propConclaveSyncData }) {
@@ -500,7 +501,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
         {/* Current Participants Grid */}
         <div className="col-span-12 lg:col-span-9 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5 items-start">
           {participants.map((p) => {
-            const initials = p.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+            const initials = getInitials(p.name, 'U');
             return (
               <div
                 key={p.uid || p.name}
@@ -534,7 +535,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                 <div className="space-y-1.5">
                   <div>
                     <span className="inline-flex items-center text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-md border border-zinc-200/80 bg-zinc-50 text-zinc-700 tracking-wider leading-tight">
-                      {p.category || 'BNI Member'}
+                      {p.category || '1-2-1 Connect Member'}
                     </span>
                   </div>
 
@@ -734,7 +735,7 @@ export default function CurrentRound({ loggedInCaptain, conclaveSyncData: propCo
                           <div key={p.id || p.uid || idx} className="p-2.5 flex items-center justify-between text-xs">
                             <div>
                               <p className="font-bold text-zinc-900">{p.name}</p>
-                              <p className="text-[11px] text-zinc-500 font-medium">{p.category || p.company || 'BNI Member'}</p>
+                              <p className="text-[11px] text-zinc-500 font-medium">{p.category || p.company || '1-2-1 Connect Member'}</p>
                             </div>
                             {p.isCaptain && (
                               <span className="px-2 py-0.5 bg-red-50 text-brand-red border border-red-100 rounded text-[9px] font-black uppercase tracking-wider">

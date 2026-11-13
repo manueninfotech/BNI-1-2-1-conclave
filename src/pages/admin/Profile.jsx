@@ -8,7 +8,8 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { api } from '../../services/api';
+import { api, fileUrl } from '../../services/api';
+import { getInitials, getProfilePhotoUrl } from '../../utils/initials';
 
 const formatJoinedDate = (rawDate) => {
   if (!rawDate) return 'July 2026';
@@ -46,6 +47,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [imgBroken, setImgBroken] = useState(false);
 
   const showToast = (title, desc, type = 'success') => {
     setToast({ title, desc, type });
@@ -62,11 +64,11 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     }
     return {
       name: parsed?.name || loggedInAdmin?.name || (isSuperadmin ? 'Superadmin' : 'Administrator'),
-      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@bni.com' : 'admin@bni.com'),
+      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@121connect.com' : 'admin@121connect.com'),
       phone: (parsed?.phone && parsed.phone !== 'N/A') ? parsed.phone : ((loggedInAdmin?.phone && loggedInAdmin.phone !== 'N/A') ? loggedInAdmin.phone : (loggedInAdmin?.mobile || '')),
       designation: parsed?.designation || loggedInAdmin?.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
-      organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
-      region: isSuperadmin ? 'All Regions (Global)' : (parsed?.region || loggedInAdmin?.chapter || loggedInAdmin?.region || 'BNI Region'),
+      organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),
+      region: isSuperadmin ? 'All Regions (Global)' : (parsed?.region || loggedInAdmin?.chapter || loggedInAdmin?.region || '1-2-1 Connect Region'),
       joinedDate: formatJoinedDate(parsed?.createdAt || loggedInAdmin?.createdAt),
       uid: parsed?.uid || parsed?.id || loggedInAdmin?.uid || loggedInAdmin?.id || ''
     };
@@ -109,7 +111,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
             email: fresh.email || prev.email,
             phone: (fresh.phone && fresh.phone !== 'N/A') ? fresh.phone : (fresh.mobile || prev.phone),
             designation: fresh.designation || prev.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
-            organization: fresh.organization || prev.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
+            organization: fresh.organization || prev.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),
             region: isSuperadmin ? 'All Regions (Global)' : (fresh.region || fresh.scope || prev.region),
             joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate),
             uid: fresh.uid || fresh.id || prev.uid
@@ -154,17 +156,18 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     }
   };
 
-  const displayInitials = (profileData.name || 'Admin')
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
+  useEffect(() => {
+    setImgBroken(false);
+  }, [profileData?.photoUrl, profileData?.photo, loggedInAdmin]);
+
+  const rawPhoto = getProfilePhotoUrl(profileData) || getProfilePhotoUrl(loggedInAdmin);
+  const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+  const displayInitials = getInitials(profileData.name, 'AD');
 
   // Role details
   const roleBadge = isSuperadmin ? 'Super Administrator' : 'Regional Administrator';
   const adminUid = profileData.uid || loggedInAdmin?.uid || loggedInAdmin?.id;
-  const displayId = adminUid ? `ADM-${adminUid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'BNI-SYS-0001' : 'BNI-ADM-0042');
+  const displayId = adminUid ? `ADM-${adminUid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'CON-SYS-0001' : 'CON-ADM-0042');
 
   // KPIs from real backend
   const kpis = isSuperadmin
@@ -213,8 +216,17 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
             <div className="flex flex-col items-center text-center">
               <div className="relative mb-4">
-                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none">
-                  {displayInitials}
+                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none overflow-hidden">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={profileData.name}
+                      onError={() => setImgBroken(true)}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span>{displayInitials}</span>
+                  )}
                 </div>
                 <span className="absolute bottom-0 right-0 bg-brand-red text-white p-1 rounded-full border-2 border-white flex items-center justify-center">
                   <Check className="w-3 h-3 text-white stroke-[3.5]" />

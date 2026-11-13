@@ -198,8 +198,8 @@ function FeeAndPaymentSection({ formData, setFormData }) {
           {showOffline && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                {field('UPI ID (e.g. name@upi)', 'upiId', { placeholder: 'bni.guntur@upi', mono: true })}
-                {field('Account Holder Name', 'accountHolderName', { placeholder: 'BNI Guntur Chapter' })}
+                {field('UPI ID (e.g. name@upi)', 'upiId', { placeholder: 'connect.guntur@upi', mono: true })}
+                {field('Account Holder Name', 'accountHolderName', { placeholder: '1-2-1 Connect Chapter' })}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {field('Bank Name', 'bankName', { placeholder: 'HDFC Bank' })}

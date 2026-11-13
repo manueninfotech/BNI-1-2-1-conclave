@@ -21,6 +21,10 @@ import { broadcastTabMessage, subscribeTabMessages } from '../utils/syncBus';
 
 const capitalizeFirst = (value) => value.charAt(0).toLocaleUpperCase() + value.slice(1);
 
+// eslint-disable-next-line no-control-regex -- strip unprintable ASCII/control bytes for Postgres jsonb
+const STRIP_CONTROL_REGEX = /[\u0000-\u001F\u007F-\u009F]/g;
+const stripControlChars = (str) => String(str || '').replace(STRIP_CONTROL_REGEX, '').trim();
+
 function parseNamesCsv(text, kind) {
   const rows = [];
   let row = [];
@@ -145,7 +149,8 @@ async function parseXlsx(arrayBuffer) {
       for (let j = 0; j < cNodes.length; j++) {
         const c = cNodes[j];
         const r = c.getAttribute('r') || '';
-        if (r.startsWith('A') || j === 0) {
+        // Strictly import Column A (e.g. A1, A2); ignore Column B, C, AA, etc.
+        if (/^A\d+$/i.test(r)) {
           const t = c.getAttribute('t');
           let val = '';
           if (t === 's') {
@@ -159,19 +164,12 @@ async function parseXlsx(arrayBuffer) {
           } else {
             val = c.getElementsByTagName('v')[0]?.textContent || '';
           }
-          val = val.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+          val = stripControlChars(val);
           if (val) values.push(val);
           break;
         }
       }
     }
-  }
-
-  if (values.length === 0 && sharedStrings.length > 0) {
-    sharedStrings.forEach((s) => {
-      const clean = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
-      if (clean) values.push(clean);
-    });
   }
 
   return values;
@@ -197,7 +195,7 @@ async function parseImportFile(file, kind) {
   }
 
   const cleaned = rawNames
-    .map((name) => String(name || '').replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim())
+    .map((name) => stripControlChars(name))
     .filter((name) => name.length > 0 && name.length <= 100);
 
   const headers = ['name', 'names', 'category', 'categories', 'region', 'regions', 'business category', 'business categories', 'chapter', 'chapters'];
@@ -261,22 +259,22 @@ export default function Settings() {
       try {
         const r = await api.get('/admin/settings/regions');
         setRegions(r.regions || []);
-      } catch {}
+      } catch { }
       try {
         const t = await api.get('/admin/settings/round-timing');
         if (t) setTiming(t);
-      } catch {}
+      } catch { }
       try {
         const d = await api.get('/admin/settings/conclave-defaults');
         if (d) {
           setDefaults(d);
           localStorage.setItem('bni_conclave_defaults', JSON.stringify(d));
         }
-      } catch {}
+      } catch { }
       try {
         const n = await api.get('/admin/settings/notifications');
         if (n) setNotif(n);
-      } catch {}
+      } catch { }
     })();
 
     // Listen to real-time cross-tab updates (e.g. category or region changed in another tab)
@@ -518,22 +516,20 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'all'
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'all'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           All Settings
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('defaults')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'defaults'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'defaults'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Sliders className="w-3.5 h-3.5 text-zinc-500" />
           <span>Defaults</span>
@@ -541,11 +537,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('categories')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'categories'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'categories'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Tag className="w-3.5 h-3.5 text-zinc-500" />
           <span>Categories ({categories.length})</span>
@@ -553,11 +548,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('timing')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'timing'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'timing'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Timer className="w-3.5 h-3.5 text-zinc-500" />
           <span>Round Timing</span>
@@ -565,11 +559,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('regions')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'regions'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'regions'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <MapPin className="w-3.5 h-3.5 text-zinc-500" />
           <span>Regions ({regions.length})</span>
@@ -577,11 +570,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('notifications')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'notifications'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'notifications'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Bell className="w-3.5 h-3.5 text-zinc-500" />
           <span>Notifications</span>
@@ -705,7 +697,7 @@ export default function Settings() {
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      BNI classification standard. No two members sharing the same category are seated together.
+                      1-2-1 Connect classification standard. No two members sharing the same category are seated together.
                     </p>
                   </div>
                 </div>
@@ -819,7 +811,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-zinc-950">BNI Conclave Round Timing Standard</h3>
+                    <h3 className="text-sm font-bold text-zinc-950">1-2-1 Connect Round Timing Standard</h3>
                     <span className="px-2 py-0.2 bg-emerald-50 text-[#00875A] border border-emerald-200 text-[10px] font-bold rounded-full">
                       Official Fixed Format
                     </span>
@@ -876,7 +868,7 @@ export default function Settings() {
             <div className="mt-4 p-3 bg-amber-50/60 border border-amber-200/80 rounded-lg flex items-center gap-2 text-xs text-amber-900 font-medium">
               <Info className="w-4 h-4 text-amber-700 shrink-0" />
               <span>
-                Standard timing formulas (60s bio + 30s referral) are locked across the BNI network to maintain competitive integrity. Live conclave admins may add +1m, +2m, or +5m extensions in real time if required.
+                Standard timing formulas (60s bio + 30s referral) are locked across the 1-2-1 Connect network to maintain competitive integrity. Live conclave admins may add +1m, +2m, or +5m extensions in real time if required.
               </span>
             </div>
           </div>

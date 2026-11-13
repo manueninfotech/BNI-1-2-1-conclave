@@ -15,6 +15,7 @@ import ReferModal from '../../components/ReferModal';
 import MemberProfileModal from '../../components/MemberProfileModal';
 import { downloadOrViewAgendaDocument, parseAgendaTextToSteps, extractTextFromPdfDataUrl } from '../../utils/documentUtils';
 import { calculateRoundTiming, formatTime, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import { getInitials } from '../../utils/initials';
 
 export default function MemberCurrentRound({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData, searchQuery }) {
   const [syncData, setSyncData] = useState(propConclaveSyncData || null);
@@ -303,7 +304,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                   </span>
                 )}
                 <span className="text-zinc-450 font-extrabold text-[9px] uppercase tracking-widest">
-                  {conclaveSyncData?.conclaveStatus?.name || conclaveSyncData?.conclaveStatus?.title || conclaveSyncData?.conclaveStatus?.region || 'BNI Conclave'}
+                  {conclaveSyncData?.conclaveStatus?.name || conclaveSyncData?.conclaveStatus?.title || conclaveSyncData?.conclaveStatus?.region || '1-2-1 Connect Conclave'}
                 </span>
               </div>
               <h1 className="text-[20px] font-black text-zinc-955 leading-tight">
@@ -652,7 +653,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredOccupants.map((member) => {
-                const initials = member.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                const initials = getInitials(member.name, 'U');
                 const isSpeakerCard = Boolean(
                   timingState?.isTalking &&
                   currentSpeaker &&
@@ -846,7 +847,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
           {(() => {
             const captainName = conclaveSyncData?.captainName || 'Table Captain';
             const captainObj = conclaveSyncData?.tableOccupants?.find(o => o.isCaptain);
-            const captainInitials = captainName.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'TC';
+            const captainInitials = getInitials(captainName, 'TC');
             const captainCategory = captainObj?.category || 'Table Captain';
 
             return (
@@ -895,7 +896,7 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
             }
 
             const nextCapName = nextRoundObj.captain || 'Upcoming Captain';
-            const nextCapInitials = nextCapName.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'TC';
+            const nextCapInitials = getInitials(nextCapName, 'TC');
 
             return (
               <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">

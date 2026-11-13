@@ -1,5 +1,5 @@
 import React, { useRef, useState, useMemo } from 'react';
-import { Link, NavLink, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { NavLink, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   CalendarRange,
   MapPin,
@@ -11,9 +11,9 @@ import {
   Activity as ActivityIcon,
   Coins
 } from 'lucide-react';
-import { api } from '../services/api';
 import { useConclave } from '../hooks/useConclave';
 import { useConclaveLive } from '../hooks/useConclaveLive';
+import { getInitials } from '../utils/initials';
 import { formatConclaveDate } from './conclaveStage';
 import { formatStatus, getStatusBadgeClasses, getStatusDotClasses } from '../utils/statusUtils';
 import GenWarningBanner from './GenWarningBanner';
@@ -54,6 +54,11 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
   // Mount real-time SSE listener at workspace level so ALL sub-tabs inherit real-time updates!
   useConclaveLive(id);
 
+  const userInitials = useMemo(() => {
+    return getInitials(loggedInAdmin?.name || conclave?.coordinator, 'AD');
+  }, [loggedInAdmin, conclave]);
+  void userInitials;
+
   // Schedule generation warnings outlive the generator's re-renders.
   const [genWarning, setGenWarning] = useState(null);
   const timer = useRef(null);
@@ -75,11 +80,6 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
   const tabs = CONCLAVE_TABS.filter((t) => !t.paidOnly || !conclave || isPaid(conclave) || tab === t.id);
 
   const tabPath = (t) => `${base}/conclaves/${id}${t === 'overview' ? '' : `/${t}`}`;
-
-  const userInitials = useMemo(() => {
-    const name = loggedInAdmin?.name || conclave?.coordinator || 'Super Admin';
-    return name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'SV';
-  }, [loggedInAdmin, conclave]);
 
   return (
     <div className="conclave-workspace flex flex-col gap-1.5 sm:gap-2">

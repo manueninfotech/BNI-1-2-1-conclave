@@ -24,6 +24,7 @@ import Pagination from '../components/Pagination';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { api } from '../services/api';
 import Avatar from '../components/Avatar';
+import { getInitials } from '../utils/initials';
 import { getConclaveDisplayStatus } from '../utils/statusUtils';
 import { subscribeTabMessages } from '../utils/syncBus';
 
@@ -233,7 +234,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                 rawList = res.registrations.map(r => {
                   const uid = r.userId || r.uid || r.id;
                   const master = userMap.get(uid) || {};
-                  const userRegion = r.region || master.region || (typeof r.location === 'string' ? r.location : '') || currentConclave?.region || 'Global BNI Network';
+                  const userRegion = r.region || master.region || (typeof r.location === 'string' ? r.location : '') || currentConclave?.region || '1-2-1 Connect Network';
                   const loc = resolveLocationDetails({ ...master, ...r }, userRegion);
                   const isRegCaptain = r.role === 'captain' || r.isTableCaptain === true;
                   return {
@@ -369,7 +370,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
           const fallbackCategory = r.category || r.businessCategory?.trim() || 'General';
           const fallbackCompany = r.company || r.businessName?.trim() || 'Self Employed';
 
-          const resolvedRegion = r.userRegion || r.region || 'Global BNI Network';
+          const resolvedRegion = r.userRegion || r.region || '1-2-1 Connect Network';
           const locStr = typeof r.location === 'object' && r.location !== null
             ? (r.location.place || r.location.city || '')
             : (r.location || r.address || '');
@@ -449,7 +450,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             status: (r.isOnline ?? isActiveMember) ? 'Active' : 'Inactive',
             lastSeenAt: r.lastSeenAt || null,
             joinDate: joinDateFormatted,
-            avatar: displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
+            avatar: getInitials(displayName, 'U'),
             photoUrl: r.photoUrl || null,
             conclaveIds: [selectedConclaveId],
             history: [{ event: 'Registered', date: historyDateFormatted, role: isCaptain ? 'Captain' : 'Member' }]
@@ -577,13 +578,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
 
   const getMemberRegion = (m) => {
     const reg = m?.region || m?.userRegion;
-    if (reg && typeof reg === 'string' && reg.trim() !== '' && reg !== 'Global BNI Network') return reg;
+    if (reg && typeof reg === 'string' && reg.trim() !== '' && reg !== '1-2-1 Connect Network') return reg;
     if (m?.state && m.state.trim() !== '') return m.state;
     if (m?.location) {
-      if (typeof m.location === 'string' && m.location !== 'Global BNI Network') return m.location;
+      if (typeof m.location === 'string' && m.location !== '1-2-1 Connect Network') return m.location;
       if (typeof m.location === 'object' && m.location.place) return m.location.place;
     }
-    if (m?.address && typeof m.address === 'string' && m.address !== 'Global BNI Network') return m.address;
+    if (m?.address && typeof m.address === 'string' && m.address !== '1-2-1 Connect Network') return m.address;
     return 'Global';
   };
 
@@ -711,7 +712,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
       return;
     }
     if (!formData.chapter.trim()) {
-      showToast("Please enter the BNI chapter name.", "error");
+      showToast("Please enter the chapter name.", "error");
       return;
     }
 
@@ -769,13 +770,13 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         setMembers(prev => prev.map(m => m.id === editingMember.id ? {
           ...m,
           ...updatedData,
-          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || m.avatar
+          avatar: getInitials(formData.name, 'U')
         } : m));
 
         setSelectedMember(prev => prev && prev.id === editingMember.id ? {
           ...prev,
           ...updatedData,
-          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || prev.avatar
+          avatar: getInitials(formData.name, 'U')
         } : prev);
 
         showToast("Member updated successfully.", "success");
@@ -791,7 +792,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         return;
       }
       try {
-        let addedId = `BNI-00${Math.floor(100 + Math.random() * 900)}`;
+        let addedId = `CON-00${Math.floor(100 + Math.random() * 900)}`;
         let defaultPw = null;
         let loginId = null;
         if (targetConclaveId) {
@@ -815,7 +816,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
             amount: Number(formData.paymentAmount) || 0,
             transactionId: formData.transactionId.trim()
           },
-          avatar: formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'M',
+          avatar: getInitials(formData.name, 'U'),
           joinDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
           history: [{ event: 'Created manually', date: new Date().toLocaleDateString(), role: formData.isCaptain ? 'Captain' : 'Member' }],
           conclaveIds: [targetConclaveId]
@@ -937,7 +938,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `bni_members_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `connect_members_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -999,10 +1000,10 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
         if (columns.length >= 5) {
           const [id, name, category, email, phone, role, status, joinDate, company, chapter] = columns;
 
-          const avatar = name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'M';
+          const avatar = getInitials(name, 'U');
 
           newMembers.push({
-            id: id || `BNI-00${Math.floor(100 + Math.random() * 900)}`,
+            id: id || `CON-00${Math.floor(100 + Math.random() * 900)}`,
             name: name || 'Unknown Member',
             category: category || 'General',
             email: email || 'n/a',
@@ -1078,7 +1079,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
   const handleDownloadTemplate = () => {
     const headers = ['Member ID', 'Name', 'Category', 'Email', 'Phone', 'Role', 'Status', 'Join Date', 'Company', 'Chapter'];
     const sampleRow = [
-      'BNI-00101',
+      'CON-00101',
       '"Suresh Verma"',
       '"Interior Designer"',
       'suresh@verma.com',
@@ -1094,7 +1095,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "bni_members_import_template.csv");
+    link.setAttribute("download", "connect_members_import_template.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1560,7 +1561,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                     <h5 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 pb-1.5">Member Information</h5>
                     <div className="grid grid-cols-2 gap-3.5">
                       <div className="min-w-0">
-                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">BNI Chapter</span>
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase block">1-2-1 Connect Chapter</span>
                         <span className="text-body-sm font-bold text-zinc-800 break-words">{selectedMember.chapter || '—'}</span>
                       </div>
                       <div className="min-w-0">
@@ -1629,10 +1630,10 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                             Registration Payment
                           </span>
                           <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded-md border ${(paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'paid'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
-                                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : (paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus) === 'waived'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}>
                             {paymentByUid[selectedMember.id] || selectedMember.payment?.status || selectedMember.paymentStatus || 'Pending'}
                           </span>
@@ -1771,7 +1772,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-3.5 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none transition-smooth"
-                      placeholder="e.g. Rajesh Mehta"
+                      placeholder="Enter full name"
                     />
                   </div>
 
@@ -1796,7 +1797,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                   {/* Chapter */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
-                      BNI Chapter <span className="text-brand-red font-black">*</span>
+                      1-2-1 Connect Chapter <span className="text-brand-red font-black">*</span>
                     </label>
                     <input
                       type="text"
@@ -1849,7 +1850,7 @@ export default function Members({ searchQuery, selectedConclaveId, loggedInAdmin
                       value={formData.company}
                       onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                       className="w-full px-3.5 py-2 border border-zinc-200 rounded-lg text-body-sm focus:ring-2 focus:ring-brand-red/10 focus:border-brand-red outline-none transition-smooth"
-                      placeholder="e.g. Mehta Developers"
+                      placeholder="Enter company name"
                     />
                   </div>
 

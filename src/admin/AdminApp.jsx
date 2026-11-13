@@ -85,7 +85,7 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
   const conclaveIdInUrl = location.pathname.match(/\/conclaves\/([^/]+)/)?.[1] || '';
 
   return (
-    <div className="admin-panel flex h-screen w-screen bg-zinc-50 text-zinc-950 font-sans antialiased overflow-hidden relative" style={{ fontFamily: '"Helvetica Neue", Arial, sans-serif' }}>
+    <div className="admin-panel flex h-screen w-screen bg-paper text-ink font-sans antialiased overflow-hidden relative" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
       {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-45 lg:hidden" />}
       <AdminSidebar
         base={base}
