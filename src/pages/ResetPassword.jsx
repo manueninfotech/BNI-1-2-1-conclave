@@ -137,8 +137,12 @@ export default function ResetPassword({ onBackToLogin }) {
         </div>
 
         {/* Brand footer */}
-        <div className="relative z-10 flex items-center justify-center text-[10.5px] text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
-          <span>Powered by <span className="text-zinc-300 font-bold">Manuen Infotech</span></span>
+        <div className="relative z-10 flex items-center justify-center gap-2 text-xs text-zinc-500 font-semibold tracking-wide border-t border-zinc-800 pt-5">
+          <span>Powered by</span>
+          <span className="bg-white px-2 py-1 rounded-md inline-flex items-center shadow-xs">
+            <img src="/manuen_square.png" alt="Manuen" className="h-6 w-6 object-contain rounded-xs shrink-0" />
+            <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-5 w-auto object-contain -ml-2 shrink-0" />
+          </span>
         </div>
 
         {/* Ambient background glows */}

@@ -658,9 +658,13 @@ export default function App() {
           )}
           {/* Captain Portal Footer */}
           <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
-            <p className="text-[11px] text-zinc-400 font-medium">
-              Powered by <strong className="font-extrabold text-zinc-650">Manuen Infotech</strong>
-            </p>
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 font-medium">
+              <span>Powered by</span>
+              <span className="inline-flex items-center">
+                <img src="/manuen_square.png" alt="Manuen" className="h-7.5 w-7.5 object-contain rounded-xs shrink-0" />
+                <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-7 w-auto object-contain -ml-3 shrink-0" />
+              </span>
+            </div>
           </footer>
         </main>
       </div>
@@ -750,9 +754,13 @@ export default function App() {
           )}
           {/* Member Portal Footer */}
           <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
-            <p className="text-[11px] text-zinc-400 font-medium">
-              Powered by <strong className="font-extrabold text-zinc-650">Manuen Infotech</strong>
-            </p>
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 font-medium">
+              <span>Powered by</span>
+              <span className="inline-flex items-center">
+                <img src="/manuen_square.png" alt="Manuen" className="h-7.5 w-7.5 object-contain rounded-xs shrink-0" />
+                <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-7 w-auto object-contain -ml-3 shrink-0" />
+              </span>
+            </div>
           </footer>
         </main>
       </div>

@@ -96,9 +96,13 @@ export default function AdminSidebar({ base, role, isOpen, onClose, onLogout, is
         </button>
 
         {!isCollapsed && (
-          <p className="pt-2 text-center text-[9.5px] text-white/60 font-semibold truncate">
-            Powered by <span className="text-white/95 font-extrabold">Manuen Infotech</span>
-          </p>
+          <div className="pt-2 flex items-center justify-center gap-2 text-[10px] text-white/80 font-semibold truncate">
+            <span>Powered by</span>
+            <span className="bg-white px-1.5 py-0.5 rounded-md inline-flex items-center shadow-xs">
+              <img src="/manuen_square.png" alt="Manuen" className="h-5.5 w-5.5 object-contain rounded-xs shrink-0" />
+              <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-5 w-auto object-contain -ml-2 shrink-0" />
+            </span>
+          </div>
         )}
       </div>
     </aside>
