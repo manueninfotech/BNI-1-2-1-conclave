@@ -85,12 +85,12 @@ export default function MemberConclaveHistory({ loggedInMember }) {
             if (pObj) {
               const pId = pObj.id;
               roundDetails = c.schedule.rounds.map((r) => {
-                const table = r.tables?.find((t) => t.captainId === pId || t.memberIds?.includes(pId));
-                const capObj = table ? c.participants.find((p) => p.id === table.captainId) : null;
+                const table = r.tables?.find((t) => (t.captainId != null && t.captainId === pId) || t.memberIds?.includes(pId));
+                const capObj = (table && table.captainId != null) ? c.participants.find((p) => p.id === table.captainId) : null;
 
                 // Track categories met
                 if (table) {
-                  const allTableMemberIds = [table.captainId, ...(table.memberIds || [])].filter(id => id !== pId);
+                  const allTableMemberIds = [table.captainId, ...(table.memberIds || [])].filter(id => id != null && id !== pId);
                   allTableMemberIds.forEach(mId => {
                     const seatedPerson = c.participants.find(p => p.id === mId);
                     if (seatedPerson?.businessCategory) {

@@ -514,10 +514,12 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                   <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Current Table</span>
                   <span className="text-[13px] font-black text-zinc-900 mt-0.5">Table {currentRoundSeating?.tableNumber || 'N/A'}</span>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Table Captain</span>
-                  <span className="text-[13px] font-black text-zinc-900 mt-0.5">{currentRoundSeating?.captain || 'Unknown'}</span>
-                </div>
+                {Boolean(currentRoundSeating?.captain) && (
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-extrabold text-zinc-700 uppercase tracking-widest">Table Captain</span>
+                    <span className="text-[13px] font-black text-zinc-900 mt-0.5">{currentRoundSeating.captain}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -636,7 +638,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                           </span>
                         </div>
                         <h3 className="text-[14.5px] font-black text-zinc-900 mt-1.5">Round {rnd.number} ({rnd.table})</h3>
-                        <p className="text-[11px] text-zinc-450 font-semibold mt-0.5">Captain: {rnd.captain}</p>
+                        {Boolean(rnd.captain) && <p className="text-[11px] text-zinc-450 font-semibold mt-0.5">Captain: {rnd.captain}</p>}
                       </div>
                       <span className="px-2 py-0.5 bg-zinc-50 border border-zinc-200 text-zinc-550 text-[9px] font-black rounded-full flex items-center gap-1 shrink-0">
                         <User className="w-3 h-3 text-zinc-450" />
@@ -693,10 +695,12 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
                     <Clock className="w-3.5 h-3.5 text-zinc-400" />
                     {formatUpcomingRoundRange(nextRound.time)}
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-650 font-semibold">
-                    <User className="w-3.5 h-3.5 text-zinc-400" />
-                    Captain: {nextRound.captain}
-                  </div>
+                  {Boolean(nextRound.captain) && (
+                    <div className="flex items-center gap-2 text-[11px] text-zinc-650 font-semibold">
+                      <User className="w-3.5 h-3.5 text-zinc-400" />
+                      Captain: {nextRound.captain}
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200/80 text-center mt-2">
