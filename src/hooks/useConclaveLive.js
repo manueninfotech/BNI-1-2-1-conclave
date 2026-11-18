@@ -61,6 +61,9 @@ const activeStreams = new Map();
  */
 const AUTH_TOKEN_TIMEOUT_MS = 10000;
 
+/** Longest a new referral waits before the Round Runner's counts refresh. */
+const COUNTS_REFRESH_MS = 1500;
+
 /**
  * In-flight token request deduplication tracker.
  *
@@ -183,6 +186,7 @@ export function useConclaveLive(conclaveId) {
       let activeController = null;
       let retryTimeout = null;
       let idleWatchdogTimer = null;
+      let countsRefreshTimer = null;
       let backoffMs = 1500;
       let consecutiveAuthFailures = 0;
       let status = 'connecting';
@@ -204,6 +208,18 @@ export function useConclaveLive(conclaveId) {
             cb(nextStatus);
           } catch { }
         });
+      };
+
+      // Phones syncing referrals or attendance trigger a state event, but its
+      // payload carries no counts. Refetch them, at most once per interval.
+      const scheduleCountsRefresh = () => {
+        if (countsRefreshTimer) return;
+        countsRefreshTimer = setTimeout(() => {
+          countsRefreshTimer = null;
+          if (isCancelled) return;
+          queryClient.invalidateQueries({ queryKey: ['referrals', conclaveId] });
+          queryClient.invalidateQueries({ queryKey: ['stats', conclaveId] });
+        }, COUNTS_REFRESH_MS);
       };
 
       const clearIdleWatchdog = () => {
@@ -470,6 +486,8 @@ export function useConclaveLive(conclaveId) {
                     }
                   }
                 } else {
+                  scheduleCountsRefresh();
+
                   // Subsequent live events: selective invalidation only when state actually changed
                   if (roundChanged || referralsChanged) {
                     queryClient.invalidateQueries({ queryKey: ['referrals', conclaveId] });
@@ -648,6 +666,10 @@ export function useConclaveLive(conclaveId) {
         currentConnectionId++; // Invalidate all pending or active connections
         isConnectionInProgress = false;
         clearIdleWatchdog();
+        if (countsRefreshTimer) {
+          clearTimeout(countsRefreshTimer);
+          countsRefreshTimer = null;
+        }
         if (retryTimeout) {
           clearTimeout(retryTimeout);
           retryTimeout = null;
