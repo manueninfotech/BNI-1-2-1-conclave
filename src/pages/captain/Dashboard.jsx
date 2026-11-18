@@ -18,31 +18,21 @@ import { api } from '../../services/api';
 import MemberProfileModal from '../../components/MemberProfileModal';
 import { formatTimeNice, formatTimeRangeNice } from '../../utils/timeFormat';
 import { calculateRoundTiming, ROUND_BLOCK_DURATION_SECS } from '../../utils/roundTiming';
+import { getInitials } from '../../utils/initials';
 
 export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboard', onTabChange, onLogout, conclaveSyncData: propConclaveSyncData }) {
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 
   const conclaveSyncData = syncData || propConclaveSyncData;
 
   const [selectedProfileMember, setSelectedProfileMember] = useState(null);
-  const [referrals, setReferrals] = useState(() => {
-    const stored = localStorage.getItem('bni_referrals');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [referrals, setReferrals] = useState([]);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -119,15 +109,8 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
     return { given, received };
   };
 
-  const [attendance, setAttendance] = useState(() => {
-      try {
-        const cached = localStorage.getItem('bni_captain_attendance_cache');
-        return cached ? JSON.parse(cached) : {};
-      } catch {
-        return {};
-      }
-    });
-    const pendingLocalEditsRef = useRef({});
+  const [attendance, setAttendance] = useState({});
+  const pendingLocalEditsRef = useRef({});
     const [isLocked, setIsLocked] = useState(false);
     const [toast, setToast] = useState(null);
     const activeRound = `Round ${conclaveSyncData?.conclaveStatus?.currentRound || 0}`;
@@ -217,7 +200,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
       name: m.name,
       category: m.category,
       company: m.company,
-      initials: m.name ? m.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() : 'M'
+      initials: getInitials(m.name, 'U')
     }));
 
     const myTable = {
@@ -421,7 +404,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                   ) : 'Conclave Session'}
                 </span>
                 <span className="text-zinc-700 text-[10px] font-semibold uppercase tracking-widest">
-                  {conclaveSyncData?.conclaveStatus?.region || conclaveSyncData?.region || 'BNI Region'}
+                  {conclaveSyncData?.conclaveStatus?.region || conclaveSyncData?.region || '1-2-1 Connect Region'}
                 </span>
               </div>
 
@@ -673,7 +656,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
                     const tableChapters = Array.from(new Set(
                       tableOccupants.map(m => m.chapter).filter(Boolean)
                     ));
-                    const chaptersText = tableChapters.length > 0 ? tableChapters.join(', ') : 'BNI Guntur Chapters';
+                    const chaptersText = tableChapters.length > 0 ? tableChapters.join(', ') : '1-2-1 Connect Chapters';
 
                     return (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11.5px] font-semibold text-zinc-600">
@@ -887,7 +870,7 @@ export default function CaptainDashboard({ loggedInCaptain, activeTab = 'dashboa
               <div className="flex items-center gap-2.5 mb-6">
                 <div className="flex -space-x-1.5">
                   {(conclaveSyncData?.tableOccupants || []).slice(0, 3).map((p, pIdx) => {
-                    const initials = p.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase() || 'M';
+                    const initials = getInitials(p.name, 'U');
                     return (
                       <div key={pIdx} className="w-7 h-7 rounded-full border border-brand-red bg-red-700/60 flex items-center justify-center text-[7px] font-bold">
                         {initials}

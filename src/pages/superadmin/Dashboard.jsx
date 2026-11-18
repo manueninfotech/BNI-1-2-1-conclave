@@ -18,50 +18,10 @@ const normRegion = (r) => String(r || '').toLowerCase().replace(/\s+region$/, ''
 import { formatStatus } from '../../utils/statusUtils';
 
 export default function SuperadminDashboard({ setActiveTab }) {
-  const [admins, setAdmins] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_admins_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [regions, setRegions] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_regions_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [conclaves, setConclaves] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_conclaves_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
-  const [members, setMembers] = useState(() => {
-    const cached = localStorage.getItem('bni_superadmin_members_cache');
-    if (cached) {
-      try {
-        const arr = JSON.parse(cached);
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { }
-    }
-    return [];
-  });
-
+  const [admins, setAdmins] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [conclaves, setConclaves] = useState([]);
+  const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -76,19 +36,15 @@ export default function SuperadminDashboard({ setActiveTab }) {
         ]);
         if (Array.isArray(adminsList)) {
           setAdmins(adminsList);
-          localStorage.setItem('bni_superadmin_admins_cache', JSON.stringify(adminsList));
         }
         if (Array.isArray(regionsList)) {
           setRegions(regionsList);
-          localStorage.setItem('bni_superadmin_regions_cache', JSON.stringify(regionsList));
         }
         if (Array.isArray(conclavesList)) {
           setConclaves(conclavesList);
-          localStorage.setItem('bni_superadmin_conclaves_cache', JSON.stringify(conclavesList));
         }
         if (Array.isArray(membersList)) {
           setMembers(membersList);
-          localStorage.setItem('bni_superadmin_members_cache', JSON.stringify(membersList));
         }
       } catch (err) {
         console.error("Failed to load superadmin dashboard metrics:", err);
@@ -135,13 +91,13 @@ export default function SuperadminDashboard({ setActiveTab }) {
       {/* Welcome Banner */}
       <div>
         <h1 className="text-2xl font-black text-zinc-955 tracking-tight">Superadmin Dashboard</h1>
-        <p className="text-xs text-zinc-500 font-semibold mt-0.5">Global BNI Conclave directory network oversight &amp; regional admin statistics.</p>
+        <p className="text-xs text-zinc-500 font-semibold mt-0.5">Global 1-2-1 Connect Conclave directory network oversight &amp; regional admin statistics.</p>
       </div>
 
       {/* KPI Strip (Feedback UI & Typography) */}
       <div className="bg-white border border-zinc-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 lg:grid-cols-4 shadow-xs">
         {[
-          { label: "Total BNI Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]", icon: Globe, iconBg: "bg-emerald-50 text-[#00875A]" },
+          { label: "Total 1-2-1 Connect Regions", value: totalRegionsCount, sub: "Active regions globally", tab: "admins", color: "text-[#00875A]", icon: Globe, iconBg: "bg-emerald-50 text-[#00875A]" },
           { label: "Regional Admins", value: totalAdminsCount, sub: "Created login profiles", tab: "admins", color: "text-zinc-600", icon: ShieldCheck, iconBg: "bg-zinc-100 text-zinc-700" },
           { label: "All-Time Conclaves", value: totalConclavesCount, sub: "Aggregated conclave events", tab: "conclaves", color: "text-[#00875A]", icon: CalendarRange, iconBg: "bg-red-50 text-brand-red" },
           { label: "Total Network Members", value: totalMembersCount, sub: "Registered across regions", tab: "members", color: "text-brand-red", icon: Users, iconBg: "bg-blue-50 text-blue-600" }
@@ -176,7 +132,7 @@ export default function SuperadminDashboard({ setActiveTab }) {
           <div className="space-y-4">
             <div>
               <h2 className="text-body-md font-black text-zinc-900 leading-tight">Conclaves per Region</h2>
-              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">Events count grouped by BNI region.</p>
+              <p className="text-[10px] text-zinc-450 font-semibold mt-0.5">Events count grouped by regional network.</p>
             </div>
 
             <div className="space-y-3.5 pt-2">

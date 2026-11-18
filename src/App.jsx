@@ -287,7 +287,7 @@ export default function App() {
         setLoggedInAdmin(payload);
       } else {
         localStorage.removeItem('bni_logged_admin');
-        setLoggedInAdmin({ name: "Sanjay Wagle", email: "admin@bni.com", region: "All Regions" });
+        setLoggedInAdmin({ name: "Admin", email: "admin@121connect.com", region: "All Regions" });
       }
 
       setLoggedInCaptain(null);
@@ -386,7 +386,6 @@ export default function App() {
         if (myRegisteredConclave) {
           syncResult = await api.post(`/conclaves/${myRegisteredConclave.id}/sync`, {}).catch(() => null);
           if (syncResult && syncResult.conclaveStatus) {
-            localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(syncResult));
             setConclaveSyncData(prev => (JSON.stringify(prev) !== JSON.stringify(syncResult) ? syncResult : prev));
           } else {
             setConclaveSyncData(null);
@@ -584,7 +583,7 @@ export default function App() {
   // If logged in as a Captain, render the Captain portal layout
   if (userRole === 'captain') {
     return (
-      <div className="flex flex-col h-screen w-screen bg-zinc-50 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen w-screen bg-paper text-ink overflow-hidden font-sans">
         <CaptainHeader
           loggedInCaptain={loggedInCaptain}
           conclaveSyncData={conclaveSyncData}
@@ -657,6 +656,16 @@ export default function App() {
               setSearchQuery={setSearchQuery}
             />
           )}
+          {/* Captain Portal Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 font-medium">
+              <span>Powered by</span>
+              <span className="inline-flex items-center">
+                <img src="/manuen_square.png" alt="Manuen" className="h-7.5 w-7.5 object-contain rounded-xs shrink-0" />
+                <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-7 w-auto object-contain -ml-3 shrink-0" />
+              </span>
+            </div>
+          </footer>
         </main>
       </div>
     );
@@ -665,7 +674,7 @@ export default function App() {
   // If logged in as a Member, render the Member portal layout with MemberHeader
   if (userRole === 'member') {
     return (
-      <div className="flex flex-col h-screen w-screen bg-zinc-50 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen w-screen bg-paper text-ink overflow-hidden font-sans">
         <MemberHeader
           loggedInMember={loggedInMember}
           conclaveSyncData={conclaveSyncData}
@@ -720,6 +729,7 @@ export default function App() {
           ) : activeTab === 'profile' ? (
             <MemberProfile
               loggedInMember={memberProfile || loggedInMember}
+              memberConclaves={memberConclaves}
               onTabChange={handleTabChange}
               onLogout={handleLogout}
             />
@@ -742,6 +752,16 @@ export default function App() {
               </div>
             </div>
           )}
+          {/* Member Portal Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 font-medium">
+              <span>Powered by</span>
+              <span className="inline-flex items-center">
+                <img src="/manuen_square.png" alt="Manuen" className="h-7.5 w-7.5 object-contain rounded-xs shrink-0" />
+                <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-7 w-auto object-contain -ml-3 shrink-0" />
+              </span>
+            </div>
+          </footer>
         </main>
       </div>
     );

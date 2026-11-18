@@ -161,9 +161,9 @@ export default function Registrations({ loggedInMember, onTabChange, onSelectCon
           }
           return {
             ...c,
-            name: c.name || c.title || 'BNI Conclave',
+            name: c.name || c.title || '1-2-1 Connect Conclave',
             venue: c.venue || c.venueLocation || 'TBD Venue',
-            region: c.region || 'BNI Region',
+            region: c.region || '1-2-1 Connect Region',
             startDate: c.date || c.startDate || null,
             status: st,
             memberCount: c.memberCount || c.registrationCount || 0,

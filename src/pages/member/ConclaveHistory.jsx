@@ -127,7 +127,7 @@ export default function MemberConclaveHistory({ loggedInMember }) {
 
           return {
             id: c.id,
-            title: c.name || c.title || 'BNI Conclave',
+            title: c.name || c.title || '1-2-1 Connect Conclave',
             location: c.venue || c.venueLocation || 'TBD Venue',
             date: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : 'TBD',
             year: c.date ? new Date(c.date).getFullYear().toString() : 'All',

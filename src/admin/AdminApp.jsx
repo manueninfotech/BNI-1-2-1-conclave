@@ -85,7 +85,7 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
   const conclaveIdInUrl = location.pathname.match(/\/conclaves\/([^/]+)/)?.[1] || '';
 
   return (
-    <div className="admin-panel flex h-screen w-screen bg-zinc-50 text-zinc-950 font-sans antialiased overflow-hidden relative" style={{ fontFamily: '"Helvetica Neue", Arial, sans-serif' }}>
+    <div className="admin-panel flex h-screen w-screen bg-paper text-ink font-sans antialiased overflow-hidden relative" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
       {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-45 lg:hidden" />}
       <AdminSidebar
         base={base}
@@ -150,6 +150,16 @@ export default function AdminApp({ role, loggedInAdmin, onLogout }) {
             </Route>
             <Route path="*" element={<Navigate to={base} replace />} />
           </Routes>
+          {/* Admin & Superadmin Footer */}
+          <footer className="mt-12 py-5 border-t border-zinc-200/70 text-center select-none">
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 font-medium">
+              <span>Powered by</span>
+              <span className="inline-flex items-center">
+                <img src="/manuen_square.png" alt="Manuen" className="h-7.5 w-7.5 object-contain rounded-xs shrink-0" />
+                <img src="/manuen_logo.png" alt="Manuen Infotech" className="h-7 w-auto object-contain -ml-3 shrink-0" />
+              </span>
+            </div>
+          </footer>
         </main>
       </div>
     </div>

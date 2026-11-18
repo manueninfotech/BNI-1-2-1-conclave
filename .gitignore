@@ -5,3 +5,4 @@ dist/
 vite.config.js.timestamp*
 .DS_Store
 manuen-backend/
+scratch/

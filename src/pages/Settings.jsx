@@ -17,8 +17,13 @@ import {
   Upload,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { broadcastTabMessage, subscribeTabMessages } from '../utils/syncBus';
 
 const capitalizeFirst = (value) => value.charAt(0).toLocaleUpperCase() + value.slice(1);
+
+// eslint-disable-next-line no-control-regex -- strip unprintable ASCII/control bytes for Postgres jsonb
+const STRIP_CONTROL_REGEX = /[\u0000-\u001F\u007F-\u009F]/g;
+const stripControlChars = (str) => String(str || '').replace(STRIP_CONTROL_REGEX, '').trim();
 
 function parseNamesCsv(text, kind) {
   const rows = [];
@@ -58,6 +63,151 @@ function parseNamesCsv(text, kind) {
   if (headers.includes(names[0]?.toLocaleLowerCase())) names.shift();
   if (names.length === 0) throw new Error(`No ${kind} found. Use a CSV with one ${kind} per row.`);
   return names.map(capitalizeFirst);
+}
+
+// Native unzipper + reader for modern Excel (.xlsx) files using browser DecompressionStream and DOMParser
+async function parseXlsx(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) {
+    throw new Error('Not a valid Excel (.xlsx) file.');
+  }
+
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const cdOffset = view.getUint32(eocdOffset + 16, true);
+
+  const files = {};
+  let cur = cdOffset;
+  for (let i = 0; i < totalEntries; i++) {
+    if (view.getUint32(cur, true) !== 0x02014b50) break;
+    const method = view.getUint16(cur + 10, true);
+    const compressedSize = view.getUint32(cur + 20, true);
+    const fileNameLen = view.getUint16(cur + 28, true);
+    const extraLen = view.getUint16(cur + 30, true);
+    const commentLen = view.getUint16(cur + 32, true);
+    const localHeaderOffset = view.getUint32(cur + 42, true);
+
+    const fileNameBytes = bytes.subarray(cur + 46, cur + 46 + fileNameLen);
+    const fileName = new TextDecoder().decode(fileNameBytes);
+
+    if (fileName === 'xl/sharedStrings.xml' || (fileName.startsWith('xl/worksheets/sheet') && fileName.endsWith('.xml'))) {
+      const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+      const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+      const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+      const rawData = bytes.subarray(dataStart, dataStart + compressedSize);
+
+      let decompressedText = '';
+      if (method === 0) {
+        decompressedText = new TextDecoder().decode(rawData);
+      } else if (method === 8) {
+        const ds = new DecompressionStream('deflate-raw');
+        const writer = ds.writable.getWriter();
+        writer.write(rawData);
+        writer.close();
+        const resp = new Response(ds.readable);
+        decompressedText = await resp.text();
+      }
+      files[fileName] = decompressedText;
+    }
+
+    cur += 46 + fileNameLen + extraLen + commentLen;
+  }
+
+  const sharedStrings = [];
+  if (files['xl/sharedStrings.xml']) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(files['xl/sharedStrings.xml'], 'text/xml');
+    const siNodes = doc.getElementsByTagName('si');
+    for (let i = 0; i < siNodes.length; i++) {
+      const tNodes = siNodes[i].getElementsByTagName('t');
+      let str = '';
+      for (let j = 0; j < tNodes.length; j++) {
+        str += tNodes[j].textContent || '';
+      }
+      sharedStrings.push(str.trim());
+    }
+  }
+
+  const sheetKey = Object.keys(files).find((k) => k.startsWith('xl/worksheets/sheet') && k.endsWith('.xml'));
+  const values = [];
+
+  if (sheetKey && files[sheetKey]) {
+    const parser = new DOMParser();
+    const sheetDoc = parser.parseFromString(files[sheetKey], 'text/xml');
+    const rowNodes = sheetDoc.getElementsByTagName('row');
+
+    for (let i = 0; i < rowNodes.length; i++) {
+      const cNodes = rowNodes[i].getElementsByTagName('c');
+      for (let j = 0; j < cNodes.length; j++) {
+        const c = cNodes[j];
+        const r = c.getAttribute('r') || '';
+        // Strictly import Column A (e.g. A1, A2); ignore Column B, C, AA, etc.
+        if (/^A\d+$/i.test(r)) {
+          const t = c.getAttribute('t');
+          let val = '';
+          if (t === 's') {
+            const v = c.getElementsByTagName('v')[0]?.textContent;
+            const idx = parseInt(v, 10);
+            if (!isNaN(idx) && sharedStrings[idx] !== undefined) {
+              val = sharedStrings[idx];
+            }
+          } else if (t === 'inlineStr') {
+            val = c.getElementsByTagName('t')[0]?.textContent || '';
+          } else {
+            val = c.getElementsByTagName('v')[0]?.textContent || '';
+          }
+          val = stripControlChars(val);
+          if (val) values.push(val);
+          break;
+        }
+      }
+    }
+  }
+
+  return values;
+}
+
+async function parseImportFile(file, kind) {
+  const fileName = (file.name || '').toLowerCase();
+
+  if (fileName.endsWith('.xls') && !fileName.endsWith('.xlsx')) {
+    throw new Error('Legacy Excel 97-2003 (.xls) format is not supported. Please save or export your file as modern Excel (.xlsx) or CSV (.csv).');
+  }
+
+  const buffer = await file.arrayBuffer();
+  const headerBytes = new Uint8Array(buffer.slice(0, 4));
+  const isZip = headerBytes[0] === 0x50 && headerBytes[1] === 0x4B && headerBytes[2] === 0x03 && headerBytes[3] === 0x04;
+
+  let rawNames = [];
+  if (fileName.endsWith('.xlsx') || isZip) {
+    rawNames = await parseXlsx(buffer);
+  } else {
+    const text = new TextDecoder('utf-8').decode(buffer);
+    rawNames = parseNamesCsv(text, kind);
+  }
+
+  const cleaned = rawNames
+    .map((name) => stripControlChars(name))
+    .filter((name) => name.length > 0 && name.length <= 100);
+
+  const headers = ['name', 'names', 'category', 'categories', 'region', 'regions', 'business category', 'business categories', 'chapter', 'chapters'];
+  if (cleaned.length > 0 && headers.includes(cleaned[0].toLowerCase())) {
+    cleaned.shift();
+  }
+
+  if (cleaned.length === 0) {
+    throw new Error(`No valid ${kind} found in file. Please provide a file with one ${kind} per row.`);
+  }
+
+  return cleaned.map(capitalizeFirst);
 }
 
 /**
@@ -109,23 +259,36 @@ export default function Settings() {
       try {
         const r = await api.get('/admin/settings/regions');
         setRegions(r.regions || []);
-      } catch {}
+      } catch { }
       try {
         const t = await api.get('/admin/settings/round-timing');
         if (t) setTiming(t);
-      } catch {}
+      } catch { }
       try {
         const d = await api.get('/admin/settings/conclave-defaults');
         if (d) {
           setDefaults(d);
           localStorage.setItem('bni_conclave_defaults', JSON.stringify(d));
         }
-      } catch {}
+      } catch { }
       try {
         const n = await api.get('/admin/settings/notifications');
         if (n) setNotif(n);
-      } catch {}
+      } catch { }
     })();
+
+    // Listen to real-time cross-tab updates (e.g. category or region changed in another tab)
+    const unsubscribe = subscribeTabMessages((msg) => {
+      if (msg.type === 'SETTINGS_CHANGED') {
+        if (msg.kind === 'categories' && Array.isArray(msg.categories)) {
+          setCategories(msg.categories);
+        } else if (msg.kind === 'regions' && Array.isArray(msg.regions)) {
+          setRegions(msg.regions);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // --- Category Actions ---
@@ -136,7 +299,9 @@ export default function Settings() {
     setCatActionLoading(true);
     try {
       const r = await api.post('/admin/categories', { name: trimmed });
-      setCategories(r.categories || []);
+      const updated = r.categories || [];
+      setCategories(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
       setNewCatDraft('');
       setCatErr(false);
     } catch {
@@ -147,12 +312,18 @@ export default function Settings() {
   };
 
   const removeCategory = async (name) => {
+    const previous = categories;
+    const next = categories.filter((c) => c.toLowerCase() !== name.toLowerCase());
+    setCategories(next);
     setCatActionLoading(true);
     try {
       const r = await api.post('/admin/categories/remove', { name });
-      setCategories(r.categories || []);
+      const updated = r?.categories || next;
+      setCategories(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
       setCatErr(false);
     } catch {
+      setCategories(previous);
       setCatErr(true);
     } finally {
       setCatActionLoading(false);
@@ -177,7 +348,7 @@ export default function Settings() {
     else setRegState('saving');
 
     try {
-      const importedNames = parseNamesCsv(await file.text(), kind === 'category' ? 'categories' : 'regions');
+      const importedNames = await parseImportFile(file, kind === 'category' ? 'categories' : 'regions');
       const existing = new Set(currentNames.map((name) => name.toLocaleLowerCase()));
       const additions = [];
       for (const name of importedNames) {
@@ -196,18 +367,26 @@ export default function Settings() {
       if (kind === 'category') {
         const merged = [...currentNames, ...additions];
         const result = await api.put('/admin/categories', { categories: merged });
-        setCategories(result.categories || merged);
+        const updated = result.categories || merged;
+        setCategories(updated);
+        broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'categories', categories: updated });
         setCatErr(false);
       } else {
         const merged = [...currentNames, ...additions];
         const result = await api.put('/admin/settings/regions', { regions: merged });
-        setRegions(result.regions || merged);
+        const updated = result.regions || merged;
+        setRegions(updated);
+        broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'regions', regions: updated });
         setRegState('saved');
       }
       const skipped = importedNames.length - additions.length;
       setImportStatus(`Imported ${additions.length}${skipped ? `; skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`);
     } catch (error) {
-      setImportStatus(`Error: ${error.message || `Could not import ${kind}s.`}`);
+      let msg = error.message || `Could not import ${kind}s.`;
+      if (msg.includes('Failed query:') || msg.includes('insert into') || msg.includes('Internal Server Error')) {
+        msg = `Could not import ${kind}s. Please check the file contents and try again.`;
+      }
+      setImportStatus(`Error: ${msg}`);
       if (kind === 'region') setRegState('error');
     } finally {
       if (kind === 'category') setCatActionLoading(false);
@@ -221,13 +400,18 @@ export default function Settings() {
       const trimmed = region.trim();
       return trimmed ? capitalizeFirst(trimmed) : '';
     }).filter(Boolean);
+    const previous = regions;
+    setRegions(capitalizedRegions);
     setRegState('saving');
     try {
       const r = await api.put('/admin/settings/regions', { regions: capitalizedRegions });
-      setRegions(r.regions || capitalizedRegions);
+      const updated = r.regions || capitalizedRegions;
+      setRegions(updated);
+      broadcastTabMessage({ type: 'SETTINGS_CHANGED', kind: 'regions', regions: updated });
       setRegState('saved');
       setNewRegionDraft('');
     } catch {
+      setRegions(previous);
       setRegState('error');
     }
     setTimeout(() => setRegState(''), 2500);
@@ -332,22 +516,20 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'all'
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'all'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           All Settings
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('defaults')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'defaults'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'defaults'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Sliders className="w-3.5 h-3.5 text-zinc-500" />
           <span>Defaults</span>
@@ -355,11 +537,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('categories')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'categories'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'categories'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Tag className="w-3.5 h-3.5 text-zinc-500" />
           <span>Categories ({categories.length})</span>
@@ -367,11 +548,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('timing')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'timing'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'timing'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Timer className="w-3.5 h-3.5 text-zinc-500" />
           <span>Round Timing</span>
@@ -379,11 +559,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('regions')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'regions'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'regions'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <MapPin className="w-3.5 h-3.5 text-zinc-500" />
           <span>Regions ({regions.length})</span>
@@ -391,11 +570,10 @@ export default function Settings() {
         <button
           type="button"
           onClick={() => setActiveTab('notifications')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'notifications'
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'notifications'
               ? 'bg-white text-zinc-950 shadow-2xs'
               : 'text-zinc-600 hover:text-zinc-900'
-          }`}
+            }`}
         >
           <Bell className="w-3.5 h-3.5 text-zinc-500" />
           <span>Notifications</span>
@@ -519,16 +697,19 @@ export default function Settings() {
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      BNI classification standard. No two members sharing the same category are seated together.
+                      1-2-1 Connect classification standard. No two members sharing the same category are seated together.
                     </p>
                   </div>
                 </div>
-                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 ${catActionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label
+                  title="Import categories from Excel (.xlsx) or CSV (.csv)"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 ${catActionLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
                   <Upload className="w-3.5 h-3.5" />
                   Import
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
                     disabled={catActionLoading}
                     className="hidden"
                     onChange={(event) => handleNamesImport('category', event)}
@@ -630,7 +811,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-zinc-950">BNI Conclave Round Timing Standard</h3>
+                    <h3 className="text-sm font-bold text-zinc-950">1-2-1 Connect Round Timing Standard</h3>
                     <span className="px-2 py-0.2 bg-emerald-50 text-[#00875A] border border-emerald-200 text-[10px] font-bold rounded-full">
                       Official Fixed Format
                     </span>
@@ -687,7 +868,7 @@ export default function Settings() {
             <div className="mt-4 p-3 bg-amber-50/60 border border-amber-200/80 rounded-lg flex items-center gap-2 text-xs text-amber-900 font-medium">
               <Info className="w-4 h-4 text-amber-700 shrink-0" />
               <span>
-                Standard timing formulas (60s bio + 30s referral) are locked across the BNI network to maintain competitive integrity. Live conclave admins may add +1m, +2m, or +5m extensions in real time if required.
+                Standard timing formulas (60s bio + 30s referral) are locked across the 1-2-1 Connect network to maintain competitive integrity. Live conclave admins may add +1m, +2m, or +5m extensions in real time if required.
               </span>
             </div>
           </div>
@@ -710,10 +891,18 @@ export default function Settings() {
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 cursor-pointer">
+                <label
+                  title="Import regions from Excel (.xlsx) or CSV (.csv)"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-200 bg-white text-zinc-700 text-xs font-bold rounded-lg hover:bg-zinc-50 cursor-pointer"
+                >
                   <Upload className="w-3.5 h-3.5" />
                   Import
-                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => handleNamesImport('region', event)} />
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
+                    className="hidden"
+                    onChange={(event) => handleNamesImport('region', event)}
+                  />
                 </label>
                 <StatusBadge state={regState} />
               </div>

@@ -6,11 +6,11 @@
  * Generates a standard UPI deep link URL.
  * Spec: upi://pay?pa=UPI_ID&pn=HOLDER_NAME&am=FEE&tn=NOTE&cu=INR
  */
-export function generateUpiUri({ upiId, name = 'BNI Conclave', amount = 0, note = 'Conclave Registration' }) {
+export function generateUpiUri({ upiId, name = '1-2-1 Connect Conclave', amount = 0, note = 'Conclave Registration' }) {
   if (!upiId) return '';
   const cleanUpiId = String(upiId).trim().replace(/\s+/g, '');
   // Clean alphanumeric name without spaces or special characters for 100% UPI scanner compatibility
-  const cleanName = String(name || 'BNIConclave').replace(/[^a-zA-Z0-9]/g, '').trim() || 'BNIConclave';
+  const cleanName = String(name || 'ConnectConclave').replace(/[^a-zA-Z0-9]/g, '').trim() || 'ConnectConclave';
   const numAmount = Number(amount || 0);
 
   let uri = `upi://pay?pa=${cleanUpiId}&pn=${cleanName}&cu=INR`;

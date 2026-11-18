@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, X, AlertCircle, Sparkles, Building2, Tag, Loader2, Clock } from 'lucide-react';
 import { addNotification } from '../utils/notifications';
-import { api } from '../services/api';
+import { api, fileUrl } from '../services/api';
+import { getInitials, getProfilePhotoUrl } from '../utils/initials';
 
 export default function ReferModal({
   recipient,
@@ -17,6 +18,11 @@ export default function ReferModal({
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [recipient]);
 
   // Check whether referral submission is allowed
   const isAllowed = isTalkingTimeActive !== undefined ? isTalkingTimeActive : Boolean(isReferralOpen);
@@ -55,10 +61,10 @@ export default function ReferModal({
       conclaveId: conclaveIdToUse,
       fromUserId: fromUid,
       fromMemberId: fromUid,
-      fromName: loggedInUser?.name || 'BNI Member',
+      fromName: loggedInUser?.name || '1-2-1 Connect Member',
       toUserId: toUid,
       toMemberId: toUid,
-      toName: recipient?.name || 'BNI Member',
+      toName: recipient?.name || '1-2-1 Connect Member',
       notes: description,
       description: description,
       roundNumber: recipient?.roundNumber || 1,
@@ -80,9 +86,9 @@ export default function ReferModal({
         referrals: [{
           id: refId,
           fromUserId: fromUid,
-          fromName: loggedInUser?.name || 'BNI Member',
+          fromName: loggedInUser?.name || '1-2-1 Connect Member',
           toUserId: toUid,
-          toName: recipient?.name || 'BNI Member',
+          toName: recipient?.name || '1-2-1 Connect Member',
           roundNumber: recipient?.roundNumber || 1,
           notes: description,
           timestamp: new Date().toISOString()
@@ -121,9 +127,8 @@ export default function ReferModal({
     onClose();
   };
 
-  const recipientInitials = recipient?.name
-    ? recipient.name.split(' ').map(n => n[0]).filter(Boolean).join('').substring(0, 2).toUpperCase()
-    : 'BNI';
+  const recipientInitials = getInitials(recipient?.name, 'U');
+  const recipientPhoto = !imgBroken && fileUrl(getProfilePhotoUrl(recipient));
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[999] flex items-center justify-center p-4 sm:p-6 animate-fade-in font-sans">
@@ -167,20 +172,29 @@ export default function ReferModal({
           {/* Recipient card summary (pre-filled & locked) */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] font-black text-zinc-450 uppercase tracking-widest block">BNI Recipient (Locked)</label>
+              <label className="text-[10px] font-black text-zinc-450 uppercase tracking-widest block">Recipient (Locked)</label>
               <span className="text-[9px] font-bold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200/60">Verified Member</span>
             </div>
 
             <div className="p-3.5 border border-zinc-200/80 bg-zinc-50/80 rounded-xl flex items-center gap-3 shadow-2xs">
-              <div className="w-10 h-10 bg-gradient-to-br from-brand-red to-red-700 text-white rounded-xl flex items-center justify-center text-xs font-black shrink-0 shadow-sm shadow-brand-red/20">
-                {recipientInitials}
+              <div className="w-10 h-10 bg-gradient-to-br from-brand-red to-red-700 text-white rounded-xl flex items-center justify-center text-xs font-black shrink-0 shadow-sm shadow-brand-red/20 overflow-hidden">
+                {recipientPhoto ? (
+                  <img
+                    src={recipientPhoto}
+                    alt={recipient?.name}
+                    onError={() => setImgBroken(true)}
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                ) : (
+                  <span>{recipientInitials}</span>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-body-xs font-black text-zinc-900 truncate leading-snug">{recipient?.name}</p>
                 <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500 font-semibold truncate">
                   <span className="truncate flex items-center gap-1">
                     <Building2 className="w-3 h-3 text-zinc-400 shrink-0" />
-                    {recipient?.company || 'BNI Chapter Member'}
+                    {recipient?.company || '1-2-1 Connect Member'}
                   </span>
                 </div>
                 {recipient?.category && (

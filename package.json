@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
     "canvas-confetti": "^1.6.0",
     "firebase": "^12.16.0",
     "lucide-react": "^0.400.0",

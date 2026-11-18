@@ -17,7 +17,7 @@ export function parseAgendaTextToSteps(rawText) {
         desc: `Scheduled for ${match[1].trim()} during the conclave program.`
       });
     } else if (line.toLowerCase().includes('agenda')) {
-      // Title header line like "BNI REGIONAL CONCLAVE 2026 AGENDA"
+      // Title header line like "1-2-1 CONNECT REGIONAL CONCLAVE 2026 AGENDA"
       continue;
     } else {
       steps.push({
@@ -162,13 +162,13 @@ export function downloadOrViewAgendaDocument(agendaDoc) {
  * Dynamically generates a clean, fresh PDF Data URL containing ONLY
  * the newly provided schedule text lines without any previous/old data.
  */
-export function createFreshAgendaPdfDataUrl(rawText, conclaveTitle = 'BNI CONCLAVE 2026') {
+export function createFreshAgendaPdfDataUrl(rawText, conclaveTitle = '1-2-1 CONNECT CONCLAVE 2026') {
   const lines = (rawText || '')
     .split(/\r?\n/)
     .map(l => l.trim())
     .filter(Boolean);
 
-  const titleHeader = (conclaveTitle || 'BNI CONCLAVE 2026').toUpperCase().replace(/[()]/g, '');
+  const titleHeader = (conclaveTitle || '1-2-1 CONNECT CONCLAVE 2026').toUpperCase().replace(/[()]/g, '');
 
   const pdfStreamLines = [
     'BT',
@@ -208,7 +208,7 @@ export function createFreshAgendaPdfDataUrl(rawText, conclaveTitle = 'BNI CONCLA
   pdfStreamLines.push('0 -25 Td');
   pdfStreamLines.push('/F2 9 Tf');
   pdfStreamLines.push('0.5 0.5 0.5 rg');
-  pdfStreamLines.push(`(Official BNI Conclave Schedule Document) Tj`);
+  pdfStreamLines.push(`(Official 1-2-1 Connect Conclave Schedule Document) Tj`);
   pdfStreamLines.push('ET');
 
   const streamBody = pdfStreamLines.join('\n');

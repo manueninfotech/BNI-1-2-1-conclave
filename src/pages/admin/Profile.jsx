@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Check,
   LogOut,
   Edit2,
   Save,
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Camera
 } from 'lucide-react';
-import { api } from '../../services/api';
+import { api, fileUrl } from '../../services/api';
+import { getInitials, getProfilePhotoUrl } from '../../utils/initials';
 
 const formatJoinedDate = (rawDate) => {
   if (!rawDate) return 'July 2026';
@@ -45,7 +46,10 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
   // Local editable state for profile info
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [toast, setToast] = useState(null);
+  const [imgBroken, setImgBroken] = useState(false);
+  const fileInputRef = useRef(null);
 
   const showToast = (title, desc, type = 'success') => {
     setToast({ title, desc, type });
@@ -62,11 +66,11 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     }
     return {
       name: parsed?.name || loggedInAdmin?.name || (isSuperadmin ? 'Superadmin' : 'Administrator'),
-      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@bni.com' : 'admin@bni.com'),
+      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@121connect.com' : 'admin@121connect.com'),
       phone: (parsed?.phone && parsed.phone !== 'N/A') ? parsed.phone : ((loggedInAdmin?.phone && loggedInAdmin.phone !== 'N/A') ? loggedInAdmin.phone : (loggedInAdmin?.mobile || '')),
       designation: parsed?.designation || loggedInAdmin?.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
-      organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
-      region: isSuperadmin ? 'All Regions (Global)' : (parsed?.region || loggedInAdmin?.chapter || loggedInAdmin?.region || 'BNI Region'),
+      organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),
+      region: isSuperadmin ? 'All Regions (Global)' : (parsed?.region || loggedInAdmin?.chapter || loggedInAdmin?.region || '1-2-1 Connect Region'),
       joinedDate: formatJoinedDate(parsed?.createdAt || loggedInAdmin?.createdAt),
       uid: parsed?.uid || parsed?.id || loggedInAdmin?.uid || loggedInAdmin?.id || ''
     };
@@ -109,9 +113,10 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
             email: fresh.email || prev.email,
             phone: (fresh.phone && fresh.phone !== 'N/A') ? fresh.phone : (fresh.mobile || prev.phone),
             designation: fresh.designation || prev.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
-            organization: fresh.organization || prev.organization || (isSuperadmin ? 'BNI Global LLC' : 'BNI Regional Office'),
+            organization: fresh.organization || prev.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),
             region: isSuperadmin ? 'All Regions (Global)' : (fresh.region || fresh.scope || prev.region),
             joinedDate: formatJoinedDate(fresh.createdAt || prev.joinedDate),
+            photoUrl: fresh.photoUrl || prev.photoUrl,
             uid: fresh.uid || fresh.id || prev.uid
           }));
         }
@@ -154,17 +159,68 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     }
   };
 
-  const displayInitials = (profileData.name || 'Admin')
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast("Invalid File", "Please select an image file (JPEG, PNG, or WebP).", "error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("File Too Large", "Profile photo must be 5 MB or smaller.", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      setIsUploadingPhoto(true);
+      try {
+        let uploadedUrl = null;
+        try {
+          const res = await api.put('/me/photo', { dataUrl });
+          uploadedUrl = res?.photoUrl;
+        } catch {
+          const res = await api.put('/me', { ...profileData, photoUrl: dataUrl });
+          uploadedUrl = res?.profile?.photoUrl || dataUrl;
+        }
+
+        const finalUrl = uploadedUrl || dataUrl;
+        setProfileData(prev => ({ ...prev, photoUrl: finalUrl }));
+        setImgBroken(false);
+
+        if (isSuperadmin) {
+          const cached = localStorage.getItem('bni_superadmin_profile');
+          const parsed = cached ? JSON.parse(cached) : {};
+          localStorage.setItem('bni_superadmin_profile', JSON.stringify({ ...parsed, photoUrl: finalUrl }));
+        } else {
+          const logged = localStorage.getItem('bni_logged_admin');
+          const loggedParsed = logged ? JSON.parse(logged) : {};
+          localStorage.setItem('bni_logged_admin', JSON.stringify({ ...loggedParsed, photoUrl: finalUrl }));
+        }
+
+        window.dispatchEvent(new Event('storage'));
+        showToast("Photo Updated", "Your profile photo has been updated successfully.", "success");
+      } catch (err) {
+        showToast("Upload Failed", err.message || "Failed to update profile photo.", "error");
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [profileData?.photoUrl, profileData?.photo, loggedInAdmin]);
+
+  const rawPhoto = getProfilePhotoUrl(profileData) || getProfilePhotoUrl(loggedInAdmin);
+  const avatarSrc = !imgBroken && fileUrl(rawPhoto);
+  const displayInitials = getInitials(profileData.name, 'AD');
 
   // Role details
   const roleBadge = isSuperadmin ? 'Super Administrator' : 'Regional Administrator';
   const adminUid = profileData.uid || loggedInAdmin?.uid || loggedInAdmin?.id;
-  const displayId = adminUid ? `ADM-${adminUid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'BNI-SYS-0001' : 'BNI-ADM-0042');
+  const displayId = adminUid ? `ADM-${adminUid.slice(0, 6).toUpperCase()}` : (isSuperadmin ? 'CON-SYS-0001' : 'CON-ADM-0042');
 
   // KPIs from real backend
   const kpis = isSuperadmin
@@ -212,13 +268,42 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
           {/* Profile Hero Card */}
           <section className="bg-white border border-zinc-200 rounded-xl p-6 shadow-2xs">
             <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4">
-                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none">
-                  {displayInitials}
+              <div className="relative mb-4 group/avatar">
+                <div className="w-24 h-24 rounded-full bg-zinc-55 border-2 border-brand-red/20 shadow-md flex items-center justify-center font-black text-2xl text-zinc-650 select-none overflow-hidden">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={profileData.name}
+                      onError={() => setImgBroken(true)}
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                  ) : (
+                    <span>{displayInitials}</span>
+                  )}
                 </div>
-                <span className="absolute bottom-0 right-0 bg-brand-red text-white p-1 rounded-full border-2 border-white flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white stroke-[3.5]" />
-                </span>
+
+                {/* Upload camera button for mobile & desktop */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingPhoto}
+                  title="Upload profile photo"
+                  aria-label="Upload profile photo"
+                  className="absolute bottom-0 right-0 bg-brand-red hover:bg-red-750 text-white p-2 rounded-full border-2 border-white flex items-center justify-center shadow-md transition-smooth cursor-pointer disabled:opacity-50"
+                >
+                  {isUploadingPhoto ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
 
               <h2 className="text-lg font-black text-zinc-900 leading-tight">{profileData.name}</h2>

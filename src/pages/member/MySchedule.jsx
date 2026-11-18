@@ -16,19 +16,11 @@ import { formatUpcomingRoundStartTime, formatUpcomingRoundRange } from '../../ut
 import { calculateRoundTiming } from '../../utils/roundTiming';
 
 export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSyncData: propConclaveSyncData }) {
-  const [syncData, setSyncData] = useState(() => {
-    if (propConclaveSyncData) return propConclaveSyncData;
-    const cached = localStorage.getItem('bni_conclave_sync_data_cache');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) { }
-    }
-    return null;
-  });
+  const [syncData, setSyncData] = useState(propConclaveSyncData || null);
 
   useEffect(() => {
     if (propConclaveSyncData) {
       setSyncData(propConclaveSyncData);
-      localStorage.setItem('bni_conclave_sync_data_cache', JSON.stringify(propConclaveSyncData));
     }
   }, [propConclaveSyncData]);
 
@@ -196,7 +188,7 @@ export default function MemberSchedule({ loggedInMember, onTabChange, conclaveSy
   if (isConclaveCompleted || !conclaveSyncData || rounds.length === 0) {
     // Pull available info from fetchedConclave list or syncData metadata
     const conclaveTitle = conclaveSyncData?.conclaveStatus?.name ||
-      conclaveSyncData?.conclaveStatus?.title || 'BNI Conclave';
+      conclaveSyncData?.conclaveStatus?.title || '1-2-1 Connect Conclave';
     const venueStr = conclaveSyncData?.conclaveStatus?.venue || '';
     // sync service returns: date (date string), startTime / endTime (ISO or HH:MM strings)
     const startDateStr = conclaveSyncData?.conclaveStatus?.date || '';
