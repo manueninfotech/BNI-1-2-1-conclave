@@ -284,11 +284,12 @@ export default function ScheduleGen({
       return;
     }
     let csv = 'Round,Table,Captain,Members\n';
+    const isCaptainless = selectedConclave?.captainMode === 'none';
     selectedConclave.schedule.rounds.forEach(r => {
       const rNum = r.roundNumber || r.round || r.number;
       (r.tables || []).forEach(t => {
         const tNum = t.tableNumber || t.number;
-        const capt = t.captainName || t.captain?.name || (t.captainId !== undefined ? `Captain ${t.captainId}` : 'None');
+        const capt = isCaptainless ? 'None' : (t.captainName || t.captain?.name || (t.captainId != null ? `Captain ${t.captainId}` : 'None'));
         const mems = (t.memberNames || t.members?.map(m => m.name) || t.memberIds || []).join('; ');
         csv += `"${rNum}","${tNum}","${capt}","${mems}"\n`;
       });
@@ -703,21 +704,24 @@ export default function ScheduleGen({
       (rd.tables || []).forEach((tbl) => {
         const tableNum = tbl.tableNumber || tbl.number;
         const occupants = [];
+        const isCaptainless = selectedConclave?.captainMode === 'none';
 
-        if (tbl.captainId !== undefined || Array.isArray(tbl.memberIds)) {
-          if (tbl.captainId !== undefined) {
+        if (tbl.captainId != null || Array.isArray(tbl.memberIds)) {
+          if (!isCaptainless && tbl.captainId != null) {
             const capt = participantsList.find(p => p.id === tbl.captainId) || { id: tbl.captainId, name: `Captain ${tbl.captainId}` };
             occupants.push(capt);
           }
           if (Array.isArray(tbl.memberIds)) {
             tbl.memberIds.forEach(mId => {
-              const mem = participantsList.find(p => p.id === mId) || { id: mId, name: `Member ${mId}` };
-              occupants.push(mem);
+              if (mId != null) {
+                const mem = participantsList.find(p => p.id === mId) || { id: mId, name: `Member ${mId}` };
+                occupants.push(mem);
+              }
             });
           }
         } else {
-          const rawMembers = tbl.participants || tbl.members || [];
-          const captainObj = tbl.captain || (tbl.captainName ? { name: tbl.captainName, id: tbl.captainId, uid: tbl.captainId } : null);
+          const rawMembers = (tbl.participants || tbl.members || []).filter(Boolean);
+          const captainObj = isCaptainless ? null : (tbl.captain || (tbl.captainName ? { name: tbl.captainName, id: tbl.captainId, uid: tbl.captainId } : (tbl.captainId != null ? { id: tbl.captainId, name: `Captain ${tbl.captainId}` } : null)));
 
           occupants.push(...rawMembers);
           if (captainObj) {
@@ -831,9 +835,10 @@ export default function ScheduleGen({
 
     for (let i = 1; i <= count; i++) {
       const tbl = r1?.tables?.find(t => (t.tableNumber || t.number) === i);
-      const hasCaptain = tbl
-        ? (tbl.captainId !== undefined || Boolean(tbl.captainName))
-        : (i <= captainsCount);
+      const isCaptainless = selectedConclave?.captainMode === 'none';
+      const hasCaptain = !isCaptainless && (tbl
+        ? (tbl.captainId != null || Boolean(tbl.captainName))
+        : (i <= captainsCount));
 
       let assignedText = '';
       if (tbl) {
@@ -1459,17 +1464,18 @@ export default function ScheduleGen({
                   const allTables = Array.from({ length: calculatedTableCount }).map((_, tblIdx) => {
                     const tableNum = tblIdx + 1;
                     const scheduledTable = currentVisualRoundData?.tables?.find(t => (t.tableNumber || t.number) === tableNum);
+                    const isCaptainless = selectedConclave?.captainMode === 'none';
 
-                    const standInUid = standIns[String(tableNum)];
-                    const anchorCaptain = scheduledTable
-                      ? participants.find(p => p.id === scheduledTable.captainId || p.uid === scheduledTable.captainId || p._originalUid === scheduledTable.captainId) || (scheduledTable.captainName ? { name: scheduledTable.captainName } : null)
-                      : null;
+                    const standInUid = isCaptainless ? null : standIns[String(tableNum)];
+                    const anchorCaptain = (isCaptainless || scheduledTable?.captainId == null)
+                      ? (!isCaptainless && scheduledTable?.captainName ? { name: scheduledTable.captainName } : null)
+                      : (participants.find(p => p.id === scheduledTable.captainId || p.uid === scheduledTable.captainId || p._originalUid === scheduledTable.captainId) || (scheduledTable.captainName ? { name: scheduledTable.captainName } : null));
 
                     const standInCaptain = standInUid
                       ? participants.find(p => p._originalUid === standInUid || p.uid === standInUid || String(p.id) === String(standInUid))
                       : null;
 
-                    const captain = standInCaptain || anchorCaptain || (scheduledTable ? { name: `Captain ${tableNum}` } : null);
+                    const captain = isCaptainless ? null : (standInCaptain || anchorCaptain || (scheduledTable?.captainId != null ? { name: `Captain ${tableNum}` } : null));
                     const isStandIn = Boolean(standInCaptain);
 
                     const rawMembers = scheduledTable && Array.isArray(scheduledTable.memberIds)
@@ -1562,31 +1568,33 @@ export default function ScheduleGen({
                             </div>
 
                             {/* Table Captain Box */}
-                            <div className={`border rounded-xl p-3 flex items-center gap-3 transition-smooth ${isStandIn ? 'bg-amber-50/90 border-amber-200 ring-1 ring-amber-300/30' : 'bg-rose-50/70 border-rose-100'}`}>
-                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isStandIn ? 'bg-amber-200/90 text-amber-800' : 'bg-amber-100/90 text-amber-500'}`}>
-                                <Crown className="w-4 h-4 fill-current" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${isStandIn ? 'text-amber-800' : 'text-brand-red'}`}>
-                                    {isStandIn ? 'STAND-IN CAPTAIN' : 'TABLE CAPTAIN'}
-                                  </span>
-                                  {isStandIn && (
-                                    <span className="text-[8.5px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 uppercase tracking-tight">
-                                      Round {visualRound}
+                            {captain && (
+                              <div className={`border rounded-xl p-3 flex items-center gap-3 transition-smooth ${isStandIn ? 'bg-amber-50/90 border-amber-200 ring-1 ring-amber-300/30' : 'bg-rose-50/70 border-rose-100'}`}>
+                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isStandIn ? 'bg-amber-200/90 text-amber-800' : 'bg-amber-100/90 text-amber-500'}`}>
+                                  <Crown className="w-4 h-4 fill-current" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${isStandIn ? 'text-amber-800' : 'text-brand-red'}`}>
+                                      {isStandIn ? 'STAND-IN CAPTAIN' : 'TABLE CAPTAIN'}
                                     </span>
+                                    {isStandIn && (
+                                      <span className="text-[8.5px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 uppercase tracking-tight">
+                                        Round {visualRound}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs font-black text-zinc-900 truncate mt-1">
+                                    {captain?.name || `Captain ${tableNum}`}
+                                  </div>
+                                  {isStandIn && anchorCaptain?.name && (
+                                    <div className="text-[10px] font-medium text-zinc-500 truncate mt-0.5">
+                                      Standing in for <span className="line-through text-zinc-400 font-semibold">{anchorCaptain.name}</span>
+                                    </div>
                                   )}
                                 </div>
-                                <div className="text-xs font-black text-zinc-900 truncate mt-1">
-                                  {captain?.name || (captain ? captain.name : `Captain ${tableNum}`)}
-                                </div>
-                                {isStandIn && anchorCaptain?.name && (
-                                  <div className="text-[10px] font-medium text-zinc-500 truncate mt-0.5">
-                                    Standing in for <span className="line-through text-zinc-400 font-semibold">{anchorCaptain.name}</span>
-                                  </div>
-                                )}
                               </div>
-                            </div>
+                            )}
 
                             {/* Members Section */}
                             <div className="space-y-2 pt-0.5">

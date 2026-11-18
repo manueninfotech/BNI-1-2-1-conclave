@@ -351,10 +351,12 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
                 <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Assigned Table</p>
                 <p className="font-black text-zinc-900 text-body-lg mt-0.5">Table {conclaveSyncData?.tableNumber || 'N/A'}</p>
               </div>
-              <div>
-                <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Session Captain</p>
-                <p className="font-black text-zinc-900 text-body-lg mt-0.5">{conclaveSyncData?.captainName || 'Unknown'}</p>
-              </div>
+              {Boolean(conclaveSyncData?.captainName) && (
+                <div>
+                  <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Session Captain</p>
+                  <p className="font-black text-zinc-900 text-body-lg mt-0.5">{conclaveSyncData.captainName}</p>
+                </div>
+              )}
               <div className="col-span-2 md:col-span-1">
                 <p className="text-[9.5px] font-black text-zinc-700 uppercase tracking-widest">Location</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
@@ -845,6 +847,8 @@ export default function MemberCurrentRound({ loggedInMember, onTabChange, concla
 
           {/* Captain Detail Card */}
           {(() => {
+            const hasCaptain = Boolean(conclaveSyncData?.captainName || conclaveSyncData?.tableOccupants?.some(o => o.isCaptain));
+            if (!hasCaptain) return null;
             const captainName = conclaveSyncData?.captainName || 'Table Captain';
             const captainObj = conclaveSyncData?.tableOccupants?.find(o => o.isCaptain);
             const captainInitials = getInitials(captainName, 'TC');

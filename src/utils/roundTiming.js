@@ -126,7 +126,7 @@ export function calculateRoundTiming({
   const baseMinutes = null;
   const extSecs = Math.max(0, Number(extensionSeconds) || 0);
 
-  const p = Math.min(8, Math.max(1, Number(personsPerTable) || activeTiming.personsPerTable || 6));
+  const p = Math.min(12, Math.max(1, Number(personsPerTable) || activeTiming.personsPerTable || 6));
 
   // Active round timing: speaking time + referral window
   const activeCadenceSecs = (p * bioSecs) + (p * refSecs);

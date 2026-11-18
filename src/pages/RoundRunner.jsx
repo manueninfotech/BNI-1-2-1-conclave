@@ -100,7 +100,7 @@ export default function RoundRunner({
   const isCompleted = statusLower === 'completed' || statusLower === 'cancelled';
 
   const totalRounds = useMemo(() => {
-    return selectedConclave?.scheduleSummary?.roundCount || selectedConclave?.roundCount || stats?.roundCount || 4;
+    return selectedConclave?.schedule?.rounds?.length || selectedConclave?.scheduleSummary?.roundCount || selectedConclave?.roundCount || stats?.roundCount || 2;
   }, [selectedConclave, stats]);
 
   // The server's round clock, ticking every second
@@ -111,10 +111,11 @@ export default function RoundRunner({
   }, []);
   const clock = useMemo(() => liveClock(selectedConclave, nowTick), [selectedConclave, nowTick]);
 
-  const isUpcoming = !isCompleted && (statusLower === 'upcoming' || statusLower === 'draft' || !selectedConclave?.currentRound);
+  const hasRoundStarted = Boolean(selectedConclave?.currentRoundStartedAt && (statusLower === 'running' || statusLower === 'active'));
+  const isUpcoming = !isCompleted && (!hasRoundStarted || statusLower === 'upcoming' || statusLower === 'draft' || !selectedConclave?.currentRound);
   const activeRound = isCompleted
     ? (selectedConclave?.currentRound || totalRounds)
-    : (isUpcoming ? 0 : (clock.round || selectedConclave?.currentRound || 0));
+    : (!hasRoundStarted ? 0 : (clock.round || selectedConclave?.currentRound || 1));
 
   const progressPercent = useMemo(() => {
     if (isCompleted) return 100;
@@ -335,10 +336,13 @@ export default function RoundRunner({
     return Math.max(1, ...tableReferralsChartData.map(t => t.referrals));
   }, [tableReferralsChartData]);
 
-  // Derive persons per table from backend config
+  // Derive persons per table dynamically from active round tables, expanding if walk-ins increased table size
   const personsPerTable = useMemo(() => {
-    return selectedConclave?.personsPerTable || stats?.personsPerTable || (tables[0]?.members ? tables[0].members.length + 1 : 6);
-  }, [selectedConclave, stats, tables]);
+    const maxTableOccupancy = tables.length > 0
+      ? Math.max(...tables.map(t => (t.members?.length || 0) + (t.captain ? 1 : 0)), 0)
+      : 0;
+    return Math.max(maxTableOccupancy, selectedConclave?.personsPerTable || stats?.personsPerTable || 6);
+  }, [tables, selectedConclave, stats]);
 
   const conclaveMoveSeconds = useMemo(() => {
     return Number(selectedConclave?.moveSeconds) || (stats?.roundTransitionMs ? stats.roundTransitionMs / 1000 : 60);
@@ -607,7 +611,25 @@ export default function RoundRunner({
         counts[giverId].totalAmount += Number(r.closedAmount);
       }
     });
-    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
+
+    const activeList = Object.values(counts).sort((a, b) => b.count - a.count);
+
+    // Ensure exactly 5 are shown if the conclave has at least 5 participants
+    if (activeList.length < 5 && selectedConclave?.participants?.length) {
+      const usedNames = new Set(activeList.map(item => item.name.toLowerCase()));
+      const remainingParticipants = selectedConclave.participants
+        .filter(p => p.name && !usedNames.has(p.name.trim().toLowerCase()))
+        .map(p => ({
+          name: p.name.trim(),
+          category: p.businessCategory || p.category || 'Member',
+          count: 0,
+          totalAmount: 0,
+        }));
+
+      activeList.push(...remainingParticipants);
+    }
+
+    return activeList.slice(0, 5);
   }, [scopedReferrals, selectedConclave]);
 
   const formatTime = (seconds) => {
@@ -720,7 +742,7 @@ export default function RoundRunner({
 
     if (activeRound >= totalRounds && !isUpcoming) {
       setConfirmModal({
-        title: 'All Rounds Completed',
+        title: 'Conclude Conclave?',
         message: `All ${totalRounds} scheduled rounds have been completed. Would you like to conclude and finish the conclave now?`,
         confirmText: 'Yes, Finish Conclave',
         confirmColor: 'brand',
@@ -729,8 +751,8 @@ export default function RoundRunner({
       return;
     }
 
-    const nextRoundVal = customRoundNum !== null ? customRoundNum : (activeRound + 1);
-    const isRound1 = activeRound === 0 || isUpcoming;
+    const isRound1 = !hasRoundStarted || activeRound === 0 || isUpcoming;
+    const nextRoundVal = customRoundNum !== null ? customRoundNum : (isRound1 ? 1 : activeRound + 1);
 
     setConfirmModal({
       title: isRound1 ? 'Start Round 1?' : `Start Round ${nextRoundVal}?`,
@@ -957,7 +979,7 @@ export default function RoundRunner({
         iconBg: 'bg-amber-600',
         title: isFinalRound ? 'Final Round Completed' : `Next Round (R${nextRoundNum})`,
         subtitle: isFinalRound
-          ? 'All rounds completed • Ready to conclude conclave'
+          ? 'Final round concluded • Ready to finish conclave'
           : `Round ${activeRound} completed • Ready for Round ${nextRoundNum}`,
         timeText: '00:00',
         timeSub: 'Time Left',
@@ -994,7 +1016,7 @@ export default function RoundRunner({
         title: 'Move to Next Table',
         subtitle: isRoundPaused
           ? `Move paused${pausedAtTime ? ` at ${pausedAtTime}` : ''} • Table Move`
-          : (activeRound < totalRounds ? 'Please move to your next table' : 'All rounds completed'),
+          : (activeRound < totalRounds ? 'Please move to your next table' : 'Please remain at your table • Final round'),
         timeText: formatTime(displayedTimeLeft),
         timeSub: isRoundPaused ? (pausedAtTime ? `Paused at ${pausedAtTime}` : 'Paused') : 'Move Time',
         showProgress: false,
@@ -1366,7 +1388,7 @@ export default function RoundRunner({
                   phaseTitle = `Round ${activeRound || 1} Completed`;
                   phaseSubtitle = isCompleted
                     ? 'Conclave Completed'
-                    : (activeRound >= totalRounds ? 'All rounds completed' : `Next Round (R${activeRound + 1})`);
+                    : (activeRound >= totalRounds ? 'Final round concluded • Ready to finish' : `Next Round (R${activeRound + 1})`);
                   phaseBadge = 'DONE';
                 } else if (isTransitionPhase) {
                   speakerTimeSeconds = displayedTimeLeft;
@@ -1456,62 +1478,68 @@ export default function RoundRunner({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-0.5">
-                {/* Pause / Resume */}
-                {isRoundPaused ? (
-                  <button
-                    type="button"
-                    onClick={handleResumeRound}
-                    disabled={isCompleted || (isRoundEnded && !isMovePhase)}
-                    className="h-10 px-4 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-zinc-900 text-zinc-900" />
-                    <span>Resume</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handlePauseRound}
-                    disabled={!isRoundRunning}
-                    className="h-10 px-4 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs"
-                  >
-                    <Pause className="w-3.5 h-3.5 fill-zinc-900 text-zinc-900" />
-                    <span>Pause</span>
-                  </button>
-                )}
+              {(() => {
+                const isReadyForRound1 = !isCompleted && (!hasRoundStarted || activeRound === 0 || isUpcoming);
+                const hasMoreRounds = !isReadyForRound1 && activeRound < totalRounds;
+                const showNextRoundBtn = !isCompleted && (isReadyForRound1 || hasMoreRounds);
 
-                {/* Next Round */}
-                <button
-                  type="button"
-                  onClick={() => handleStartNextRound()}
-                  disabled={isStartingRound || isCompleted}
-                  className={`h-10 px-4 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-xs cursor-pointer disabled:opacity-40 ${
-                    activeRound >= totalRounds && !isUpcoming
-                      ? 'bg-zinc-700 hover:bg-zinc-800'
-                      : 'bg-[#00875A] hover:bg-emerald-600'
-                  }`}
-                >
-                  <Play className="w-3.5 h-3.5 fill-white text-white" />
-                  <span>
-                    {(() => {
-                      if (activeRound === 0 || isUpcoming) return 'Start Round 1';
-                      if (activeRound >= totalRounds) return 'All Rounds Completed';
-                      return `Next Round (R${activeRound + 1})`;
-                    })()}
-                  </span>
-                </button>
+                return (
+                  <div className={`grid grid-cols-1 ${showNextRoundBtn ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5 pt-0.5`}>
+                    {/* Pause / Resume */}
+                    {isRoundPaused ? (
+                      <button
+                        type="button"
+                        onClick={handleResumeRound}
+                        disabled={isCompleted || (isRoundEnded && !isMovePhase)}
+                        className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs border border-emerald-400/30"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white text-white" />
+                        <span>Resume</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handlePauseRound}
+                        disabled={!isRoundRunning}
+                        className="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs border border-amber-400/30"
+                      >
+                        <Pause className="w-3.5 h-3.5 fill-white text-white" />
+                        <span>Pause</span>
+                      </button>
+                    )}
 
-                {/* Finish Conclave */}
-                <button
-                  type="button"
-                  onClick={handleFinishConclave}
-                  disabled={isCompleted}
-                  className="h-10 px-4 rounded-xl bg-white hover:bg-rose-50 text-brand-red font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs border border-rose-200"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-red" />
-                  <span>Finish Conclave</span>
-                </button>
-              </div>
+                    {/* Next Round */}
+                    {showNextRoundBtn && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartNextRound()}
+                        disabled={isStartingRound || isCompleted}
+                        className="h-10 px-4 rounded-xl bg-[#00875A] hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-xs cursor-pointer disabled:opacity-40"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white text-white" />
+                        <span>
+                          {isReadyForRound1 ? 'Start Round 1' : `Next Round (R${activeRound + 1})`}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Finish Conclave */}
+                    <button
+                      type="button"
+                      onClick={handleFinishConclave}
+                      disabled={isCompleted}
+                      className={`h-10 px-4 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-2 transition-smooth cursor-pointer disabled:opacity-40 shadow-xs ${
+                        !showNextRoundBtn
+                          ? 'bg-[#00875A] hover:bg-emerald-600 border border-emerald-400/40'
+                          : 'bg-zinc-900/80 hover:bg-zinc-900 border border-white/20'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                      <span>Finish Conclave</span>
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -1677,45 +1705,47 @@ export default function RoundRunner({
           {/* 3. Bottom Row: Top Referrals + Referrals by Status (Responsive Side-by-side) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Left: Top Referrals Leaderboard (Kept same as it is) */}
-            <div className="bg-white rounded-2xl border border-zinc-200/90 p-4 sm:p-5 shadow-3xs flex flex-col gap-3 font-sans min-w-0">
+            <div className="bg-white rounded-2xl border border-zinc-200/90 p-3.5 sm:p-4 shadow-3xs flex flex-col gap-2.5 font-sans min-w-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-brand-red shrink-0" />
                   <h4 className="text-xs sm:text-sm font-black text-zinc-950 uppercase tracking-wider truncate">Top Referrals</h4>
                 </div>
                 {displayLeaderboard?.length > 0 && (
-                  <span className="text-[11px] font-bold text-zinc-400">{displayLeaderboard.length} Members</span>
+                  <span className="text-[10.5px] font-bold text-zinc-400 tabular-nums">{displayLeaderboard.length} Members</span>
                 )}
               </div>
 
-              <div className="space-y-2 pt-1 flex-1">
+              <div className="space-y-1 pt-0.5 flex-1">
                 {displayLeaderboard && displayLeaderboard.length > 0 ? (
                   displayLeaderboard.map((item, idx) => {
                     const badgeColor = idx === 0
-                      ? 'bg-amber-400 text-amber-950'
+                      ? 'bg-amber-400 text-amber-950 shadow-3xs'
                       : idx === 1
-                        ? 'bg-slate-300 text-slate-800'
+                        ? 'bg-slate-300 text-slate-800 shadow-3xs'
                         : idx === 2
-                          ? 'bg-amber-600 text-white'
-                          : 'bg-zinc-100 text-zinc-700';
+                          ? 'bg-amber-600 text-white shadow-3xs'
+                          : 'bg-zinc-150 text-zinc-700';
 
                     return (
                       <div
                         key={idx}
-                        className="flex items-center justify-between p-2 sm:p-2.5 rounded-xl hover:bg-zinc-50 transition-colors"
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-zinc-50 transition-colors"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${badgeColor}`}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-[10.5px] shrink-0 ${badgeColor}`}>
                             {idx + 1}
                           </span>
                           <div className="min-w-0">
-                            <div className="text-xs font-black text-zinc-900 truncate">{item.name}</div>
-                            <div className="text-[10px] font-semibold text-zinc-400 truncate">{item.category}</div>
+                            <div className="text-xs font-black text-zinc-900 truncate leading-tight">{item.name}</div>
+                            <div className="text-[9.5px] font-semibold text-zinc-400 truncate leading-tight mt-0.5">{item.category}</div>
                           </div>
                         </div>
 
                         <div className="text-right shrink-0">
-                          <span className="text-xs font-black text-brand-red tabular-nums">{item.count} {item.count === 1 ? 'Referral' : 'Referrals'}</span>
+                          <span className={`text-xs font-black tabular-nums ${item.count > 0 ? 'text-brand-red' : 'text-zinc-400'}`}>
+                            {item.count} {item.count === 1 ? 'Referral' : 'Referrals'}
+                          </span>
                         </div>
                       </div>
                     );
