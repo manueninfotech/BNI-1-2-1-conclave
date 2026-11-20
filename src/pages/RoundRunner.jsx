@@ -1614,28 +1614,32 @@ export default function RoundRunner({
               {/* Bar Chart Area */}
               <div className="flex-1 flex flex-col justify-end min-h-[170px] pt-4 w-full min-w-0 overflow-hidden">
                 <div className="flex items-end justify-between gap-1.5 sm:gap-2.5 md:gap-3 h-36 px-2 sm:px-3 pb-0 w-full min-w-0">
-                  {referralsByRoundData.map((item, idx) => {
+                  {(() => {
                     const maxVal = Math.max(1, ...referralsByRoundData.map(r => r.count));
-                    const heightPct = item.count > 0 ? Math.max(15, Math.min(100, (item.count / maxVal) * 100)) : 0;
-                    return (
-                      <div key={idx} className="flex-1 min-w-0 flex flex-col items-center justify-end h-full">
-                        <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums">{item.count}</span>
-                        {item.count > 0 ? (
-                          <div
-                            className={`w-3.5 sm:w-4.5 rounded-t-md transition-all duration-300 ${
-                              item.round === activeRound ? 'bg-brand-red' : 'bg-red-800'
-                            }`}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                        ) : (
-                          <div className="w-3.5 sm:w-4.5 h-1 bg-zinc-300 rounded-full" />
-                        )}
-                        <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap" title={`Round ${item.round}`}>
-                          R{item.round}
-                        </span>
-                      </div>
-                    );
-                  })}
+                    return referralsByRoundData.map((item, idx) => {
+                      const heightPct = item.count > 0 ? Math.max(8, Math.min(100, Math.round((item.count / maxVal) * 100))) : 0;
+                      return (
+                        <div key={idx} className="flex-1 min-w-0 flex flex-col items-center h-full">
+                          <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums shrink-0">{item.count}</span>
+                          <div className="flex-1 w-full flex items-end justify-center min-h-0">
+                            {item.count > 0 ? (
+                              <div
+                                className={`w-3.5 sm:w-4.5 rounded-t-md transition-all duration-300 ${
+                                  item.round === activeRound ? 'bg-brand-red' : 'bg-red-800'
+                                }`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            ) : (
+                              <div className="w-3.5 sm:w-4.5 h-1 bg-zinc-300 rounded-full mb-0.5" />
+                            )}
+                          </div>
+                          <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap shrink-0" title={`Round ${item.round}`}>
+                            R{item.round}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -1667,36 +1671,40 @@ export default function RoundRunner({
               {/* Bar Chart Area */}
               <div className="flex-1 flex flex-col justify-end min-h-[170px] pt-4 w-full min-w-0 overflow-hidden">
                 <div className="flex items-end justify-between gap-1.5 sm:gap-2.5 md:gap-3 h-36 px-2 sm:px-3 pb-0 w-full min-w-0">
-                  {top5TablesChartData.map((item, idx) => {
+                  {(() => {
                     const maxVal = Math.max(1, ...top5TablesChartData.map(t => t.referrals));
-                    const heightPct = item.referrals > 0 ? Math.max(12, Math.min(100, (item.referrals / maxVal) * 100)) : 0;
-                    const barColor = idx === 0
-                      ? 'bg-brand-red'
-                      : idx === 1
-                        ? 'bg-red-700'
-                        : idx === 2
-                          ? 'bg-red-800'
-                          : idx === 3
-                            ? 'bg-red-900'
-                            : 'bg-zinc-800';
+                    return top5TablesChartData.map((item, idx) => {
+                      const heightPct = item.referrals > 0 ? Math.max(8, Math.min(100, Math.round((item.referrals / maxVal) * 100))) : 0;
+                      const barColor = idx === 0
+                        ? 'bg-brand-red'
+                        : idx === 1
+                          ? 'bg-red-700'
+                          : idx === 2
+                            ? 'bg-red-800'
+                            : idx === 3
+                              ? 'bg-red-900'
+                              : 'bg-zinc-800';
 
-                    return (
-                      <div key={idx} className="flex-1 min-w-0 flex flex-col items-center justify-end h-full">
-                        <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums">{item.referrals}</span>
-                        {item.referrals > 0 ? (
-                          <div
-                            className={`w-3.5 sm:w-4.5 rounded-t-md transition-all duration-300 ${barColor}`}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                        ) : (
-                          <div className="w-3.5 sm:w-4.5 h-1 bg-zinc-200 rounded-full" />
-                        )}
-                        <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap" title={item.fullName}>
-                          {item.name}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div key={idx} className="flex-1 min-w-0 flex flex-col items-center h-full">
+                          <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums shrink-0">{item.referrals}</span>
+                          <div className="flex-1 w-full flex items-end justify-center min-h-0">
+                            {item.referrals > 0 ? (
+                              <div
+                                className={`w-3.5 sm:w-4.5 rounded-t-md transition-all duration-300 ${barColor}`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            ) : (
+                              <div className="w-3.5 sm:w-4.5 h-1 bg-zinc-200 rounded-full mb-0.5" />
+                            )}
+                          </div>
+                          <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap shrink-0" title={item.fullName}>
+                            {item.name}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -1773,27 +1781,31 @@ export default function RoundRunner({
               {/* Bar Chart Area */}
               <div className="flex-1 flex flex-col justify-end min-h-[170px] pt-4 w-full min-w-0 overflow-hidden">
                 <div className="flex items-end justify-between gap-1.5 sm:gap-2.5 md:gap-3 h-36 px-3 sm:px-6 pb-0 w-full min-w-0">
-                  {referralsByStatusData.map((item, idx) => {
+                  {(() => {
                     const maxVal = Math.max(1, ...referralsByStatusData.map(s => s.count));
-                    const heightPct = item.count > 0 ? Math.max(12, Math.min(100, (item.count / maxVal) * 100)) : 0;
+                    return referralsByStatusData.map((item, idx) => {
+                      const heightPct = item.count > 0 ? Math.max(8, Math.min(100, Math.round((item.count / maxVal) * 100))) : 0;
 
-                    return (
-                      <div key={idx} className="flex-1 min-w-0 flex flex-col items-center justify-end h-full">
-                        <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums">{item.count}</span>
-                        {item.count > 0 ? (
-                          <div
-                            className={`w-4 sm:w-5 rounded-t-md transition-all duration-300 ${item.barColor}`}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                        ) : (
-                          <div className="w-4 sm:w-5 h-1 bg-zinc-200 rounded-full" />
-                        )}
-                        <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap">
-                          {item.name}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div key={idx} className="flex-1 min-w-0 flex flex-col items-center h-full">
+                          <span className="text-xs font-black text-zinc-900 mb-1.5 tabular-nums shrink-0">{item.count}</span>
+                          <div className="flex-1 w-full flex items-end justify-center min-h-0">
+                            {item.count > 0 ? (
+                              <div
+                                className={`w-4 sm:w-5 rounded-t-md transition-all duration-300 ${item.barColor}`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            ) : (
+                              <div className="w-4 sm:w-5 h-1 bg-zinc-200 rounded-full mb-0.5" />
+                            )}
+                          </div>
+                          <span className="text-xs font-black text-zinc-600 mt-2 text-center whitespace-nowrap shrink-0">
+                            {item.name}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 

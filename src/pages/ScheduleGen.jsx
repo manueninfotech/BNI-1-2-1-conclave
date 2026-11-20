@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useConclave } from '../hooks/useConclave';
+import { useConclaveStats } from '../hooks/useConclaveStats';
+import { useConclaveMembers } from '../hooks/useConclaveMembers';
+import { useConclaveLive } from '../hooks/useConclaveLive';
 import { broadcastTabMessage } from '../utils/syncBus';
 import { getInitials } from '../utils/initials';
 import {
@@ -46,58 +50,66 @@ export default function ScheduleGen({
   isHubMode = false,
 }) {
   const queryClient = useQueryClient();
-  // Conclaves list state
-  const [conclaves, setConclaves] = useState([]);
+
+  // Reactive Conclave, Stats, Registrations hooks with Real-Time SSE Sync
+  const { data: rawConclave = null, isLoading: isConclaveLoading } = useConclave(selectedConclaveId);
+  const { data: rawStats = null } = useConclaveStats(selectedConclaveId);
+  const { data: rawMembers = [] } = useConclaveMembers(selectedConclaveId);
+  useConclaveLive(selectedConclaveId);
+
+  // Instant conclave cache for cold refreshes so no loading spinner or flash appears
+  const instantConclave = useMemo(() => {
+    if (!selectedConclaveId) return null;
+    try {
+      const cached = localStorage.getItem(`connect_instant_conclave_${selectedConclaveId}`);
+      if (cached) return JSON.parse(cached);
+    } catch { }
+    return null;
+  }, [selectedConclaveId]);
 
   useEffect(() => {
-    async function loadConclaves() {
+    if (rawConclave && rawConclave.id) {
       try {
-        const data = await api.get('/admin/conclaves');
-        if (data && data.length > 0) {
-          const mapped = data.map(c => {
-            let state = c.state;
-            let country = c.country;
-            const venue = c.venueLocation || c.venue || 'N/A';
-            const venueShort = venue.split(',')[0] || 'N/A';
-            const startDate = c.date || c.startDate || '';
-            const dateRange = c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : (c.dateRange || 'N/A');
-
-            let status = c.status;
-            const s = (c.status || '').toLowerCase().replace(/[\s_-]/g, '');
-            if (s === 'registrationopen' || s === 'upcoming') status = 'Upcoming';
-            else if (s === 'running' || s === 'active') status = 'Running';
-            else if (s === 'completed') status = 'Completed';
-            else if (s === 'draft') status = 'Draft';
-            else if (s === 'cancelled') status = 'Cancelled';
-
-            const hasSched = Boolean(c.scheduleSummary || c.schedule || ['running', 'completed', 'locked'].includes(s));
-
-            return {
-              ...c,
-              state,
-              country,
-              venue,
-              venueShort,
-              startDate,
-              dateRange,
-              status,
-              progress: hasSched ? 100 : s === 'running' ? 60 : 0
-            };
-          });
-          setConclaves(mapped);
-          localStorage.setItem('connect_schedule_gen_conclaves_cache', JSON.stringify(mapped));
-        }
-      } catch (err) {
-        console.error('API load failed for conclaves:', err);
-      }
+        localStorage.setItem(`connect_instant_conclave_${rawConclave.id}`, JSON.stringify(rawConclave));
+      } catch { }
     }
-    loadConclaves();
-  }, []);
+  }, [rawConclave]);
 
-  const selectedConclave = useMemo(() =>
-    conclaves.find(c => c.id === selectedConclaveId),
-    [conclaves, selectedConclaveId]
-  );
+  const membersList = rawMembers;
+
+  const selectedConclave = useMemo(() => {
+    const c = rawConclave || instantConclave;
+    if (!c) return null;
+    const venue = c.venueLocation || c.venue || 'N/A';
+    const venueShort = venue.split(',')[0] || 'N/A';
+    const startDate = c.date || c.startDate || '';
+    const dateRange = c.date
+      ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' })
+      : (c.dateRange || 'N/A');
+
+    let status = c.status;
+    const s = (c.status || '').toLowerCase().replace(/[\s_-]/g, '');
+    if (s === 'registrationopen' || s === 'upcoming') status = 'Upcoming';
+    else if (s === 'running' || s === 'active') status = 'Running';
+    else if (s === 'completed') status = 'Completed';
+    else if (s === 'draft') status = 'Draft';
+    else if (s === 'cancelled') status = 'Cancelled';
+
+    const hasSched = Boolean(c.scheduleSummary || c.schedule || ['running', 'completed', 'locked'].includes(s));
+
+    return {
+      ...c,
+      state: c.state,
+      country: c.country,
+      venue,
+      venueShort,
+      startDate,
+      dateRange,
+      status,
+      progress: hasSched ? 100 : s === 'running' ? 60 : 0
+    };
+  }, [rawConclave]);
+
   const conclaveName = selectedConclave?.name || 'Conclave';
 
   const isLocked = Boolean(selectedConclave?.isScheduleLocked || selectedConclave?.status?.toLowerCase() === 'locked');
@@ -111,61 +123,27 @@ export default function ScheduleGen({
   const isConclaveRunningOrLocked = Boolean(isLocked || isConclaveCompleted || isRunning);
   const hasGeneratedSchedule = Boolean(selectedConclave?.schedule || selectedConclave?.scheduleSummary);
 
-  // Stats state - scoped strictly per conclave ID without static fallbacks
-  const [stats, setStats] = useState(() => {
-    if (selectedConclaveId) {
-      try {
-        const cached = localStorage.getItem(`bni_admin_stats_cache_${selectedConclaveId}`);
-        if (cached) return JSON.parse(cached);
-      } catch { }
-    }
-    return null;
-  });
+  // Live Stats derived from backend stats query & current members list
+  const stats = useMemo(() => {
+    if (!rawStats && !membersList?.length) return null;
+    const distinctCatCount = new Set(
+      (membersList || [])
+        .map(u => u.category?.trim() || u.businessCategory?.trim())
+        .filter(Boolean)
+    ).size;
 
-  useEffect(() => {
-    let alive = true;
-    async function loadStatsAndMembers() {
-      if (!selectedConclaveId) {
-        setStats(null);
-        return;
+    return {
+      ...(rawStats || {}),
+      counts: {
+        registered: rawStats?.counts?.registered ?? membersList.length,
+        active: rawStats?.counts?.active ?? membersList.filter(m => Boolean(m.isOnline || m.checkedIn || m.presence === 'online' || m.isActive === true || m.status?.toLowerCase() === 'active')).length,
+        captains: rawStats?.counts?.captains ?? membersList.filter(m => (m.role || '').toLowerCase() === 'captain' || m.isCaptain).length,
+        businessTypes: distinctCatCount || rawStats?.counts?.businessTypes || 0,
+        referrals: rawStats?.counts?.referrals ?? 0,
+        attendanceRecords: rawStats?.counts?.attendanceRecords ?? 0
       }
-      try {
-        let statsData = await api.get(`/admin/conclaves/${selectedConclaveId}/stats`).catch(() => null);
-        let allUsers = await api.get('/admin/users').catch(() => []);
-
-        let registeredCount = statsData?.counts?.registered ?? 0;
-        let activeCount = statsData?.counts?.active ?? 0;
-        let captainsCount = statsData?.counts?.captains ?? 0;
-
-        const distinctCatCount = new Set((allUsers || []).map(u => u.category?.trim() || u.businessCategory?.trim()).filter(Boolean)).size || 0;
-
-        const updatedStats = {
-          counts: {
-            registered: registeredCount,
-            active: activeCount,
-            captains: captainsCount,
-            businessTypes: distinctCatCount,
-            referrals: statsData?.counts?.referrals ?? 0,
-            attendanceRecords: statsData?.counts?.attendanceRecords ?? 0
-          }
-        };
-        if (alive) {
-          setStats(updatedStats);
-          try {
-            localStorage.setItem(`bni_admin_stats_cache_${selectedConclaveId}`, JSON.stringify(updatedStats));
-          } catch { }
-        }
-      } catch (err) {
-        console.error('Failed to load conclave stats:', err);
-      }
-    }
-    loadStatsAndMembers();
-    const interval = setInterval(loadStatsAndMembers, 15000);
-    return () => {
-      alive = false;
-      clearInterval(interval);
     };
-  }, [selectedConclaveId]);
+  }, [rawStats, membersList]);
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -215,21 +193,16 @@ export default function ScheduleGen({
   const [roundTimeMinutes, setRoundTimeMinutes] = useState('7.5');
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
-  const [membersList, setMembersList] = useState([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [roundSelectOpen, setRoundSelectOpen] = useState(false);
 
-  // When opening preview, refresh conclave data to ensure stand-in captains and live updates are loaded
+  // When opening preview, refresh conclave query to ensure stand-in captains and live updates are loaded
   useEffect(() => {
     if (isPreviewOpen && selectedConclaveId) {
-      api.get(`/admin/conclaves/${selectedConclaveId}`).then(fresh => {
-        if (fresh && fresh.id) {
-          setConclaves(prev => prev.map(c => c.id === fresh.id ? { ...c, ...fresh } : c));
-        }
-      }).catch(() => null);
+      queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
     }
-  }, [isPreviewOpen, selectedConclaveId, visualRound]);
+  }, [isPreviewOpen, selectedConclaveId, visualRound, queryClient]);
 
   // Close preview on Escape key and lock body scroll
   useEffect(() => {
@@ -249,24 +222,6 @@ export default function ScheduleGen({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isPreviewOpen]);
-
-  useEffect(() => {
-    let alive = true;
-    async function loadMembers() {
-      if (!selectedConclaveId) return;
-      try {
-        const res = await api.get(`/admin/conclaves/${selectedConclaveId}/registrations`).catch(() => null);
-        const list = res?.registrations || (Array.isArray(res) ? res : []);
-        if (alive && Array.isArray(list)) {
-          setMembersList(list);
-        }
-      } catch (err) {
-        console.warn('Could not load conclave registrations:', err);
-      }
-    }
-    loadMembers();
-    return () => { alive = false; };
-  }, [selectedConclaveId]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -386,13 +341,37 @@ export default function ScheduleGen({
 
   const [targetTableCount, setTargetTableCount] = useState(null);
 
-  const calculatedTableCount = useMemo(() => {
+  const displayPersonsPerTable = useMemo(() => {
+    if (hasGeneratedSchedule) {
+      const p = selectedConclave?.schedule?.config?.personsPerTable ?? selectedConclave?.personsPerTable;
+      if (typeof p === 'number' && p > 0) return p;
+    }
+    return personsPerTable;
+  }, [hasGeneratedSchedule, selectedConclave, personsPerTable]);
+
+  const displayRoundCount = useMemo(() => {
+    if (hasGeneratedSchedule) {
+      const r = selectedConclave?.schedule?.rounds?.length ?? selectedConclave?.schedule?.config?.roundCount ?? selectedConclave?.roundCount;
+      if (typeof r === 'number' && r > 0) return r;
+    }
+    return roundCount;
+  }, [hasGeneratedSchedule, selectedConclave, roundCount]);
+
+  const displayTableCount = useMemo(() => {
+    if (hasGeneratedSchedule) {
+      const t = selectedConclave?.schedule?.rounds?.[0]?.tables?.length
+        ?? selectedConclave?.scheduleSummary?.tableCount
+        ?? selectedConclave?.schedule?.tableCount;
+      if (typeof t === 'number' && t > 0) return t;
+    }
     if (targetTableCount !== null && targetTableCount > 0) {
       return targetTableCount;
     }
     if (totalAttendees <= 0) return selectedConclave?.scheduleSummary?.tableCount || 0;
-    return Math.max(1, Math.ceil(totalAttendees / Math.max(2, personsPerTable)));
-  }, [targetTableCount, totalAttendees, personsPerTable, selectedConclave]);
+    return Math.max(1, Math.ceil(totalAttendees / Math.max(2, displayPersonsPerTable)));
+  }, [hasGeneratedSchedule, selectedConclave, targetTableCount, totalAttendees, displayPersonsPerTable]);
+
+  const calculatedTableCount = displayTableCount;
 
   const handleTableCountChange = (newCount) => {
     if (isConclaveRunningOrLocked) return;
@@ -403,46 +382,54 @@ export default function ScheduleGen({
     setPersonsPerTable(newCapacity);
   };
 
-  // Track previous conclave ID so we only initialize parameters when changing conclaves
-  const prevConclaveIdRef = useRef(null);
-
-  // Sync parameters only when selecting a different conclave
+  // Sync parameters when conclave is loaded or changed
   useEffect(() => {
     if (!selectedConclave) return;
 
-    const hasSched = Boolean(selectedConclave.scheduleSummary || selectedConclave.schedule);
+    const sched = selectedConclave.schedule;
+    const schedSummary = selectedConclave.scheduleSummary;
+    const hasSched = Boolean(sched?.rounds?.length || schedSummary || isConclaveRunningOrLocked);
+
     setProgress(hasSched ? 100 : 0);
     setElapsed(0);
     setProcessed(hasSched ? (selectedConclave?.registrationCount || stats?.counts?.registered || 0) : 0);
 
-    // Only populate input parameters when switching to a different conclave or on first load
-    if (prevConclaveIdRef.current !== selectedConclave.id) {
-      prevConclaveIdRef.current = selectedConclave.id;
-      setTargetTableCount(null);
-      const hasGeneratedSchedule = Boolean(selectedConclave.schedule || selectedConclave.scheduleSummary || isRunning);
-      if (hasGeneratedSchedule && typeof selectedConclave.personsPerTable === 'number') {
+    if (hasSched) {
+      // Priority 1: Values from actual generated schedule
+      const p = sched?.config?.personsPerTable ?? selectedConclave.personsPerTable;
+      if (typeof p === 'number' && p > 0) setPersonsPerTable(p);
+
+      const r = sched?.rounds?.length ?? sched?.config?.roundCount ?? selectedConclave.roundCount;
+      if (typeof r === 'number' && r > 0) setRoundCount(r);
+
+      const t = sched?.rounds?.[0]?.tables?.length ?? schedSummary?.tableCount ?? sched?.tableCount;
+      if (typeof t === 'number' && t > 0) setTargetTableCount(t);
+    } else {
+      // Pre-generation defaults
+      if (typeof selectedConclave.personsPerTable === 'number' && selectedConclave.personsPerTable > 0) {
         setPersonsPerTable(selectedConclave.personsPerTable);
       } else if (conclaveDefaults?.personsPerTable) {
         setPersonsPerTable(conclaveDefaults.personsPerTable);
-      } else if (typeof selectedConclave.personsPerTable === 'number') {
-        setPersonsPerTable(selectedConclave.personsPerTable);
       }
-      if (hasGeneratedSchedule && typeof selectedConclave.roundCount === 'number') {
+
+      if (typeof selectedConclave.roundCount === 'number' && selectedConclave.roundCount > 0) {
         setRoundCount(selectedConclave.roundCount);
       } else if (conclaveDefaults?.roundCount) {
         setRoundCount(conclaveDefaults.roundCount);
-      } else if (typeof selectedConclave.roundCount === 'number') {
-        setRoundCount(selectedConclave.roundCount);
       }
-      if (typeof selectedConclave.moveSeconds === 'number') {
-        setMoveSecondsState(selectedConclave.moveSeconds);
-      }
+
+      setTargetTableCount(null);
     }
-  }, [selectedConclave?.id, conclaveDefaults]);
+
+    if (typeof selectedConclave.moveSeconds === 'number') {
+      setMoveSecondsState(selectedConclave.moveSeconds);
+    }
+  }, [selectedConclave?.id, selectedConclave?.schedule, selectedConclave?.scheduleSummary, isConclaveRunningOrLocked]);
 
   // Round Timing
   const [roundTiming, setRoundTiming] = useState({ bioSeconds: 60, referralSeconds: 30, bufferSeconds: 120 });
 
+  // Load backend defaults once on mount without overwriting conclave configuration
   useEffect(() => {
     async function loadBackendDefaults() {
       try {
@@ -451,18 +438,6 @@ export default function ScheduleGen({
         if (d && typeof d === 'object') {
           setConclaveDefaults(d);
           localStorage.setItem('bni_conclave_defaults', JSON.stringify(d));
-          const hasGeneratedSchedule = Boolean(selectedConclave?.schedule || selectedConclave?.scheduleSummary || isConclaveRunningOrLocked);
-          if (!hasGeneratedSchedule) {
-            if (d.personsPerTable) setPersonsPerTable(d.personsPerTable);
-            if (d.roundCount) setRoundCount(d.roundCount);
-          } else {
-            if (!selectedConclave || typeof selectedConclave.personsPerTable !== 'number') {
-              setPersonsPerTable(d.personsPerTable || 5);
-            }
-            if (!selectedConclave || typeof selectedConclave.roundCount !== 'number') {
-              setRoundCount(d.roundCount || 2);
-            }
-          }
         }
         const t = await api.get('/admin/settings/round-timing').catch(() => null)
           || await api.get('/app-config').then(r => r?.roundTiming).catch(() => null);
@@ -474,7 +449,7 @@ export default function ScheduleGen({
       }
     }
     loadBackendDefaults();
-  }, [selectedConclaveId, selectedConclave]);
+  }, []);
 
   const [toast, setToast] = useState(null);
   const showToast = (title, desc) => {
@@ -482,7 +457,7 @@ export default function ScheduleGen({
     setTimeout(() => setToast(null), 3000);
   };
 
-  const roundLengthSecs = Math.min(8, personsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
+  const roundLengthSecs = Math.min(12, displayPersonsPerTable) * ((roundTiming?.bioSeconds || 60) + (roundTiming?.referralSeconds || 30));
 
   const saveMoveSeconds = async (secs) => {
     if (isConclaveRunningOrLocked) return;
@@ -570,22 +545,6 @@ export default function ScheduleGen({
         });
       }
 
-      try {
-        const data = await api.get('/admin/conclaves');
-        setConclaves(data.map(c => {
-          const s = (c.status || '').toLowerCase();
-          const hasSched = Boolean(c.scheduleSummary || c.schedule || ['running', 'completed', 'locked'].includes(s));
-          return {
-            ...c,
-            venueShort: (c.venueLocation || c.venue || 'N/A').split(',')[0] || 'N/A',
-            dateRange: c.date ? new Date(c.date).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }) : (c.dateRange || 'N/A'),
-            progress: hasSched ? 100 : s === 'running' ? 60 : 0
-          };
-        }));
-      } catch (err) {
-        console.warn('Refetching conclaves failed:', err);
-      }
-
       setProgress(100);
       setIsGenerating(false);
       setGenStep('Schedule Ready');
@@ -594,8 +553,12 @@ export default function ScheduleGen({
 
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
       queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', selectedConclaveId] });
+      queryClient.invalidateQueries({ queryKey: ['members', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['stats', selectedConclaveId] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['members', selectedConclaveId] });
 
       showToast('Schedule Created', 'All tables and members have been arranged.');
     } catch (err) {
@@ -635,22 +598,12 @@ export default function ScheduleGen({
     setIsLocking(true);
     try {
       await api.post(`/admin/conclaves/${selectedConclaveId}/lock-schedule`);
-      const updatedConclaves = conclaves.map(c =>
-        c.id === selectedConclaveId
-          ? {
-            ...c,
-            isScheduleLocked: true,
-            isRegistrationOpen: false,
-            registrationOverride: 'closed',
-            status: (c.status === 'Completed' || c.status === 'running') ? c.status : 'registrationClosed'
-          }
-          : c
-      );
-      setConclaves(updatedConclaves);
       queryClient.invalidateQueries({ queryKey: ['conclave', selectedConclaveId] });
       queryClient.invalidateQueries({ queryKey: ['conclaves'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclave', selectedConclaveId] });
       broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['conclaves'] });
+      broadcastTabMessage({ type: 'INVALIDATE_QUERY', queryKey: ['stats', selectedConclaveId] });
       setIsModalOpen(false);
       showToast('Seating Finalized & Locked', 'Table assignments are now locked and visible in the mobile app.');
     } catch (err) {
@@ -855,7 +808,7 @@ export default function ScheduleGen({
       });
     }
     return list;
-  }, [calculatedTableCount, selectedConclave, captainsCount, personsPerTable]);
+  }, [displayTableCount, selectedConclave, captainsCount, displayPersonsPerTable]);
 
   return (
     <div className={`w-full flex flex-col gap-3 sm:gap-3.5 animate-fade-in pb-8 sm:pb-10 ${isHubMode ? '' : 'max-w-[1600px] mx-auto'}`}>
@@ -974,12 +927,12 @@ export default function ScheduleGen({
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <span className="text-sm font-black text-zinc-950 tabular-nums">
-                    {calculatedTableCount}
+                    {displayTableCount}
                   </span>
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || calculatedTableCount >= 50}
-                    onClick={() => handleTableCountChange(calculatedTableCount + 1)}
+                    disabled={isConclaveRunningOrLocked || displayTableCount >= 50}
+                    onClick={() => handleTableCountChange(displayTableCount + 1)}
                     className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -996,18 +949,18 @@ export default function ScheduleGen({
                 <div className="flex items-center justify-between h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-2 shadow-3xs transition-smooth">
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || personsPerTable <= 2}
+                    disabled={isConclaveRunningOrLocked || displayPersonsPerTable <= 2}
                     onClick={() => setPersonsPerTable(p => Math.max(2, p - 1))}
                     className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <span className="text-sm font-black text-zinc-950 tabular-nums">
-                    {personsPerTable}
+                    {displayPersonsPerTable}
                   </span>
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || personsPerTable >= 16}
+                    disabled={isConclaveRunningOrLocked || displayPersonsPerTable >= 16}
                     onClick={() => setPersonsPerTable(p => Math.min(16, p + 1))}
                     className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -1025,18 +978,18 @@ export default function ScheduleGen({
                 <div className="flex items-center justify-between h-9 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-2 shadow-3xs transition-smooth">
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || roundCount <= 1}
+                    disabled={isConclaveRunningOrLocked || displayRoundCount <= 1}
                     onClick={() => setRoundCount(r => Math.max(1, r - 1))}
                     className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
                   <span className="text-sm font-black text-zinc-950 tabular-nums">
-                    {roundCount}
+                    {displayRoundCount}
                   </span>
                   <button
                     type="button"
-                    disabled={isConclaveRunningOrLocked || roundCount >= 20}
+                    disabled={isConclaveRunningOrLocked || displayRoundCount >= 20}
                     onClick={() => setRoundCount(r => Math.min(20, r + 1))}
                     className="w-7 h-7 rounded-lg hover:bg-zinc-100 text-zinc-800 flex items-center justify-center font-bold text-xs transition-smooth disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
@@ -1095,7 +1048,7 @@ export default function ScheduleGen({
                       : `${(roundLengthSecs / 60).toFixed(1)} minutes`}
                   </span>
                   <span className="text-[10.5px] font-semibold text-zinc-400">
-                    ({personsPerTable} seats × 90s)
+                    ({displayPersonsPerTable} seats × 90s)
                   </span>
                 </div>
               </div>
@@ -1118,13 +1071,15 @@ export default function ScheduleGen({
             <div className="grid grid-cols-4 divide-x divide-zinc-150 text-center pb-3 border-b border-zinc-150">
               <div className="flex flex-col items-center justify-center px-1">
                 <Users className="w-3.5 h-3.5 text-brand-red mb-1" />
-                <span className="text-base font-black text-zinc-950 leading-none">{roundCount}</span>
+                <span className="text-base font-black text-zinc-950 leading-none">
+                  {displayRoundCount}
+                </span>
                 <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Rounds</span>
               </div>
 
               <div className="flex flex-col items-center justify-center px-1">
                 <TableIcon className="w-3.5 h-3.5 text-brand-red mb-1" />
-                <span className="text-base font-black text-zinc-950 leading-none">{calculatedTableCount}</span>
+                <span className="text-base font-black text-zinc-950 leading-none">{displayTableCount}</span>
                 <span className="text-[10px] font-bold text-zinc-500 mt-1 whitespace-nowrap">Tables / Round</span>
               </div>
 
