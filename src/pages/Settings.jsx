@@ -17,6 +17,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api } from '../services/api';
+import ChaptersCard from '../admin/ChaptersCard';
 import { broadcastTabMessage, subscribeTabMessages } from '../utils/syncBus';
 
 const capitalizeFirst = (value) => value.charAt(0).toLocaleUpperCase() + value.slice(1);
@@ -547,6 +548,16 @@ export default function Settings() {
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab('chapters')}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'chapters'
+              ? 'bg-white text-zinc-950 shadow-2xs'
+              : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+        >
+          <span>Chapters</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('timing')}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'timing'
               ? 'bg-white text-zinc-950 shadow-2xs'
@@ -800,6 +811,8 @@ export default function Settings() {
             </div>
           </div>
         )}
+
+        {(activeTab === 'all' || activeTab === 'chapters') && <ChaptersCard />}
 
         {/* Section 3: Official Round Timing Standard */}
         {(activeTab === 'all' || activeTab === 'timing') && (
