@@ -66,7 +66,7 @@ export default function AdminProfile({ loggedInAdmin, role = 'admin', onLogout }
     }
     return {
       name: parsed?.name || loggedInAdmin?.name || (isSuperadmin ? 'Superadmin' : 'Administrator'),
-      email: parsed?.email || loggedInAdmin?.email || (isSuperadmin ? 'superadmin@121connect.com' : 'admin@121connect.com'),
+      email: parsed?.email || loggedInAdmin?.email || '',
       phone: (parsed?.phone && parsed.phone !== 'N/A') ? parsed.phone : ((loggedInAdmin?.phone && loggedInAdmin.phone !== 'N/A') ? loggedInAdmin.phone : (loggedInAdmin?.mobile || '')),
       designation: parsed?.designation || loggedInAdmin?.designation || (isSuperadmin ? 'Global Administrator' : 'Regional Administrator'),
       organization: parsed?.organization || loggedInAdmin?.organization || (isSuperadmin ? '1-2-1 Connect Global' : '1-2-1 Connect Regional Office'),

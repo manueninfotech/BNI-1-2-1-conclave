@@ -287,7 +287,7 @@ export default function App() {
         setLoggedInAdmin(payload);
       } else {
         localStorage.removeItem('bni_logged_admin');
-        setLoggedInAdmin({ name: "Admin", email: "admin@121connect.com", region: "All Regions" });
+        setLoggedInAdmin({ name: "Admin", email: "", region: "All Regions" });
       }
 
       setLoggedInCaptain(null);

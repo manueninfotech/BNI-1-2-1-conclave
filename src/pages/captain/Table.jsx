@@ -270,7 +270,7 @@ export default function CaptainTable({ loggedInCaptain, searchQuery, conclaveSyn
                     </div>
 
                     <div className="pt-3 border-t border-zinc-100 flex justify-between items-center text-[10px]">
-                      <span className="text-zinc-500 font-extrabold uppercase text-[9px] tracking-wider truncate">{member.chapter || '1-2-1 Connect Chapter'}</span>
+                      <span className="text-zinc-500 font-extrabold uppercase text-[9px] tracking-wider truncate">{member.chapter || 'No chapter'}</span>
                       <span className="text-brand-red bg-red-50 border border-red-100 px-2 py-0.5 rounded font-black text-[9px] uppercase tracking-wider">
                         {bniTag}
                       </span>

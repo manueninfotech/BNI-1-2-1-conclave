@@ -267,7 +267,7 @@ export default function SignUp({ onSwitchToLogin, onLogin }) {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    placeholder="member@121connect.com"
+                    placeholder="you@yourbusiness.com"
                     required
                     className="w-full pl-10 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-body-md font-semibold outline-none focus:border-zinc-800 transition-smooth placeholder-zinc-400 text-zinc-900"
                   />
