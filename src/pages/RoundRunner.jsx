@@ -38,7 +38,7 @@ import {
   calculateRoundTiming,
   ROUND_BLOCK_DURATION_SECS,
 } from '../utils/roundTiming';
-import { clockNow, liveClock } from '../utils/roundClock';
+import { clockNow, liveClock, peopleFor } from '../utils/roundClock';
 import TableCaptainsPanel from '../admin/TableCaptainsPanel';
 import WalkInsPanel from '../admin/WalkInsPanel';
 
@@ -336,13 +336,13 @@ export default function RoundRunner({
     return Math.max(1, ...tableReferralsChartData.map(t => t.referrals));
   }, [tableReferralsChartData]);
 
-  // Derive persons per table dynamically from active round tables, expanding if walk-ins increased table size
+  // The size this round is timed for, from the shared round clock: the server
+  // stores it per round (larger when walk-ins enlarge a round's tables), so the
+  // runner, the server and every phone time the round the same way.
   const personsPerTable = useMemo(() => {
-    const maxTableOccupancy = tables.length > 0
-      ? Math.max(...tables.map(t => (t.members?.length || 0) + (t.captain ? 1 : 0)), 0)
-      : 0;
-    return Math.max(maxTableOccupancy, selectedConclave?.personsPerTable || stats?.personsPerTable || 6);
-  }, [tables, selectedConclave, stats]);
+    if (!selectedConclave) return stats?.personsPerTable || 6;
+    return peopleFor(selectedConclave, activeRound > 0 ? activeRound : 1);
+  }, [selectedConclave, activeRound, stats]);
 
   const conclaveMoveSeconds = useMemo(() => {
     return Number(selectedConclave?.moveSeconds) || (stats?.roundTransitionMs ? stats.roundTransitionMs / 1000 : 60);

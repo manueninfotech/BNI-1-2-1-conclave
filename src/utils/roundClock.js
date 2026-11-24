@@ -5,6 +5,9 @@
  *
  *  - A round: 1-min bio per person, then one referral slot of 30 s per
  *    person (8 per table → 8 + 4 = 12 min). Max 8 per table.
+ *  - Each round is timed for its own size: roundPeople[k-1] from the server
+ *    (bigger when a walk-in re-plan enlarges that round's tables), else
+ *    personsPerTable.
  *  - Extension (+1/+2/+5 min) is added after the referral slot.
  *  - Manual: after a round (+ extension), show the move break (1/2/5 min),
  *    then wait for the admin to start the next round.
@@ -25,13 +28,19 @@ const toMs = (v) => {
   const t = new Date(v).getTime();
   return Number.isNaN(t) ? NaN : t;
 };
-const people = (c) => Math.min(MAX_PERSONS_PER_TABLE, Math.max(1, Number(c?.personsPerTable) || 1));
+/** People round `k` is timed for (default: the stored current round). */
+export function peopleFor(c, k) {
+  const round = k ?? (Number(c?.currentRound) || 1);
+  const stored = Array.isArray(c?.roundPeople) ? Number(c.roundPeople[round - 1]) : NaN;
+  const p = Number.isFinite(stored) && stored > 0 ? stored : Number(c?.personsPerTable) || 1;
+  return Math.min(MAX_PERSONS_PER_TABLE, Math.max(1, p));
+}
 const isAutomatic = (c) => c?.roundProgressionMode === 'automatic';
 const moveMs = (c) => Math.max(0, Number(c?.moveSeconds ?? DEFAULT_MOVE_SECONDS)) * 1000;
 const extMs = (c) => Math.max(0, Number(c?.roundExtensionSeconds) || 0) * 1000;
 
-export function phases(c) {
-  const p = people(c);
+export function phases(c, k) {
+  const p = peopleFor(c, k);
   return { bioMs: p * BIO_MS_PER_PERSON, referralMs: p * REFERRAL_MS_PER_PERSON, talkMs: p * (BIO_MS_PER_PERSON + REFERRAL_MS_PER_PERSON) };
 }
 
@@ -47,8 +56,9 @@ export function roundStartMs(c, k) {
   if (Number.isNaN(anchor) || cur < 1 || k < cur) return null;
   if (k === cur) return anchor;
   if (!isAutomatic(c)) return null;
-  const { talkMs } = phases(c);
-  return anchor + (talkMs + extMs(c) + moveMs(c)) + (k - cur - 1) * (talkMs + moveMs(c));
+  let t = anchor + phases(c, cur).talkMs + extMs(c) + moveMs(c);
+  for (let j = cur + 1; j < k; j++) t += phases(c, j).talkMs + moveMs(c);
+  return t;
 }
 
 /**
@@ -62,7 +72,6 @@ export function liveClock(c, now = Date.now()) {
     return { round: 0, phase: 'not_started', roundStartMs: null, phaseEndsMs: null, extensionMs: 0 };
   }
   const t = clockNow(c, now);
-  const { bioMs, talkMs } = phases(c);
   let k = cur;
   if (isAutomatic(c)) {
     while (k < total) {
@@ -72,6 +81,7 @@ export function liveClock(c, now = Date.now()) {
     }
   }
   const start = roundStartMs(c, k);
+  const { bioMs, talkMs } = phases(c, k);
   const ext = k === cur ? extMs(c) : 0;
   const into = t - start;
   const base = { round: k, roundStartMs: start, extensionMs: ext };
