@@ -9,7 +9,8 @@ import {
   Play,
   MessageSquare,
   Activity as ActivityIcon,
-  Coins
+  Coins,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useConclave } from '../hooks/useConclave';
 import { useConclaveLive } from '../hooks/useConclaveLive';
@@ -24,6 +25,7 @@ import RoundRunner from '../pages/RoundRunner';
 import Payments from '../pages/Payments';
 import Feedback from '../pages/Feedback';
 import Activity from './Activity';
+import ConclaveImagesPanel from './ConclaveImagesPanel';
 
 export const CONCLAVE_TABS = [
   { id: 'overview', label: 'Overview', icon: Home },
@@ -32,6 +34,7 @@ export const CONCLAVE_TABS = [
   { id: 'round-runner', label: 'Round Runner', icon: Play },
   // Only for conclaves that charge a fee: totals and failed payment attempts.
   { id: 'payments', label: 'Payments', paidOnly: true, icon: Coins },
+  { id: 'images', label: 'Images', icon: ImageIcon },
   { id: 'feedback', label: 'Feedback', icon: MessageSquare },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
 ];
@@ -187,6 +190,7 @@ export default function ConclaveWorkspace({ base, loggedInAdmin, searchQuery }) 
         )}
         {tab === 'payments' && <Payments selectedConclaveId={id} embedded />}
         {tab === 'feedback' && <Feedback selectedConclaveId={id} embedded />}
+        {tab === 'images' && <ConclaveImagesPanel conclaveId={id} />}
         {tab === 'activity' && <Activity conclaveId={id} embedded />}
       </div>
 
