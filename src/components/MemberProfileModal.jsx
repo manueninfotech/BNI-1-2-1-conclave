@@ -17,11 +17,15 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
   const rawPhoto = getProfilePhotoUrl(member);
   const avatarSrc = !imgBroken && fileUrl(rawPhoto);
 
-  const formattedPhone = member.phone || member.mobile || '+91 98765 43210';
-  const formattedEmail = member.email || `${member.name.toLowerCase().replace(/\s+/g, '.')}@121connect.com`;
-  const chapter = member.chapter || '1-2-1 Connect Chapter';
-  const company = member.company || member.businessName || 'Business Partner';
-  const category = member.category || member.businessCategory || 'Business Professional';
+  // Only what the member gave us. Never a made-up number or address: an
+  // invented email looked real and could be mailed by mistake.
+  const formattedPhone = member.phone || member.mobile || '';
+  const rawEmail = (member.email || '').trim();
+  const formattedEmail = rawEmail && !/@bni121\.conclave$/i.test(rawEmail) ? rawEmail : '';
+  const chapter = member.chapter || 'Not added';
+  const company = member.company || member.businessName || '';
+  const category = member.category || member.businessCategory || '';
+  const ask = (member.specificAsk || member.ask || '').trim();
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[80] p-4 sm:p-6 animate-fade-in font-sans">
@@ -55,11 +59,13 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
                 <h3 className="text-lg font-black tracking-tight text-white truncate">{member.name}</h3>
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               </div>
-              <p className="text-[12px] text-zinc-300 font-semibold truncate mt-0.5">{company}</p>
+              {company && <p className="text-[12px] text-zinc-300 font-semibold truncate mt-0.5">{company}</p>}
               <div className="flex items-center gap-2 mt-2">
-                <span className="px-2 py-0.5 bg-red-500/20 border border-red-400/30 text-red-200 text-[9px] font-black uppercase tracking-wider rounded-md">
-                  {category}
-                </span>
+                {category && (
+                  <span className="px-2 py-0.5 bg-red-500/20 border border-red-400/30 text-red-200 text-[9px] font-black uppercase tracking-wider rounded-md">
+                    {category}
+                  </span>
+                )}
                 {member.isCaptain && (
                   <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-400/30 text-amber-200 text-[9px] font-black uppercase tracking-wider rounded-md">
                     Table Captain
@@ -92,6 +98,7 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
             <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Contact Information</span>
             
             <div className="space-y-2 text-[12px] font-semibold text-zinc-700">
+              {formattedPhone ? (
               <a
                 href={`tel:${formattedPhone.replace(/\s+/g, '')}`}
                 className="flex items-center justify-between p-3 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200/70 rounded-xl transition-smooth group cursor-pointer"
@@ -102,7 +109,14 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-700" />
               </a>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-zinc-50 border border-zinc-200/70 rounded-xl text-zinc-500">
+                  <Phone className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <span>No phone number added</span>
+                </div>
+              )}
 
+              {formattedEmail ? (
               <a
                 href={`mailto:${formattedEmail}`}
                 className="flex items-center justify-between p-3 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200/70 rounded-xl transition-smooth group cursor-pointer"
@@ -113,16 +127,24 @@ export default function MemberProfileModal({ member, onClose, onSendReferral, is
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-700" />
               </a>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                  <Mail className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>No email yet. The app asks the member to add one.</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Business Overview */}
-          <div className="space-y-1.5">
-            <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Business Profile</span>
-            <div className="p-3.5 bg-zinc-50 border border-zinc-200/70 rounded-xl text-[11.5px] text-zinc-650 leading-relaxed font-semibold">
-              Specialized in {category} solutions and high-quality services for 1-2-1 Connect members and corporate clients. Seated for active business networking.
+          {/* What they asked for at this conclave (only when they wrote one) */}
+          {ask && (
+            <div className="space-y-1.5">
+              <span className="text-[9.5px] font-black text-zinc-700 uppercase tracking-wider block">Conclave Specific Ask</span>
+              <div className="p-3.5 bg-zinc-50 border border-zinc-200/70 rounded-xl text-[11.5px] text-zinc-650 leading-relaxed font-semibold">
+                {ask}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 

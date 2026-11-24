@@ -810,7 +810,7 @@ export default function SuperadminAdmins({ searchQuery }) {
                   value={adminForm.email}
                   onChange={(e) => setAdminForm(prev => ({ ...prev, email: e.target.value }))}
                   className="w-full h-10 px-3 border border-zinc-250 rounded-lg text-body-sm font-semibold text-zinc-800 focus:ring-1 focus:ring-brand-red focus:border-brand-red focus:outline-hidden"
-                  placeholder="admin@121connect.com"
+                  placeholder="name@yourbusiness.com"
                 />
               </div>
 

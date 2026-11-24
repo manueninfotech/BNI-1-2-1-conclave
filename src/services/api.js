@@ -115,7 +115,6 @@ async function getAuthHeaders() {
   } else if (role === 'superadmin') {
     activeSession = localStorage.getItem('bni_superadmin_profile') || localStorage.getItem('bni_logged_admin');
     if (!headers['X-User-Id']) headers['X-User-Id'] = 'superadmin';
-    if (!headers['X-User-Email']) headers['X-User-Email'] = 'superadmin@121connect.com';
   } else {
     activeSession = localStorage.getItem('bni_logged_admin');
   }
